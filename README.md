@@ -27,23 +27,39 @@ The AdaptiveCPP community have managed to get their software working for Windows
 Here are some examples demonstrating the usage of the code:
 
 ### Example 1 - 2D Robot Reaching a Target
-![Example 1](./examples/ex_2Drobot-R-U/fig.png)
+<p align="center">
+<img src="./examples/ex_2Drobot-R-U/fig.png" alt="Example 1 - 2D Robot Reaching a Target" width="500"/>
+</p>
+  
 A 2D robot controller is synthesized over an infinite-time horizon with the goal of reaching the target region in green, see [ex_2Drobot-R-U](./examples/ex_2Drobot-R-U/).
 
 ### Example 2 - 2D Robot Reaching a Target while Avoiding a Region
-![Example 2](./examples/ex_2Drobot-RA-U/fig,png)
+
+<p align="center">
+<img src="./examples/ex_2Drobot-RA-U/fig.png" alt="Example 2 - 2D Robot Reaching a Target while Avoiding a Region" width="500"/>
+</p>
+
 A 2D robot controller is synthesized over an infinite-time horizon with the goal of reaching the target region in green, while avoiding the unsafe region marked in red, see [ex_2Drobot-RA-U](./examples/ex_2Drobot-RA-U/).
 
 ### Example 3 - 3D Autonomous Vehicle Reaching a Target while Avoiding a Region
-![Example 3](./examples/ex_3Dvehicle-RA/fig,png)
+<p align="center">
+<img src="./examples/ex_3Dvehicle-RA/fig.png" alt="Example 3 - 3D Autonomous Vehicle Reaching a Target while Avoiding a Region" width="500"/>
+</p>
+
 A 3D autonomous vehicle controller is synthesized over an infinite-time horizon with the goal of reaching the target region in green, while avoiding the unsafe region marked in red, see [ex_3Dvehicle-RA](./examples/ex_3Dvehicle-RA/).
 
 ### Example 4 - 3D Room Temperature Model Remaining in a Safe Region
-![Example 4](./examples/ex_3Droom-S/fig,png)
+<p align="center">
+<img src="./examples/ex_3Droom-S/fig.png" alt="Example 4 - 3D Room Temperature Model Remaining in a Safe Region" width="500"/>
+</p>
+
 A 3D room temperature model is synthesized over a finite-time horizon of 10 steps with the goal of remaining inside of the safe region, bounded by the red dashes, see [ex_3Droom-S](./examples/ex_3Droom-S/).
 
 ### Example 5 - 4D Building Automation System Remaining in a Safe Region
-![Example 5](./examples/ex_4DBAS-S/fig,png)
+<p align="center">
+<img src="./examples/ex_4DBAS-S/fig.png" alt="Example 5 - 4D Building Automation System Remaining in a Safe Region" width="500"/>
+</p>
+
 A 4D building automation system controller is synthesized over a finite-time horizon of 10 steps with the goal of remaining inside of the safe region, bounded by the red dashes, see [ex_4DBAS-S](./examples/ex_4DBAS-S/).
 
 ### Testing the Examples
