@@ -72,12 +72,17 @@ Smaller Examples: [ex_2Drobot-R-U](./examples/ex_2Drobot-R-U/), [ex_2Drobot-R-D]
 Larger Examples: [ex_3Dvehicle-RA](./examples/ex_3Dvehicle-RA/), [ex_3Droom-S](./examples/ex_3Droom-S/), [ex_5Droom-S](./examples/ex_5Droom-S/), [ex_7DBAS-S](./examples/ex_7DBAS-S/), [ex_14Dstochy-S](./examples/ex_14Dstochy-S/)
 
 ### Setup For New Examples
-The most helpful and descriptive example is [ex_2Drobot-R-D](./examples/ex_2Drobot-R-D/) which has plenty of additional comments in the configuration file to aid the user to design their own configuration file. The other examples are also helpful, but omit some of the less common functions. Other specific examples for various types of case study include:
-
-1. Multivariate noise distribution - [ex_multivariateNormalPDF](./examples/ex_multivariateNormalPDF)
-2. Custom noise distribution - [ex_customPDF](./examples/ex_customPDF)
-3. Load files and run synthesis - [ex_load_reach](./examples/ex_load_reach)
-4. Managing absorbing states in the state space - [ex_load_safe](./examples/ex_load_safe)
+The most helpful and descriptive example is [ex_2Drobot-R-D](./examples/ex_2Drobot-R-D/) which has plenty of additional comments in the configuration file to aid the user to design their own configuration file. The other examples are also helpful, but omit some of the less common functions. The majority of examples provide the code for both infinite-time horizon and finite-time horizon with one choice commented out. Below is a list of the type of case studies that the user may wish to use and an example demonstrating that type of case study:
+- Verification: [ex_7DBAS-S](./examples/ex_7DBAS-S)
+- Reachability *without* Disturbance: [ex_2Drobot-R-U](./examples/ex_2Drobot-R-U)
+- Reachability *with* Disturbance: [ex_2Drobot-R-D](./examples/ex_2Drobot-R-D)
+- Reach-while-Avoid *without* Disturbance: [ex_2Drobot-RA-U](./examples/ex_2Drobot-RA-U)
+- Reach-while-Avoid *with* Disturbance: [ex_2Drobot-RA-U](./examples/ex_2Drobot-RA-D)
+- Safety: [ex_4DBAS-S](./examples/ex_4DBAS-S)
+- multivariate normal distributions: [ex_multivariateNormalPDF](./examples/ex_multivariateNormalPDF)
+- custom distributions: [ex_customPDF](./examples/ex_customPDF)
+- Loading source files into **IMPaCT** for synthesis: [ex_load_reach](./examples/ex_load_reach)
+- Dealing with Absorbing states: [ex_load_safe](./examples/ex_load_safe)
 
 ## Contributing and Reporting Bugs
 Contributions and Collaborations are welcome! Please contact us for more details.
