@@ -24,6 +24,9 @@ For detailed installation instructions on Mac and Linux, please refer to the [In
 The AdaptiveCPP community have managed to get their software working for Windows, but we have not attempted that ourselves. We would love for you to try and demonstrate **IMPaCT** also works on Windows and provide us with the installation instructions we can share with others to widen the reach and usability of **IMPaCT**!
 
 ## Examples
+
+For detailed instructions on how to run and adjust the examples, or how to create your own examples, please refer to the [Setup Guide](./setup.md) file.
+
 Here are some examples demonstrating the usage of the code:
 
 ### Example 1 - 2D Robot Reaching a Target
@@ -76,8 +79,6 @@ The most helpful and descriptive example is [ex_2Drobot-R-D](./examples/ex_2Drob
 2. Custom noise distribution - [ex_customPDF](./examples/ex_customPDF)
 3. Load files and run synthesis - [ex_load_reach](./examples/ex_load_reach)
 4. Managing absorbing states in the state space - [ex_load_safe](./examples/ex_load_safe)
-
-For more detailed instructions on how to run and adjust the examples, or how to create your own examples, please refer to the [Setup Guide](./setup.md) file.
 
 ## Contributing and Reporting Bugs
 Contributions and Collaborations are welcome! Please contact me for more details.
