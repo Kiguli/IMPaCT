@@ -13,6 +13,7 @@ We benchmark **IMPaCT** on several physical case studies, adopted from the *ARCH
 - [Installation](#installation)
 - [Examples](#examples)
 - [Contributing and Reporting Bugs](#contributing-and-reporting-bugs)
+- [Authors](#authors)
 - [License](#license)
 
 ## Related Paper
@@ -81,7 +82,12 @@ The most helpful and descriptive example is [ex_2Drobot-R-D](./examples/ex_2Drob
 ## Contributing and Reporting Bugs
 Contributions and Collaborations are welcome! Please contact me for more details.
 
-Similarly, please get in contact if you wish to report any bugs, I will do my best to resolve these in a timely manner. When contacting me, please provide as much details as you can regarding the bug: e.g. what occurred? why you think it happened? and what you think the fix would be?
+Similarly, please get in contact if you wish to report any bugs, we will do my best to resolve these in a timely manner. When contacting us, please provide as many details as you can regarding the bug: e.g. what occurred? why you think it happened? and what you think the fix would be?
+
+## Authors
+
+- [Ben Wooding](https://woodingben.com)
+- [Abolfazl Lavaei](https://lavaei-cps.de/)
 
 ## License
 This project is licensed under the [MIT License](./LICENSE) see the file for details.
