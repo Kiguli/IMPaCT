@@ -299,5 +299,17 @@ Makefiles always seem to be generally a bit tricky and frustrating when it comes
 acpp  robot2D.cpp ../../src/IMDP.cpp ../../src/MDP.cpp --acpp-targets="omp" -O3 -lnlopt -lm -I/usr/include/hdf5/serial -L/usr/lib/x86_64-linux-gnu/hdf5/serial -lhdf5 -lglpk -lgsl -lgslcblas -DH5_USE_110_API -larmadillo -o robot2D
 ```
 
-The Makefile also includes the instructions for when the user runs `make clean` 
+The Makefile also includes the instructions for when the user runs `make clean` to remove the previous executable files that were created.
 
+- `acpp` is the compiler that comes from [AdaptiveCpp](https://github.com/AdaptiveCpp/AdaptiveCpp) using this compiler also requires the `--acpp-targets="omp"` which selects OpenMP as the backend for parallelism. Note instead of these commands we have experienced it also working with `syclcc` as the compiler without the targets command. If you are having issues, try both.
+- `robot2D.cpp` or equivalent is the source file to be compiled, this should be your configuration file.
+- `../../src/IMDP.cpp` and `../../src/MDP.cpp` are the other sources files required to build the program and contain all the functions that are used and the class descriptions. Make sure these accurately point to the `src` folder from the location the configuration file is. The default location assumes the command `make` is called from inside one of the examples inside the `examples` folder.
+- `-O3` is a flag that indicates the highest level of optimization
+- `-l` signifiers a linker flag. So, `-lnlopt -lm -lhdf5 -lglpk -lgsl -lgslcblas -larmadillo` link to `NLopt`, `math`, `HDF5`, `GLPK`, `GSL`, `gslcblas`, and `Armadillo` libraries respectively.
+- `-I` specifies an include directory and `-L` signifies a library directory, so `-I/usr/include/hdf5/serial -L/usr/lib/x86_64-linux-gnu/hdf5/serial` specifies explicitly to include and link to the HDF5 library at this location. You can change these as necessary (e.g. `-lhdf5` may find the correct directories immediately, or other libraries may not be found and require including and linking via `-I` and `-L`.
+- `-D` is a preprocessor definition so `-DH5_USE_110_API` indicates to use `HDF5`'s 1.10 API.
+- Finally, `-o` indicates the name of the output file after compiling. The Makefile will automatically match the configuration file name to the executable file name, so for configuration file `robot2D.cpp` the executable via `-o robot2D` is called `robot2D`.
+
+To run the make file simply run `make` into the command line of the terminal pointing to the folder the configuration file is in, then type `./name` where name is the appropriate name for the executable.
+
+We hope this file has provided comprehensive details for the setup and running of our tool, please contact us with any issues or corrections based on your experiences of using **IMPaCT**.
