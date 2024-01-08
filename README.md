@@ -1,6 +1,6 @@
 # IMPaCT Software Tool
 
-**IMPaCT**: **I**nterval **M**DP **Pa**rallel Construction for **C**ontroller Synthesis of Large-Scale S**T**ochastic Systems.
+**IMPaCT**: <ins>**I**</ins>nterval <ins>**M**</ins>DP <ins>**Pa**</ins>rallel Construction for <ins>**C**</ins>ontroller Synthesis of Large-Scale S<ins>**T**</ins>ochastic Systems.
 
 **IMPaCT** is a software tool for the parallelized verification and controller synthesis of large-scale stochastic systems using *interval Markov chains* (IMCs) and *interval Markov decision processes* (IMDPs), respectively. The tool serves to (i) construct IMCs/IMDPs as finite abstractions of underlying original systems, and (ii) leverage *interval iteration algorithms* for formal verification and controller synthesis over infinite-horizon properties, including *safety*, *reachability*, and *reach-while-avoid*, while offering convergence guarantees.
 
