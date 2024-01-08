@@ -21,8 +21,6 @@ For more information about the underlying concepts or research, you can find the
 ## Installation
 For detailed installation instructions on Mac and Linux, please refer to the [Installation Guide](./installation.md) file.
 
-The AdaptiveCPP community have managed to get their software working for Windows, but we have not attempted that ourselves. We would love for you to try and demonstrate **IMPaCT** also works on Windows and provide us with the installation instructions we can share with others to widen the reach and usability of **IMPaCT**!
-
 ## Examples
 
 For detailed instructions on how to run and adjust the examples, or how to create your own examples, please refer to the [Setup Guide](./setup.md) file.
