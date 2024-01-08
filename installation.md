@@ -19,6 +19,83 @@ Most of these can be installed simply using either `sudo apt-get install` or `su
 
 ## MacOS
 
+### Python3
+
+Check if already installed:
+`python3 --version`
+
+Install:
+`brew install python`
+
+### CMake
+
+Check if already installed:
+`cmake --version`
+
+Install:
+`brew install cmake`
+
+### Boost
+
+Check if already installed:
+`which boost`
+
+Install:
+`brew install boost`
+
+### AdaptiveCPP
+
+See the most up to date installation instructions [here](https://github.com/AdaptiveCpp/AdaptiveCpp/blob/develop/doc/installing.md).
+
+either clone from [AdaptiveCPP GitHub](https://github.com/AdaptiveCpp/AdaptiveCpp) or unzip the folder in this repository: 
+`unzip AdaptiveCpp-develop.zip`
+
+go into the directory:
+`cd AdaptiveCpp-develop`
+
+build the files
+`sudo cmake .`
+
+install the files
+`sudo make install`
+
+### HDF5
+
+Check if already installed:
+`h5dump --version`
+
+Install:
+`brew install hdf5`
+
+### Armadillo
+
+should be able to install everything with: `brew install armadillo`
+
+**Important!** Enable HDF5 usage in Armadillo by going to the folder `armadillo_bits` where Armadillo is installed:
+`cd usr/local/armadillo_bits`
+
+open config file:
+`sudo vi config.hpp`
+
+uncomment the line `ARMA_USE_HDF5` by removing the `#` symbol, press `i` to edit the file!
+
+save and exit the file: `Esc` then `:x` and enter
+
+### GSL
+
+Install:
+`brew install gsl`
+
+### NLopt
+
+Install: 
+`brew install nlopt`
+
+### GLPK
+
+Install:
+`brew install glpk`
+
 ## Linux
 
 ### Python3
