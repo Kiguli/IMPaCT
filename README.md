@@ -13,11 +13,14 @@ We benchmark **IMPaCT** on several physical case studies, adopted from the *ARCH
 - [Installation](#installation)
 - [Examples](#examples)
 - [Contributing and Reporting Bugs](#contributing-and-reporting-bugs)
-- [Authors](#authors)
 - [License](#license)
 
 ## Related Paper
 For more information about the underlying concepts or research, you can find the related arXiv paper [here](./IMPaCT-Paper_arXiv.pdf).
+
+### Authors
+- [Ben Wooding](https://woodingben.com)
+- [Abolfazl Lavaei](https://lavaei-cps.de/)
 
 ## Installation
 For detailed installation instructions on Mac and Linux, please refer to the [Installation Guide](./installation.md) file.
@@ -88,11 +91,6 @@ The most helpful and descriptive example is [ex_2Drobot-R-D](./examples/ex_2Drob
 Contributions and Collaborations are welcome! Please contact us for more details.
 
 Similarly, please get in contact if you wish to report any bugs, we will do my best to resolve these in a timely manner. When contacting us, please provide as many details as you can regarding the bug: e.g. what occurred? why you think it happened? and what you think the fix would be?
-
-## Authors
-
-- [Ben Wooding](https://woodingben.com)
-- [Abolfazl Lavaei](https://lavaei-cps.de/)
 
 ## License
 This project is licensed under the [MIT License](./LICENSE) see the file for details.
