@@ -293,6 +293,11 @@ The following functions can be used to load and save the different components of
 
 # Makefiles
 
-Makefiles always seem to be generally a bit tricky and frustrating when it comes to code, if you encounter any issues after installing the pre-requisites with running an example from **IMPaCT**, it is likely the makefile is the issue.
+Makefiles always seem to be generally a bit tricky and frustrating when it comes to code, if you encounter any issues after installing the pre-requisites with running an example from **IMPaCT**, it is likely the makefile is the issue. In general, a handy guide for using Makefiles can be found [here](https://opensource.com/article/18/8/what-how-makefile). Simply, the Makefile tries to compile the code to create an executable file that you can then run the get the synthesis or verification results for your system. The Makefile combines all the various different compilers, libraries and files together so that you do not have to manually write the compilation instructions yourself, e.g.:
 
+```
+acpp  robot2D.cpp ../../src/IMDP.cpp ../../src/MDP.cpp --acpp-targets="omp" -O3 -lnlopt -lm -I/usr/include/hdf5/serial -L/usr/lib/x86_64-linux-gnu/hdf5/serial -lhdf5 -lglpk -lgsl -lgslcblas -DH5_USE_110_API -larmadillo -o robot2D
+```
+
+The Makefile also includes the instructions for when the user runs `make clean` 
 
