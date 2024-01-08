@@ -80,7 +80,7 @@ The most helpful and descriptive example is [ex_2Drobot-R-D](./examples/ex_2Drob
 4. Managing absorbing states in the state space - [ex_load_safe](./examples/ex_load_safe)
 
 ## Contributing and Reporting Bugs
-Contributions and Collaborations are welcome! Please contact me for more details.
+Contributions and Collaborations are welcome! Please contact us for more details.
 
 Similarly, please get in contact if you wish to report any bugs, we will do my best to resolve these in a timely manner. When contacting us, please provide as many details as you can regarding the bug: e.g. what occurred? why you think it happened? and what you think the fix would be?
 
