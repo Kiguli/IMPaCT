@@ -1,0 +1,2 @@
+examples/ex_load_reach/maxtm.h5 filter=lfs diff=lfs merge=lfs -text
+examples/ex_load_reach/mintm.h5 filter=lfs diff=lfs merge=lfs -text
