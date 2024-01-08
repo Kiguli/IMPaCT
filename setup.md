@@ -25,7 +25,7 @@ Please compare the instructions in the setup with the examples given in the repo
 - [State Space and Specification](#state-space-and-specification)
 - [Dynamics](#dynamics)
 - [Compute Abstraction](#compute-abstraction)
-- [Synthesis](#synthesis)
+- [Verification and Synthesis](#verification-and-synthesis)
 - [Loading and Saving Files](#loading-and-saving-files)
 - [Makefiles](#makefiles)
 
@@ -154,17 +154,17 @@ return (ss[0] >= 5.0 && ss[0] <= 8.0) && (ss[1] >= 5.0 && ss[1] <= 8.0);
 
 This boolean function is then passed to the `IMDP` object and the states are removed from the state space and added to the target space.
 
-```imdp.setTargetSpace(target_condition, true);```
+`imdp.setTargetSpace(target_condition, true);`
 
 # Dynamics
 
 The dynamics of the system are designed and passed to the `IMDP` object in a similar way to the boolean target space. A function should be described where the number of parameters for the function matches the number of parameters of the `IMDP` object.
 
-```function<vec(const vec&, const vec& , const vec&)> dynamics3;```
+`function<vec(const vec&, const vec& , const vec&)> dynamics3;`
 
-```function<vec(const vec&, const vec&)> dynamics2;```
+`function<vec(const vec&, const vec&)> dynamics2;`
 
-```function<vec(const vec&)> dynamics1;```
+`function<vec(const vec&)> dynamics1;`
 
 ### Demonstration
 
@@ -179,21 +179,120 @@ auto dynamics = [](const vec& x, const vec& u) -> vec {
     };
 ```
 
+The dynamics can then be added using (the function detects automatically the number of parameters):
+
+ `imdp.setDynamics(dynamics);`
 
 # Compute Abstraction
 
+IMDP abstraction consists of a nonlinear optimization for each state to state transition within the system. This occurs twice, once for the minimal transition probabilities and the second time for the maximal transition probabilities.
+
+Firstly, the algorithm used for the nonlinear optimization can be set using the function:
+
 `void setAlgorithm(nlopt::algorithm alg);`
 
+where the default choice is `nlopt::LN_SBPLX` but any other algorithm can be used, see [NLopt algorithms](https://nlopt.readthedocs.io/en/latest/NLopt_Algorithms/) for more options.
+
+At this point the abstraction step for each of the matrices can occur. It is always necessary to run:
 
 `void minTransitionMatrix();`
+
 `void maxTransitionMatrix();`
-`void minTargetTransitionVector();`
-`void maxTargetTransitionVector();`
+
 `void minAvoidTransitionVector();`
+
 `void maxAvoidTransitionVector();`
 
-# Synthesis
+as these algorithms do the abstraction for the transitions inside of the state space and also the transitions outside of the state space (even if the avoid region is empty). Optionally, if a target region has been set for reachability or reach-while-avoid specifications then the following functions should also be called:
+
+`void minTargetTransitionVector();`
+
+`void maxTargetTransitionVector();`
+
+As a nice implementation trick, for each of the transition probabilities that is calculated, if any matrix/vector element is zero for the maximal case, then it is impossible for the minimal case to not also be zero. This can provide a beneficial speedup of implementation to avoid needing to run the nonlinear optimization step in those cases. We can do this low-cost abstraction for the transition matrix and for the target transition vector using:
+
+`void transitionMatrixBounds();`
+
+`void targetTransitionVectorBounds();`
+
+The more sparse the transition matrices are, the greater the performance this computational trick will provide the user.
+
+# Verification and Synthesis
+
+We provide two different synthesis algorithms for the different specifications dependent on whether the specifications are over an infinite-time horizon or a finite-time horizon. For infinite-time horizon the *interval iteration* algorithm is implemented which provides guarantees on convergence of the systems, unlike the more common *value iteration*, see  for more details. For the finite-time horizon specifications, we use the *value iteration* algorithm as convergence is not required and it is computationally more efficient, requiring only one Bellman equation instead of two, again we refer to [our paper](./IMPaCT-Paper_arXiv.pdf) for details.
+
+Both algorithms are implemented for safety problems and also for reachability/reach-while-avoid problems. The functions automatically detect which of reachability and reach-while-avoid specifications are being used dependent on the avoid region being an empty set or not. Safety algorithms are implemented in a slightly different way to reachability, and so seperate functions are necessary.
+
+For all the verification and synthesis functions, a boolean `IMDP_lower` needs to be selected that chooses either a pessimistic (`true`) or optimistic (`false`) control strategy. Pessimistic controllers considering the worst case noise and the satisfaction probability lower bound when finding the optimal control inputs, before fixing the input to find the satisfaction probability upper bound. Optimistic control policies consider the reverse. For finite-time horizon verification and synthesis, a second parameter for the number of time steps to consider is also required.
+
+Finally, once again we highlight that the tool automatically detects if there is an input present in the system to whether it provides a lookup table controller or a lookup table for the verification probabilities of each state. The same functions are used in both cases.
+
+`void infiniteHorizonReachController(bool IMDP_lower);`
+
+`void infiniteHorizonSafeController(bool IMDP_lower);`
+
+`void finiteHorizonReachController(bool IMDP_lower, size_t timeHorizon);`
+
+`void finiteHorizonSafeController(bool IMDP_lower, size_t timeHorizon);`
 
 # Loading and Saving Files
 
+As mentioned briefly before, **IMPaCT** is very flexible and enables the user to compute some parts of the abstraction, verification and/or synthesis elsewhere and load these into **IMPaCT** for the remaining steps. **IMPaCT** loads and saves files each in a seperate [HDF5](https://www.neonscience.org/resources/learning-hub/tutorials/about-hdf5#:~:text=Supports%20Large%2C%20Complex%20Data%3A%20HDF5,%2C%20heterogeneous%2C%20and%20complex%20datasets.) file. The field parameter is by default called `dataset`. The [HDF5](https://www.neonscience.org/resources/learning-hub/tutorials/about-hdf5#:~:text=Supports%20Large%2C%20Complex%20Data%3A%20HDF5,%2C%20heterogeneous%2C%20and%20complex%20datasets.) format is especially useful as it natively supported by many applications and languages such as [HDF5 for MATLAB](https://uk.mathworks.com/help/matlab/hdf5-files.html), [HDF5 for Python](https://docs.h5py.org/en/stable/), [HDF5 for R](https://www.bioconductor.org/packages/devel/bioc/vignettes/rhdf5/inst/doc/rhdf5.html), etc.
+
+In addition, loading the transition matrix files that have been computed using data, or other methods, means **IMPaCT** is flexible beyond just model-based system analysis and controller design. 
+
+The following functions can be used to load and save the different components of **IMPaCT** to HDF5 files. Use the links above to see how they can be used in the other tools. Also check out example [ex_load_reach](./examples/ex_load_reach) which shows how the matrices and vectors can be loaded into **IMPaCT** for synthesis and verification. 
+
+`void loadStateSpace(string filename);`
+
+`void loadInputSpace(string filename);`
+
+`void loadDisturbSpace(string filename);`
+
+`void loadTargetSpace(string filename);`
+
+`void loadAvoidSpace(string filename);`
+
+`void loadMinTargetTransitionVectorx(string filename);`
+
+`void loadMaxTargetTransitionVector(string filename);`
+
+`void loadMinAvoidTransitionVector(string filename);`
+
+`void loadMaxAvoidTransitionVector(string filename);`
+
+`void loadMinTransitionMatrix(string filename);`
+
+`void loadMaxTransitionMatrix(string filename);`
+
+`void loadController(string filename);`
+
+`void saveStateSpace();`
+
+`void saveInputSpace();`
+
+`void saveDisturbSpace();`
+
+`void saveTargetSpace();`
+
+`void saveAvoidSpace();`
+
+`void saveMinTargetTransitionVector();`
+
+`void saveMaxTargetTransitionVector();`
+
+`void saveMinAvoidTransitionVector();`
+
+`void saveMaxAvoidTransitionVector();`
+
+`void saveMinTransitionMatrix();`
+
+`void saveMaxTransitionMatrix();`
+
+`void saveController();`
+
 # Makefiles
+
+Makefiles always seem to be generally a bit tricky and frustrating when it comes to code, if you encounter any issues after installing the pre-requisites with running an example from **IMPaCT**, it is likely the makefile is the issue.
+
+
