@@ -209,4 +209,4 @@ Install:
 
 ## Windows
 
-The AdaptiveCPP community have managed to get their software working for Windows, but we have not attempted that ourselves. We would love for you to try and demonstrate IMPaCT also works on Windows and provide us with the installation instructions we can share with others to widen the reach and usability of **IMPaCT**!
+The AdaptiveCPP community have managed to get their software working for Windows, but we have not attempted it ourselves. Feel free to try **IMPaCT** on Windows and share with us your experience!
