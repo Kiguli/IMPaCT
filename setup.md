@@ -19,27 +19,47 @@ Please compare the instructions in the setup with the examples given in the repo
 - Dealing with Absorbing states: [ex_load_safe](./examples/ex_load_safe)
 
 # Table of Contents
+- [Minimal Requirements](#minimal-requirements)
 - [Running an Example](#running-an-example)
-- [Constructing IMDP/IMC](#constructing-imdpimc)
-- [Noise Distributions](#noise-distributions)
-- [State Space and Specification](#state-space-and-specification)
-- [Dynamics](#dynamics)
-- [Compute Abstraction](#compute-abstraction)
+- [Abstraction](#abstraction)
+    - [IMC/IMDP Class Object](#imcimdp-class-object)
+    - [Noise Distributions](#noise-distributions)
+    - [Specification](#specification)
+    - [Dynamics](#dynamics)
+    - [Construct Abstraction](#construct-abstraction)
 - [Verification and Synthesis](#verification-and-synthesis)
 - [Loading and Saving Files](#loading-and-saving-files)
 - [Makefiles](#makefiles)
 
+# Minimal Requirements
+
+For any configuration file, there are some basic requirements for the abstraction and verification/synthesis of an IMC/IMDP.
+
+First, the file must be a `*.cpp` file which creates an `IMDP` class object with a specified number of dimensions for the state, input (if any), and disturbance (if any).
+
+Second, any of these spaces must be defined using a hyper-rectangle.
+
+Third, depending on the specification the states should be labelled, where the default is all states are considered safe states.
+
+Fourth, the minimal and maximal abstraction should be constructed for transitions within the state space, and any transitions to outside of the state space should be also bounded. Depending on the specification, other transitions to regions may be calculated.
+
+Fifth, the verification or synthesis occurs over the constructed abstraction, for either infinite-time horizon specifications or finite-time horizon specifications.
+
+Sixth, at any point files can be stored with information relating to each of these steps, using the `save` functions. Additionally, steps can be replaced by using the `load` functions to get the information from a file.
+
 # Running an Example
 
-In general one should be able to go into a folder of any of the examples where there will be some `.cpp` file e.g. `example.cpp` which contains the configuration file for the case study and also a make file which will compile and then run the code. To run the case study, open up a terminal or command line interface and run:
+In general one should be able to go into a folder of any of the examples where there will be some `*.cpp` file e.g. `example.cpp` which contains the configuration file for the case study and also a make file which will compile and then run the code. To run the case study, open up a terminal or command line interface and run:
 
 `make` which will compile the code followed by `./example` which will execute the new file. The name of the executable file will match the file `*.cpp` but without the `.cpp` part at the end.
 
 When looking at the output, its possible there appear lots of debug warnings, these can be removed by running `export ACPP_DEBUG_LEVEL=0`.
 
-# Constructing IMDP/IMC
+# Abstraction
 
-First, it is important to always define an IMDP object for both IMDP/IMC problems using:
+## IMC/IMDP Class Object
+
+First, it is important to always define an IMDP object for both IMC/IMDP problems using:
 
 `IMDP(const int x, const int u, const int w);`
 
@@ -55,7 +75,7 @@ e.g.
 
 `imdp.setNoiseType(NORMAL);` 
 
-# Noise Distributions
+## Noise Distributions
 
 **IMPaCT** considers by default normal distributions and has built-in functionality for both diagonal covariance matrices (*the default*) and full covariance matrices with nonzero offdiagonal values. **IMPaCT** also enables the use of custom distributions if the user provides the PDF function that will be integrated inside of the tool. The integration is computed via Monte Carlo integration due to its scalability against other implementations, therefore the user is expected to provide the number of samples for this integration for both the multivariate normal distribution and custom distribution environments. For the normal distribution with diagonal covariance matrix, the product of the closed-form cumulative distribution function of each dimension independently is calculated. This also improves the computation time for the abstractions.
 
@@ -109,7 +129,7 @@ or simply
 
 `imdp.setNoise(NoiseType::CUSTOM, false, 1000);`
 
-# State Space and Specification
+## Specification
 
 The state space, input space, and disturbance space can be defined each by a hyper-rectangle. Three vectors are defined each with length equal to the number of dimensions of the space. Vector `lb` is each lower bound of each dimension, `ub` is the upper bounds of each dimension, and `eta` is the discretization parameter of each dimension. If either or both of the input space and disturbance space are not present in the system then the functions calls can be simply omitted from the configuration file.
 
@@ -156,7 +176,7 @@ This boolean function is then passed to the `IMDP` object and the states are rem
 
 `imdp.setTargetSpace(target_condition, true);`
 
-# Dynamics
+## Dynamics
 
 The dynamics of the system are designed and passed to the `IMDP` object in a similar way to the boolean target space. A function should be described where the number of parameters for the function matches the number of parameters of the `IMDP` object.
 
@@ -183,7 +203,7 @@ The dynamics can then be added using (the function detects automatically the num
 
  `imdp.setDynamics(dynamics);`
 
-# Compute Abstraction
+## Construct Abstraction
 
 IMDP abstraction consists of a nonlinear optimization for each state to state transition within the system. This occurs twice, once for the minimal transition probabilities and the second time for the maximal transition probabilities.
 
@@ -241,7 +261,7 @@ As mentioned briefly before, **IMPaCT** is very flexible and enables the user to
 
 In addition, loading the transition matrix files that have been computed using data, or other methods, means **IMPaCT** is flexible beyond just model-based system analysis and controller design. 
 
-The following functions can be used to load and save the different components of **IMPaCT** to HDF5 files. Use the links above to see how they can be used in the other tools. Also check out example [ex_load_reach](./examples/ex_load_reach) which shows how the matrices and vectors can be loaded into **IMPaCT** for synthesis and verification. 
+The following functions can be used to load and save the different components of **IMPaCT** to HDF5 files. Use the links above to see how they can be used in the other tools. Also check out example [ex_load_reach](./examples/ex_load_reach) which shows how the matrices and vectors can be loaded into **IMPaCT** for verification and synthesis. 
 
 `void loadStateSpace(string filename);`
 
@@ -293,7 +313,7 @@ The following functions can be used to load and save the different components of
 
 # Makefiles
 
-Makefiles always seem to be generally a bit tricky and frustrating when it comes to code, if you encounter any issues after installing the pre-requisites with running an example from **IMPaCT**, it is likely the makefile is the issue. In general, a handy guide for using Makefiles can be found [here](https://opensource.com/article/18/8/what-how-makefile). Simply, the Makefile tries to compile the code to create an executable file that you can then run the get the synthesis or verification results for your system. The Makefile combines all the various different compilers, libraries and files together so that you do not have to manually write the compilation instructions yourself, e.g.:
+Makefiles always seem to be generally a bit tricky and frustrating when it comes to code, if you encounter any issues after installing the pre-requisites with running an example from **IMPaCT**, it is likely the makefile is the issue. In general, a handy guide for using Makefiles can be found [here](https://opensource.com/article/18/8/what-how-makefile). Simply, the Makefile tries to compile the code to create an executable file that you can then run the get the verification or synthesis results for your system. The Makefile combines all the various different compilers, libraries and files together so that you do not have to manually write the compilation instructions yourself, e.g.:
 
 ```
 acpp  robot2D.cpp ../../src/IMDP.cpp ../../src/MDP.cpp --acpp-targets="omp" -O3 -lnlopt -lm -I/usr/include/hdf5/serial -L/usr/lib/x86_64-linux-gnu/hdf5/serial -lhdf5 -lglpk -lgsl -lgslcblas -DH5_USE_110_API -larmadillo -o robot2D
