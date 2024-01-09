@@ -19,6 +19,8 @@ Most of these can be installed simply using either `sudo apt-get install` or `su
 
 ## MacOS
 
+Open your machines terminal, not the the terminal of an application e.g. PyCharm.
+
 ### Python3
 
 Check if already installed:
@@ -97,6 +99,8 @@ Install:
 `brew install glpk`
 
 ## Linux
+
+Open your machines terminal, not the the terminal of an application e.g. PyCharm.
 
 ### Python3
 
