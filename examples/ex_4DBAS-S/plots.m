@@ -21,7 +21,6 @@ time = 0:(size(trace, 1)-1);
 for i = 1:size(trace, 2)
     subplot(2, 2, i); % 2x2 grid, select ith subplot
     plot(time, trace(:, i), '-'); % Plot data for the ith parameter
-    %title(['x', num2str(i)]); % Set subplot title
     xlabel('Time'); % X-axis label
     ylabel(['x', num2str(i)]); % Y-axis label
     grid on; % Show grid

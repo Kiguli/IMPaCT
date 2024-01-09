@@ -6,33 +6,12 @@ ss = h5read('ss.h5','/dataset');
 target = h5read('ts.h5','/dataset');
 avoid = h5read('as.h5','/dataset');
 is = h5read('is.h5','/dataset');
-
-boxSize = 0.5; % Eta_xs
-
-%plot the state space with target set and avoid set
-% figure
-% plot(ss(:,1),ss(:,2),'.',"Color", "blue")
-% hold on
-% x = target(:,1);
-% y = target(:,2);
-% % Plotting boxes around each point
-% for i = 1:length(x)
-%     rectangle('Position', [x(i)-boxSize/2, y(i)-boxSize/2, boxSize, boxSize], 'FaceColor', 'g');
-% end
-% 
-% hold on
-% x = avoid(:,1);
-% y = avoid(:,2);
-% % Plotting boxes around each point
-% for i = 1:length(x)
-%     rectangle('Position', [x(i)-boxSize/2, y(i)-boxSize/2, boxSize, boxSize], 'FaceColor', 'r');
-% end
-
-% interval iteration algorithm
 controller = h5read('controller.h5','/dataset');
 
+boxSize = 0.5;
+
 %% Test Run
-init_x = [3 -3 0.6]; %1,-8
+init_x = [3 -3 0.6];
 init_u = [4, 0.4];
 trace = [init_x, init_u];
 while ~((trace(end, 1) >= -5.75-boxSize/2 && trace(end, 1) <= 0.25+boxSize/2) && (trace(end, 2) >= -0.25-boxSize/2 && trace(end, 2) <= 5.75+boxSize/2))
@@ -42,8 +21,7 @@ while ~((trace(end, 1) >= -5.75-boxSize/2 && trace(end, 1) <= 0.25+boxSize/2) &&
     trace = [trace; dynamics(x, u), u];
 end
 
-%%
-% %plot the state space with target set and avoid set
+%% plot the state space with target set and avoid set
 figure
 plot(ss(:,1),ss(:,2),'.',"Color", "blue")
 hold on
