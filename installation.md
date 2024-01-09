@@ -49,7 +49,7 @@ Install:
 
 See the most up to date installation instructions [here](https://github.com/AdaptiveCpp/AdaptiveCpp/blob/develop/doc/installing.md).
 
-either clone from [AdaptiveCPP GitHub](https://github.com/AdaptiveCpp/AdaptiveCpp) or unzip the folder in this repository: 
+either clone from [AdaptiveCPP GitHub](https://github.com/AdaptiveCpp/AdaptiveCpp) or unzip the folder directly from this repository [here](./AdaptiveCpp-develop.zip): 
 `unzip AdaptiveCpp-develop.zip`
 
 go into the directory:
@@ -130,7 +130,7 @@ Install:
 
 See the most up to date installation instructions [here](https://github.com/AdaptiveCpp/AdaptiveCpp/blob/develop/doc/installing.md).
 
-either clone from [AdaptiveCPP GitHub](https://github.com/AdaptiveCpp/AdaptiveCpp) or unzip the folder in this repository: 
+either clone from [AdaptiveCPP GitHub](https://github.com/AdaptiveCpp/AdaptiveCpp) or unzip the folder directly from this repository [here](./AdaptiveCpp-develop.zip): 
 `unzip AdaptiveCpp-develop.zip`
 
 go into the directory:
