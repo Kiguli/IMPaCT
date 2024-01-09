@@ -65,14 +65,14 @@ A 3D autonomous vehicle controller is synthesized over an infinite-time horizon 
 
 ### Example 4 - 3D Room Temperature Remaining in a Safe Region
 <p align="center">
-<img src="./examples/ex_3Droom-S/fig.png" alt="Example 4 - 3D Room Temperature Model Remaining in a Safe Region" width="400"/>
+<img src="./examples/ex_3Droom-S/fig.png" alt="Example 4 - 3D Room Temperature Model Remaining in a Safe Region" width="500"/>
 </p>
 
 A 3D room temperature model is synthesized over a finite-time horizon of 10 steps with the goal of remaining inside of the safe region, bounded by the red dashes, see [ex_3Droom-S](./examples/ex_3Droom-S/).
 
 ### Example 5 - 4D Building Automation System Remaining in a Safe Region
 <p align="center">
-<img src="./examples/ex_4DBAS-S/fig.png" alt="Example 5 - 4D Building Automation System Remaining in a Safe Region" width="400"/>
+<img src="./examples/ex_4DBAS-S/fig.png" alt="Example 5 - 4D Building Automation System Remaining in a Safe Region" width="500"/>
 </p>
 
 A 4D building automation system controller is synthesized over a finite-time horizon of 10 steps with the goal of remaining inside of the safe region, bounded by the red dashes, see [ex_4DBAS-S](./examples/ex_4DBAS-S/).
