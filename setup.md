@@ -26,7 +26,7 @@ Please compare the instructions in the setup with the examples given in the repo
     - [Noise Distributions](#noise-distributions)
     - [Specification](#specification)
     - [Dynamics](#dynamics)
-    - [Construct Abstraction](#construct-abstraction)
+    - [Construct IMC/IMDP](#construct-imcimdp)
 - [Verification and Synthesis](#verification-and-synthesis)
 - [Loading and Saving Files](#loading-and-saving-files)
 - [Makefiles](#makefiles)
@@ -203,7 +203,7 @@ The dynamics can then be added using (the function detects automatically the num
 
  `imdp.setDynamics(dynamics);`
 
-## Construct Abstraction
+## Construct IMC/IMDP
 
 IMDP abstraction consists of a nonlinear optimization for each state to state transition within the system. This occurs twice, once for the minimal transition probabilities and the second time for the maximal transition probabilities.
 
