@@ -16,11 +16,23 @@ We benchmark **IMPaCT** on several physical case studies, adopted from the *ARCH
 - [License](#license)
 
 ## Related Paper
-For more information about the underlying concepts or research, you can find the related arXiv paper [here](./IMPaCT-Paper_arXiv.pdf).
+For more information about the underlying concepts or research, you can find the related arXiv paper [pdf](./IMPaCT-Paper_arXiv.pdf) and [arXiv link](https://arxiv.org/abs/2401.03555).
 
 ### Authors
 - [Ben Wooding](https://woodingben.com)
 - [Abolfazl Lavaei](https://lavaei-cps.de/)
+
+### Citing IMPaCT
+```
+@misc{wooding2024impact,
+      title={IMPaCT: Interval MDP Parallel Construction for Controller Synthesis of Large-Scale Stochastic Systems}, 
+      author={Ben Wooding and Abolfazl Lavaei},
+      year={2024},
+      eprint={2401.03555},
+      archivePrefix={arXiv},
+      primaryClass={eess.SY}
+}
+```
 
 ## Installation
 For detailed installation instructions on Mac and Linux, please refer to the [Installation Guide](./installation.md) file.
