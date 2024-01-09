@@ -74,7 +74,10 @@ Install:
 should be able to install everything with: `brew install armadillo`
 
 **Important!** Enable HDF5 usage in Armadillo by going to the folder `armadillo_bits` where Armadillo is installed:
-`cd usr/local/armadillo_bits`
+e.g. `cd usr/local/../armadillo_bits`
+
+you can find the location of this file using (if multiple locations exist you can try all of them to be safe!):
+`sudo find / -type d -name 'armadillo_bits'`
 
 open config file:
 `sudo vi config.hpp`
@@ -168,7 +171,10 @@ install:
 `sudo make install`
 
 **Important!** Enable HDF5 usage in Armadillo by going to the folder `armadillo_bits` where Armadillo is installed:
-`cd usr/local/armadillo_bits`
+e.g. `cd usr/local/../armadillo_bits`
+
+you can find the location of this file using (if multiple locations exist you can change all of them to be safe!):
+`sudo find / -type d -name 'armadillo_bits'`
 
 open config file:
 `sudo vi config.hpp`
