@@ -82,8 +82,8 @@ int main() {
     
     /* ###### calculate abstraction for target vectors ######*/
     /// each bound can be done seperately using:
-    //mdp.minTargetTransitionMatrix();
-    //mdp.maxTargetTransitionMatrix();
+    //mdp.minTargetTransitionVector();
+    //mdp.maxTargetTransitionVector();
     ///or combined using:
     mdp.targetTransitionVectorBounds();
     

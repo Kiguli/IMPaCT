@@ -33,8 +33,8 @@ int main() {
     
     /*###### load the files ######*/
     mdp.loadStateSpace("ss.h5");
-    mdp.loadMinAvoidTransitionMatrix("minatm.h5");
-    mdp.loadMaxAvoidTransitionMatrix("maxatm.h5");
+    mdp.loadMinAvoidTransitionVector("minatm.h5");
+    mdp.loadMaxAvoidTransitionVector("maxatm.h5");
     mdp.loadMinTransitionMatrix("mintm.h5");
     mdp.loadMaxTransitionMatrix("maxtm.h5");
     

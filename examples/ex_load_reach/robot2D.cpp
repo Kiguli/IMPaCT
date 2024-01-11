@@ -37,16 +37,16 @@ int main() {
     IMDP mdp(dim_x,dim_u,dim_w);
     
     /* ###### load the different spaces ###### */
-    mdp.loadStateSpace();
-    mdp.loadInputSpace();
+    mdp.loadStateSpace("ss.h5");
+    mdp.loadInputSpace("is.h5");
 
     /* ###### load matrices and vectors ######*/
-    mdp.loadMinTargetTransitionVector();
-    mdp.loadMaxTargetTransitionVector();
-    mdp.loadMinAvoidTransitionVector();
-    mdp.loadMaxAvoidTransitionVector();
-    mdp.loadMinTransitionMatrix();
-    mdp.loadMaxTransitionMatrix();
+    mdp.loadMinTargetTransitionVector("minttm.h5");
+    mdp.loadMaxTargetTransitionVector("minttm.h5");
+    mdp.loadMinAvoidTransitionVector("minatm.h5");
+    mdp.loadMaxAvoidTransitionVector("maxatm.h5");
+    mdp.loadMinTransitionMatrix("mintm.h5");
+    mdp.loadMaxTransitionMatrix("maxtm.h5");
 
     /* ###### synthesize infinite horizon controller ######*/
     mdp.infiniteHorizonReachController(true);
