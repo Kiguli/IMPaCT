@@ -263,6 +263,8 @@ In addition, loading the transition matrix files that have been computed using d
 
 The following functions can be used to load and save the different components of **IMPaCT** to HDF5 files. Use the links above to see how they can be used in the other tools. Also check out example [ex_load_reach](./examples/ex_load_reach) which shows how the matrices and vectors can be loaded into **IMPaCT** for verification and synthesis. 
 
+**Note:** if the synthesis diverges to values greater than one, it is very likely that the matrices you loaded in should be transposed. Additionally, you can use functions, e.g. `h5disp("*.h5")` and `h5read("*.h5","/dataset")` from MATLAB, to check the vectors matrices before you load them into IMPaCT that they are the correct dimensions and size.
+
 `void loadStateSpace(string filename);`
 
 `void loadInputSpace(string filename);`
