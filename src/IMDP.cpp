@@ -8136,6 +8136,7 @@ void IMDP::saveMinTargetTransitionVector(){
         cout << "Min Target Transition Vector is empty, can't save file." << endl;
     }else{
         minTargetM.save("minttm.h5", hdf5_binary);
+        cout << "saved in minttm.h5." << endl;
     }
 }
 
@@ -8144,6 +8145,8 @@ void IMDP::loadMinTargetTransitionVector(string filename){
     bool ok = minTargetM.load(filename);
     if (ok == false){
         cout << "Issue loading minimum target transition Vector!" << endl;
+    }else{
+        cout << "Loaded min target transition vector" << endl;
     }
 }
 
@@ -8153,6 +8156,7 @@ void IMDP::saveMinAvoidTransitionVector(){
         cout << "Min Avoid Transition Vector is empty, can't save file." << endl;
     }else{
         minAvoidM.save("minatm.h5", hdf5_binary);
+        cout << "saved in minatm.h5." << endl;
     }
 }
 
@@ -8161,6 +8165,8 @@ void IMDP::loadMinAvoidTransitionVector(string filename){
     bool ok = minAvoidM.load(filename);
     if (ok == false){
         cout << "Issue loading minimum avoid transition Vector!" << endl;
+    } else{
+        cout << "Loaded min avoid transition vector" << endl;
     }
 }
 
@@ -8170,6 +8176,7 @@ void IMDP::saveMinTransitionMatrix(){
         cout << "Min Transition Matrix is empty, can't save file." << endl;
     }else{
         minTransitionM.save("mintm.h5", hdf5_binary);
+        cout << "saved in mintm.h5." << endl;
     }
 }
 
@@ -8178,6 +8185,8 @@ void IMDP::loadMinTransitionMatrix(string filename){
     bool ok = minTransitionM.load(filename);
     if (ok == false){
         cout << "Issue loading minimum transition matrix!" << endl;
+    }else{
+        cout << "loaded min transition matrix" << endl;
     }
 }
 
@@ -8187,6 +8196,7 @@ void IMDP::saveMaxTargetTransitionVector(){
         cout << "Max Target Transition Vector is empty, can't save file." << endl;
     }else{
         maxTargetM.save("maxttm.h5", hdf5_binary);
+        cout << "saved in maxttm.h5." << endl;
     }
 }
 
@@ -8195,6 +8205,8 @@ void IMDP::loadMaxTargetTransitionVector(string filename){
     bool ok = maxTargetM.load(filename);
     if (ok == false){
         cout << "Issue loading maximum target transition Vector!" << endl;
+    }else{
+        cout << "loaded max target transition vector" << endl;
     }
 }
 
@@ -8204,6 +8216,7 @@ void IMDP::saveMaxAvoidTransitionVector(){
         cout << "Max Avoid Transition Vector is empty, can't save file." << endl;
     }else{
         maxAvoidM.save("maxatm.h5", hdf5_binary);
+        cout << "saved in maxatm.h5." << endl;
     }
 }
 
@@ -8212,6 +8225,8 @@ void IMDP::loadMaxAvoidTransitionVector(string filename){
     bool ok = maxAvoidM.load(filename);
     if (ok == false){
         cout << "Issue loading maximum avoid transition Vector!" << endl;
+    }else{
+        cout << "loaded max avoid transition vector" << endl;
     }
 }
 
@@ -8221,6 +8236,7 @@ void IMDP::saveMaxTransitionMatrix(){
         cout << "Max Transition Matrix is empty, can't save file." << endl;
     }else{
         maxTransitionM.save("maxtm.h5", hdf5_binary);
+        cout << "saved in maxtm.h5." << endl;
     }
 }
 
@@ -8229,6 +8245,8 @@ void IMDP::loadMaxTransitionMatrix(string filename){
     bool ok = maxTransitionM.load(filename);
     if (ok == false){
         cout << "Issue loading maximum transition matrix!" << endl;
+    }else{
+        cout << "loaded max transition matrix" << endl;
     }
 }
 
@@ -8238,6 +8256,7 @@ void IMDP::saveController(){
         cout << "Controller is empty, can't save file." << endl;
     }else{
         controller.save("controller.h5", hdf5_binary);
+        cout << "saved in controller.h5." << endl;
     }
 }
 
@@ -8246,6 +8265,8 @@ void IMDP::loadController(string filename){
     bool ok = controller.load(filename);
     if (ok == false){
         cout << "Issue loading controller!" << endl;
+    }else{
+        cout << "Controller loaded successfully" << endl;
     }
 }
 
@@ -14868,4 +14889,3 @@ void IMDP::finiteHorizonSafeController(bool IMDP_lower, size_t timeHorizon) {
     auto duration = chrono::duration_cast<chrono::milliseconds>(end - start);
     cout << "Execution time: " << duration.count()/1000.0 << " seconds" << endl;
 }
-

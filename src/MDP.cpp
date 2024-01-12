@@ -192,6 +192,7 @@ void MDP::saveStateSpace(){
         cout << "State space is empty, can't save file." << endl;
     }else{
         state_space.save("ss.h5",hdf5_binary);
+        cout << "saved in ss.h5." << endl;
     }
 }
 
@@ -201,6 +202,7 @@ void MDP::loadStateSpace(string filename){
         cout << "Issue loading state_space!" << endl;
     }else{
         state_space_size = state_space.n_rows;
+        cout << "State space loaded" << endl;
     }
 }
 
@@ -230,6 +232,7 @@ void MDP::saveInputSpace(){
         cout << "Input space is empty, can't save file." << endl;
     }else{
         input_space.save("is.h5",hdf5_binary);
+        cout << "saved in is.h5." << endl;
     }
 }
 
@@ -239,6 +242,7 @@ void MDP::loadInputSpace(string filename){
         cout << "Issue loading input space!" << endl;
     }else{
         input_space_size = input_space.n_rows;
+        cout << "input space loaded" << endl;
     }
 }
 
@@ -267,6 +271,7 @@ void MDP::saveDisturbSpace(){
         cout << "Disturb space is empty, can't save file." << endl;
     }else{
         disturb_space.save("ws.h5",hdf5_binary);
+        cout << "saved in ws.h5." << endl;
     }
 }
 
@@ -276,6 +281,7 @@ void MDP::loadDisturbSpace(string filename){
         cout << "Issue loading disturb space!" << endl;
     }else{
         disturb_space_size = disturb_space.n_rows;
+        cout << "loaded disturbance space successfully." << endl;
     }
 }
 
@@ -309,6 +315,7 @@ void MDP::saveTargetSpace(){
         cout << "Target space is empty, can't save file." << endl;
     }else{
         target_space.save("ts.h5",hdf5_binary);
+        cout << "saved in ts.h5." << endl;
     }
 }
 
@@ -316,6 +323,8 @@ void MDP::loadTargetSpace(string filename){
     bool ok = target_space.load(filename);
     if (ok == false){
         cout << "Issue loading target space!" << endl;
+    }else{
+        cout << "loaded target space" << endl;
     }
 }
 
@@ -349,6 +358,7 @@ void MDP::saveAvoidSpace(){
         cout << "Avoid space is empty, can't save file." << endl;
     }else{
         avoid_space.save("as.h5",hdf5_binary);
+        cout << "saved in as.h5." << endl;
     }
 }
 
@@ -356,6 +366,8 @@ void MDP::loadAvoidSpace(string filename){
     bool ok = avoid_space.load(filename);
     if (ok == false){
         cout << "Issue loading avoid space!" << endl;
+    }else{
+        cout << "loaded avoid space" << endl;
     }
 }
 

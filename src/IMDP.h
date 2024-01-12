@@ -55,7 +55,7 @@ public:
     void infiniteHorizonSafeController(bool IMDP_lower);
     void finiteHorizonReachController(bool IMDP_lower, size_t timeHorizon);
     void finiteHorizonSafeController(bool IMDP_lower, size_t timeHorizon);
-    
+
     /// Functions to Save the Vectors, Matrices and Controller
     void saveMinTargetTransitionVector();
     void saveMinAvoidTransitionVector();
