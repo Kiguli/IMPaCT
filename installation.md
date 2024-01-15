@@ -4,7 +4,7 @@ The following pre-requisite libraries and software are required in order to run 
 - Python3
 - CMake
 - Boost
-- AdaptiveCPP
+- AdaptiveCPP (*with clang++ and OpenMP for compiler and parallelization*)
 - HDF5
 - Armadillo (*including enabling HDF5 usage*)
 - GSL
@@ -20,6 +20,8 @@ Most of these can be installed simply using either `sudo apt-get install` or `su
 ## MacOS
 
 Open your machines terminal, not the the terminal of an application e.g. PyCharm.
+
+If you have never run or installed code on your machine before then its a good idea to install XCode and this will download many packages automatically.
 
 ### Python3
 
@@ -58,7 +60,13 @@ go into the directory:
 build the files
 `sudo cmake .` (note this dot is important to signify the current folder)
 
-install the files
+If errors occur then adding flags will help with the compilation such as:
+
+`sudo cmake -DCMAKE_INSTALL_PREFIX=/usr/local -DCMAKE_CXX_COMPILER=/path/to/clang++ -DOpenMP_ROOT=/path/to/libomp/include`
+
+You may need to find these files yourself to link appropriately.
+
+install the files:
 `sudo make install`
 
 ### HDF5
@@ -108,6 +116,8 @@ Install:
 
 Open your machines terminal, not the the terminal of an application e.g. PyCharm.
 
+If you have never run code on your PC before, it's a good idea to run `sudo apt-get install build-essential` which will download many essential packages for your PC.
+
 ### Python3
 
 Check if already installed:
@@ -134,7 +144,7 @@ Install:
 
 ### AdaptiveCPP
 
-See the most up to date installation instructions [here](https://github.com/AdaptiveCpp/AdaptiveCpp/blob/develop/doc/installing.md).
+See the most up to date installation instructions [here](https://github.com/AdaptiveCpp/AdaptiveCpp/blob/develop/doc/installing.md), this installation can be tricky and so there much more info on the official page. The most common problem that is faced is with correctly linking AdaptiveCpp with the correct installed files and compilers.
 
 either clone from [AdaptiveCPP GitHub](https://github.com/AdaptiveCpp/AdaptiveCpp) or unzip the folder directly from this repository [here](./AdaptiveCpp-develop.zip): 
 `unzip AdaptiveCpp-develop.zip`
@@ -142,8 +152,13 @@ either clone from [AdaptiveCPP GitHub](https://github.com/AdaptiveCpp/AdaptiveCp
 go into the directory:
 `cd AdaptiveCpp-develop`
 
-build the files
+you may need to install clang and openMP:
+`sudo apt install -y libclang16-dev clangtools-16 libomp-16-dev`
+
+build the files:
 `sudo cmake .` (note this dot is important to signify the current folder)
+
+if issues occur add some flags such as `-DCMAKE_CXX_COMPILER=/path/to/clang++-16` can help with the correct compilation, check the official page for more details.
 
 install the files
 `sudo make install`
