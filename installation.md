@@ -56,7 +56,7 @@ go into the directory:
 `cd AdaptiveCpp-develop`
 
 build the files
-`sudo cmake .`
+`sudo cmake .` (note this dot is important to signify the current folder)
 
 install the files
 `sudo make install`
@@ -143,7 +143,7 @@ go into the directory:
 `cd AdaptiveCpp-develop`
 
 build the files
-`sudo cmake .`
+`sudo cmake .` (note this dot is important to signify the current folder)
 
 install the files
 `sudo make install`
