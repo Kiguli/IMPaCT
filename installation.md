@@ -19,6 +19,8 @@ Most of these can be installed simply using either `sudo apt-get install` or `su
 
 ## MacOS
 
+I have personally got **IMPaCT** running on MacOS with an Intel chip, for the newer M1 and M2 chips you may need to see the AdaptiveCPP page [here](https://github.com/AdaptiveCpp/AdaptiveCpp/blob/develop/doc/installing.md) to see the support.
+
 Open your machines terminal, not the the terminal of an application e.g. PyCharm.
 
 If you have never run or installed code on your machine before then its a good idea to install XCode and this will download many packages automatically.
