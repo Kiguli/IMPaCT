@@ -112,8 +112,8 @@ We want to take the time to thank some people who were generous in giving their 
 
 - Sadegh Soudjani who assisted with some of the discussions in the early stages of this work.
 - Ernesto Casablanca who kindly provided the Dockerfile that we provide for the tool.
-- Omid Akbarzadeh, Ali Aminzadeh, Jamie Gardner, Milad Kazemi, Marco Lewis, and, Mahdieh Zaker, who assisted with debugging the installation instructions.
-- Max Planck Institute, Rupak Majumdar, Sadegh Soudjani, Tobias Kaufmann, for providing access to and support with the computing infrastructure used for simulations.
+- Omid Akbarzadeh, Ali Aminzadeh, Jamie Gardner, Milad Kazemi, Marco Lewis, and Mahdieh Zaker, who assisted with debugging the installation instructions.
+- Max Planck Institute, Rupak Majumdar, Sadegh Soudjani, and Tobias Kaufmann, for providing access and support for the computing infrastructure used for simulations.
 
 ## License
 This project is licensed under the [MIT License](./LICENSE) see the file for details.
