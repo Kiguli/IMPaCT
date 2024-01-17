@@ -4,14 +4,14 @@ FROM python:3
 WORKDIR /app
 
 # Copy the other libraries into the container
-COPY ./AdaptiveCpp-develop.zip ./armadillo-12.6.4.tar.xz ./gsl-latest.tar.gz ./nlopt-2.7.1.tar.gz ./
+COPY ./AdaptiveCpp-develop.zip ./armadillo-12.6.4.tar.xz ./gsl-2.7.1.tar.gz ./nlopt-2.7.1.tar.gz ./
 
 # Unzip the other libraries and remove the zip files
 RUN unzip AdaptiveCpp-develop.zip && \
     tar -xf armadillo-12.6.4.tar.xz && \
-    tar -xf gsl-latest.tar.gz && \
+    tar -xf gsl-2.7.1.tar.gz && \
     tar -xf nlopt-2.7.1.tar.gz && \
-    rm AdaptiveCpp-develop.zip armadillo-12.6.4.tar.xz gsl-latest.tar.gz nlopt-2.7.1.tar.gz
+    rm AdaptiveCpp-develop.zip armadillo-12.6.4.tar.xz gsl-2.7.1.tar.gz nlopt-2.7.1.tar.gz
 
 # Install the system dependencies
 RUN apt-get update && apt-get install -y \
