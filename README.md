@@ -11,6 +11,7 @@
 - [Installation](#installation)
 - [Examples](#examples)
 - [Reporting Bugs](#reporting-bugs)
+- [Acknowledgements](#acknowledgements)
 - [License](#license)
 
 ## Related Paper
@@ -33,6 +34,9 @@ For more information about the underlying research, you can find the related arX
 ```
 
 ## Installation
+
+The easiest way to install and run the tool would be using the [Dockerfile](./Dockerfile) in this repository and you can use the docker [notes](./Docker_instructions.md) to help (kindly put together for us by Ernesto Casablanca).
+
 For detailed installation instructions on Mac and Linux, please refer to the [Installation Guide](./installation.md) file.
 
 ## Examples
@@ -99,6 +103,14 @@ The most helpful and descriptive example is [ex_2Drobot-R-D](./examples/ex_2Drob
 
 ## Reporting Bugs
 Please get in contact if you wish to report any bugs, we will do our best to resolve these in a timely manner. When contacting us, please provide as many details as you can regarding the bug: e.g. what occurred, why you think it happened, and what you think the fix would be?
+
+## Acknowledgements
+
+We want to take the time to thank some people who were generous in giving their time to the support of this tool.
+
+- Sadegh Soudjani who assisted with some of the discussions in the early stages of this work.
+- Ernesto Casablanca who kindly provided the Dockerfile that we provide for the tool.
+- Omid Akbarzadeh, Ali Aminzadeh, Jamie Gardner, Milad Kazemi, Marco Lewis, and, Mahdieh Zaker, who assisted with debugging the installation instructions.
 
 ## License
 This project is licensed under the [MIT License](./LICENSE) see the file for details.
