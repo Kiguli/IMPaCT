@@ -155,7 +155,7 @@ go into the directory:
 `cd AdaptiveCpp-develop`
 
 you may need to install clang and openMP:
-`sudo apt install -y libclang16-dev clangtools-16 libomp-16-dev`
+`sudo apt install -y libclang-16-dev clang-tools-16 libomp-16-dev`
 
 build the files:
 `sudo cmake .` (note this dot is important to signify the current folder)
@@ -208,7 +208,7 @@ save and exit the file: `Esc` then `:x` and enter
 ### GSL
 
 either download GSL [here](https://www.gnu.org/software/gsl/) or unzip the file:
-`tar -xzf gsl-latest.tar.gz`
+`tar -xzf gsl-2.7.1.tar.gz`
 
 configure the files: `./configure`
 
