@@ -81,6 +81,9 @@ RUN cd nlopt-2.7.1 && \
     cd ../.. && \
     rm -rf nlopt-2.7.1
 
+# Add support for HDF5 in Armadillo
+RUN find /usr -type f -wholename '*/armadillo_bits/config.hpp' -exec sed -i 's/\s*\/\/\s*#define ARMA_USE_HDF5/#define ARMA_USE_HDF5/g' {} \;
+
 COPY src src
 COPY examples examples
 
