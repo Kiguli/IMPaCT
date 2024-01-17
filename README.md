@@ -37,9 +37,9 @@ For more information about the underlying research, you can find the related arX
 
 ## Installation
 
-The easiest way to install and run the tool would be using the [Dockerfile](./Dockerfile) in this repository and you can use the docker [notes](./Docker_instructions.md) to help (kindly put together for us by Ernesto Casablanca).
+The easiest way to install and run the tool would be using the image that can be downloaded from this repository by going to packages in the right-hand side menu. You can also build the docker image [Dockerfile](./Dockerfile) yourself and you can use the docker [notes](./Docker_instructions.md) to help (kindly put together for us by Ernesto Casablanca).
 
-For detailed installation instructions on Mac and Linux, please refer to the [Installation Guide](./installation.md) file.
+For detailed manual installation instructions on Mac and Linux, please refer to the [Installation Guide](./installation.md) file. These can be a little bit finicky, particularly trying to install AdaptiveCpp for your machine.
 
 ## Examples
 
