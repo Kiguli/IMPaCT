@@ -26,11 +26,11 @@ const int dim_w = 0;
 // States
 const vec ss_lb = {-5.0, -5.0,-3.4};
 const vec ss_ub = {5.0, 5.0, 3.4};
-const vec ss_eta = {0.5, 0.5,0.2};
+const vec ss_eta = {0.5, 0.5,0.4};
 // Inputs
 const vec is_lb = {-1.0,-0.4};
 const vec is_ub = {4.0,0.4};
-const vec is_eta = {0.5, 0.1};
+const vec is_eta = {1, 0.2};
 
 //standard deviation of each dimension
 const vec sigma = {sqrt(1/1.5), sqrt(1/1.5),sqrt(1/1.5)};
