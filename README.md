@@ -112,7 +112,7 @@ We want to take the time to thank some people who were generous in giving their 
 
 - Sadegh Soudjani who assisted with some of the discussions in the early stages of this work.
 - Ernesto Casablanca who kindly provided the Dockerfile that we provide for the tool.
-- Omid Akbarzadeh, Ali Aminzadeh, Jamie Gardner, Milad Kazemi, Marco Lewis, and Mahdieh Zaker, who assisted with debugging the installation instructions.
+- Omid Akbarzadeh, Ali Aminzadeh, Jamie Gardner, Milad Kazemi, Marco Lewis, Oliver Sch&ouml;n, and Mahdieh Zaker, who assisted with debugging the installation instructions.
 - Max Planck Institute, and Tobias Kaufmann, for providing access and support with using the computing infrastructure used for simulations.
 
 ## License
