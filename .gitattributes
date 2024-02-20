@@ -7,7 +7,7 @@
 *.{bat,[bB][aA][tT]} text eol=crlf
  
 # Ignore language of source files to prevent dominating (over 20k lines of code)
-src/* linguist-vendored
+src/IMDP.cpp linguist-vendored
 
 examples/ex_load_reach/maxtm.h5 filter=lfs diff=lfs merge=lfs -text
 examples/ex_load_reach/mintm.h5 filter=lfs diff=lfs merge=lfs -text
