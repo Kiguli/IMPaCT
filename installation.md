@@ -253,10 +253,11 @@ Below are some basic commands for GPU installation for Linux (on top of the prev
 
 Find your GPU card using 
 
-lspci
+`lspci`
 
 ### To install LLVM
 
+```
 llvm-config --version
 
 sudo apt-install clang
@@ -268,17 +269,20 @@ chmod +x llvm.sh
 sudo ./llvm.sh 16
 
 sudo apt install -y libclang-16-dev clang-tools-16 libomp-16-dev llvm-16-dev
-
+```
 ### To install CUDA
 
+```
 nvcc --version
 
 sudo apt install nvidia-cuda-toolkit
-
+```
 ### Add Flags to AdaptiveCPP installation
 
 go into directory
 
+```
 sudo cmake . -DCUDAToolkit_LIBRARY_ROOT=/usr/lib/cuda
 
 sudo make install
+```
