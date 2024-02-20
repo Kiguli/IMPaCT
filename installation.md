@@ -10,13 +10,15 @@ The following pre-requisite libraries and software are required in order to run 
 - GSL
 - NLopt
 - GLPK
+- *optional* GPU specific extras, e.g. llvm, cuda, etc.
 
 Most of these can be installed simply using either `sudo apt-get install` or `sudo brew install` for Linux or MacOS respectively. Some have been provided in zip files in this repository for ease of installation. Due to updates to specific different libraries and tools, please check online if any of the below installation points no longer work and we will try and update them quickly.
 
 - [MacOS](#macOS)
 - [Linux](#linux)
 - [Windows](#windows)
-
+- [GPU](#gpu)
+  
 ## MacOS
 
 I have personally got **IMPaCT** running on MacOS with an Intel chip, for the newer M1 and M2 chips you may need to see the AdaptiveCPP page [here](https://github.com/AdaptiveCpp/AdaptiveCpp/blob/develop/doc/installing.md) to see the support.
@@ -242,3 +244,41 @@ Install:
 ## Windows
 
 The AdaptiveCPP community have managed to get their software working for Windows, but we have not attempted it ourselves. Feel free to try **IMPaCT** on Windows and share with us your experience!
+
+## GPU
+
+Check AdaptiveCPP instructions for different GPU cards and operating systems [here](https://github.com/AdaptiveCpp/AdaptiveCpp/blob/develop/doc/installing.md). 
+
+Below are some basic commands for GPU installation for Linux (on top of the previous installation instructions).
+
+Find your GPU card using 
+
+lspci
+
+### To install LLVM
+
+llvm-config --version
+
+sudo apt-install clang
+
+wget https://apt.llvm.org/llvm.sh
+
+chmod +x llvm.sh
+
+sudo ./llvm.sh 16
+
+sudo apt install -y libclang-16-dev clang-tools-16 libomp-16-dev llvm-16-dev
+
+### To install CUDA
+
+nvcc --version
+
+sudo apt install nvidia-cuda-toolkit
+
+### Add Flags to AdaptiveCPP installation
+
+go into directory
+
+sudo cmake . -DCUDAToolkit_LIBRARY_ROOT=/usr/lib/cuda
+
+sudo make install
