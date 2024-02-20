@@ -39,7 +39,11 @@ For more information about the underlying research, you can find the related arX
 
 The easiest way to install and run the tool would be using the image that can be downloaded from this repository by going to packages in the right-hand side menu. You can also build the docker image [Dockerfile](./Dockerfile) yourself and you can use the docker [notes](./Docker_instructions.md) to help (kindly put together for us by Ernesto Casablanca).
 
+You will need to install the parts for your specific GPU seperately, please see the AdaptiveCpp project for these installation details. 
+
 For detailed manual installation instructions on Mac and Linux, please refer to the [Installation Guide](./installation.md) file. These can be a little bit finicky, particularly trying to install AdaptiveCpp for your machine.
+
+We believe it should be possible to install the tool also for Windows, we have not tried this ourselves, do let us know if you have success!
 
 ## Examples
 
@@ -98,10 +102,11 @@ The most helpful and descriptive example is [ex_2Drobot-R-D](./examples/ex_2Drob
 - Reach-while-Avoid *without* Disturbance: [ex_2Drobot-RA-U](./examples/ex_2Drobot-RA-U)
 - Reach-while-Avoid *with* Disturbance: [ex_2Drobot-RA-U](./examples/ex_2Drobot-RA-D)
 - Safety: [ex_4DBAS-S](./examples/ex_4DBAS-S)
-- multivariate normal distributions: [ex_multivariateNormalPDF](./examples/ex_multivariateNormalPDF)
+- Multivariate normal distributions: [ex_multivariateNormalPDF](./examples/ex_multivariateNormalPDF)
 - custom distributions: [ex_customPDF](./examples/ex_customPDF)
 - Loading source files into **IMPaCT** for synthesis: [ex_load_reach](./examples/ex_load_reach)
 - Dealing with Absorbing states: [ex_load_safe](./examples/ex_load_safe)
+- Using the GPU [ex_GPU](./examples/ex_GPU)
 
 ## Reporting Bugs
 Please get in contact if you wish to report any bugs, we will do our best to resolve these in a timely manner. When contacting us, please provide as many details as you can regarding the bug: e.g. what occurred, why you think it happened, and what you think the fix would be?
