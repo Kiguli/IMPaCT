@@ -16,6 +16,8 @@
 #include <hdf5.h>
 #include "custom.cpp"
 
+#include "GPU_synthesis.cpp"
+
 using namespace std;
 using namespace arma;
 
