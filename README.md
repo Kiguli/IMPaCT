@@ -39,9 +39,13 @@ For more information about the underlying research, you can find the related arX
 
 The easiest way to install and run the tool would be using the image that can be downloaded from this repository by going to packages in the right-hand side menu. You can also build the docker image [Dockerfile](./Dockerfile) yourself and you can use the docker [notes](./Docker_instructions.md) to help (kindly put together for us by Ernesto Casablanca).
 
+For ubuntu (tested on ubuntu 22, but may work for some other linux systems too) an installation script [install_ubuntu.sh](./install_ubuntu22.sh) can be easily used by running in the terminal the commands:
+
+`chmod +x install_ubuntu22.sh` to make the file executable followed by `sudo ./install_ubuntu.sh` to install all the packages and dependencies.
+
 You will need to install the parts for your specific GPU seperately, please see the AdaptiveCpp project for these installation details. 
 
-For detailed manual installation instructions on Mac and Linux, please refer to the [Installation Guide](./installation.md) file. These can be a little bit finicky, particularly trying to install AdaptiveCpp for your machine.
+For more detailed step by step manual installation instructions for Mac and Linux, please refer to the [Installation Guide](./installation.md). These can be a little bit finicky, particularly trying to install AdaptiveCpp on your machine.
 
 We believe it should be possible to install the tool also for Windows, we have not tried this ourselves, do let us know if you have success!
 
