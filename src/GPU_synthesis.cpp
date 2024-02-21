@@ -1914,9 +1914,9 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                             s = s + accminAT[i];
                             
                             for (size_t col = 0; col < state_space_size; col++) {
-                                temp0 += accminT[(val*state_space_size*disturb_space_size) +i]*accf0[val];
-                                temp1 += accminT[(val*state_space_size*disturb_space_size) +i]*accf1[val];
-                                s = s+ accminT[(val*state_space_size*disturb_space_size) +i];
+                                temp0 += accminT[(col*state_space_size*disturb_space_size) +i]*accf0[col];
+                                temp1 += accminT[(col*state_space_size*disturb_space_size) +i]*accf1[col];
+                                s = s+ accminT[(col*state_space_size*disturb_space_size) +i];
                             }
                             
                             // maximize transitions to avoid set
@@ -2253,9 +2253,9 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                             s = s + accminAT[i];
                             
                             for (size_t col = 0; col < state_space_size; col++) {
-                                temp0 += accminT[(val*state_space_size*disturb_space_size) +i]*accs0[col];
-                                temp1 += accminT[(val*state_space_size*disturb_space_size) +i]*accs1[col];
-                                s = s+ accminT[(val*state_space_size*disturb_space_size) +i];
+                                temp0 += accminT[(col*state_space_size*disturb_space_size) +i]*accs0[col];
+                                temp1 += accminT[(col*state_space_size*disturb_space_size) +i]*accs1[col];
+                                s = s+ accminT[(col*state_space_size*disturb_space_size) +i];
                             }
                             
                             if ((1.0-s) <= accdTT[i]){
@@ -2669,7 +2669,7 @@ void IMDP::finiteHorizonReachControllerSorted(bool IMDP_lower, size_t timeHorizo
             while (k < timeHorizon) {
                 cout << "." << flush;
                 
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(first1);
+                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(first0);
                 
                 // Create a vector of pairs containing the original values and their indices
                 std::vector<std::pair<int, double>> indexed_values;
@@ -2801,7 +2801,7 @@ void IMDP::finiteHorizonReachControllerSorted(bool IMDP_lower, size_t timeHorizo
             cout << "Matrix Fixed" << endl;
             while (k < timeHorizon) {
                 cout << "." << flush;
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(second1);
+                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(second0);
                 
                 // Create a vector of pairs containing the original values and their indices
                 std::vector<std::pair<int, double>> indexed_values;
@@ -2919,7 +2919,7 @@ void IMDP::finiteHorizonReachControllerSorted(bool IMDP_lower, size_t timeHorizo
             while (k < timeHorizon) {
             cout << "." << flush;
                 
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(first1);
+                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(first0);
                 
                 // Create a vector of pairs containing the original values and their indices
                 std::vector<std::pair<int, double>> indexed_values;
@@ -3175,7 +3175,7 @@ void IMDP::finiteHorizonReachControllerSorted(bool IMDP_lower, size_t timeHorizo
             while (k < timeHorizon) {
                 cout << "." << flush;
                 
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(first1);
+                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(first0);
                 
                 // Create a vector of pairs containing the original values and their indices
                 std::vector<std::pair<int, double>> indexed_values;
@@ -3291,7 +3291,7 @@ void IMDP::finiteHorizonReachControllerSorted(bool IMDP_lower, size_t timeHorizo
             while (k < timeHorizon) {
                 cout << "." << flush;
                 
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(second1);
+                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(second0);
                 
                 // Create a vector of pairs containing the original values and their indices
                 std::vector<std::pair<int, double>> indexed_values;
@@ -3416,7 +3416,7 @@ void IMDP::finiteHorizonReachControllerSorted(bool IMDP_lower, size_t timeHorizo
             while (k<timeHorizon) {
                 cout << "." << flush;
                 
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(first1);
+                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(first0);
                 
                 // Create a vector of pairs containing the original values and their indices
                 std::vector<std::pair<int, double>> indexed_values;
@@ -3533,7 +3533,7 @@ void IMDP::finiteHorizonReachControllerSorted(bool IMDP_lower, size_t timeHorizo
             while (k<timeHorizon) {
                 cout << "." << flush;
                 
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(second1);
+                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(second0);
                 
                 // Create a vector of pairs containing the original values and their indices
                 std::vector<std::pair<int, double>> indexed_values;
@@ -3659,7 +3659,7 @@ void IMDP::finiteHorizonReachControllerSorted(bool IMDP_lower, size_t timeHorizo
             while (k < timeHorizon) {
             cout << "." << flush;
                 
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(first1);
+                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(first0);
                 
                 // Create a vector of pairs containing the original values and their indices
                 std::vector<std::pair<int, double>> indexed_values;
@@ -3723,8 +3723,8 @@ void IMDP::finiteHorizonReachControllerSorted(bool IMDP_lower, size_t timeHorizo
                             
                             
                             for (size_t col = 0; col < state_space_size; col++) {
-                                temp0 += accminT[(val*state_space_size*input_space_size) +i]*accf0[val];
-                                s = s+ accminT[(val*state_space_size*input_space_size) +i];
+                                temp0 += accminT[(col*state_space_size*input_space_size) +i]*accf0[col];
+                                s = s+ accminT[(col*state_space_size*input_space_size) +i];
                             }
                             
                             // maximize transitions to avoid set
@@ -3802,7 +3802,7 @@ void IMDP::finiteHorizonReachControllerSorted(bool IMDP_lower, size_t timeHorizo
             while (k < timeHorizon) {
                 cout << "." << flush;
                 
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(second1);
+                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(second0);
                 
                 // Create a vector of pairs containing the original values and their indices
                 std::vector<std::pair<int, double>> indexed_values;
@@ -3922,7 +3922,7 @@ void IMDP::finiteHorizonReachControllerSorted(bool IMDP_lower, size_t timeHorizo
             while (k < timeHorizon) {
                 cout << "." << flush;
                 
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(first1);
+                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(first0);
                 
                 // Create a vector of pairs containing the original values and their indices
                 std::vector<std::pair<int, double>> indexed_values;
@@ -4064,7 +4064,7 @@ void IMDP::finiteHorizonReachControllerSorted(bool IMDP_lower, size_t timeHorizo
                 
                 cout << "." << flush;
                 
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(second1);
+                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(second0);
                 
                 // Create a vector of pairs containing the original values and their indices
                 std::vector<std::pair<int, double>> indexed_values;
@@ -4192,7 +4192,7 @@ void IMDP::finiteHorizonReachControllerSorted(bool IMDP_lower, size_t timeHorizo
             while (k < timeHorizon) {
                 cout << "." << flush;
                 
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(first1);
+                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(first0);
                 
                 // Create a vector of pairs containing the original values and their indices
                 std::vector<std::pair<int, double>> indexed_values;
@@ -4339,7 +4339,7 @@ void IMDP::finiteHorizonReachControllerSorted(bool IMDP_lower, size_t timeHorizo
             cout << "Matrix Fixed" << endl;
             while (k < timeHorizon) {
                 cout << "." << flush;
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(second1);
+                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(second0);
                 
                 // Create a vector of pairs containing the original values and their indices
                 std::vector<std::pair<int, double>> indexed_values;
@@ -4463,7 +4463,7 @@ void IMDP::finiteHorizonReachControllerSorted(bool IMDP_lower, size_t timeHorizo
             while (k < timeHorizon) {
             cout << "." << endl; 
                 
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(first1);
+                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(first0);
                 
                 // Create a vector of pairs containing the original values and their indices
                 std::vector<std::pair<int, double>> indexed_values;
@@ -4607,7 +4607,7 @@ void IMDP::finiteHorizonReachControllerSorted(bool IMDP_lower, size_t timeHorizo
             while (k<timeHorizon) {
                 cout << "." << flush;
                 
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(second1);
+                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(second0);
                 
                 // Create a vector of pairs containing the original values and their indices
                 std::vector<std::pair<int, double>> indexed_values;

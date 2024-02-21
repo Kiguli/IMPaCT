@@ -55,6 +55,12 @@ public:
     void infiniteHorizonSafeController(bool IMDP_lower);
     void finiteHorizonReachController(bool IMDP_lower, size_t timeHorizon);
     void finiteHorizonSafeController(bool IMDP_lower, size_t timeHorizon);
+    /// Sorted Versions
+    void infiniteHorizonReachControllerSorted(bool IMDP_lower);
+    void finiteHorizonReachControllerSorted(bool IMDP_lower, size_t timeHorizon);
+    void infiniteHorizonSafeControllerSorted(bool IMDP_lower);
+    void finiteHorizonSafeControllerSorted(bool IMDP_lower, size_t timeHorizon);
+
 
     /// Functions to Save the Vectors, Matrices and Controller
     void saveMinTargetTransitionVector();
