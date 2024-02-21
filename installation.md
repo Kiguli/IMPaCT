@@ -118,6 +118,14 @@ Install:
 
 ## Linux
 
+### Ubuntu (tested on Ubuntu 22)
+
+For your local machine if it runs ubuntu (tested on ubuntu 22, but may work for some other linux systems too) an installation script [install_ubuntu22.sh](./install_ubuntu22.sh) can be easily used by running in the terminal the commands:
+
+`chmod +x install_ubuntu22.sh` to make the file executable followed by `sudo ./install_ubuntu22.sh` to install all the packages and dependencies.
+
+### Other Linux Machines
+
 Open your machines terminal, not the the terminal of an application e.g. PyCharm.
 
 If you have never run code on your PC before, it's a good idea to run `sudo apt-get install build-essential` which will download many essential packages for your PC.
