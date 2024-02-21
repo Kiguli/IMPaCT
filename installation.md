@@ -14,6 +14,8 @@ The following pre-requisite libraries and software are required in order to run 
 
 Most of these can be installed simply using either `sudo apt-get install` or `sudo brew install` for Linux or MacOS respectively. Some have been provided in zip files in this repository for ease of installation. Due to updates to specific different libraries and tools, please check online if any of the below installation points no longer work and we will try and update them quickly.
 
+**Inside this repository you can find a Dockerfile with IMPaCT pre-installed which is the easiest way to use the tool. Additionally we have included an install script which automatically installs IMPaCT and has been tested to work on Ubuntu 22.**
+
 - [MacOS](#macOS)
 - [Linux](#linux)
 - [Windows](#windows)
