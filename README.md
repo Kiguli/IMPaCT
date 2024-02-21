@@ -39,7 +39,7 @@ For more information about the underlying research, you can find the related arX
 
 The easiest way to install and run the tool would be using the image that can be downloaded from this repository by going to packages in the right-hand side menu. You can also build the docker image [Dockerfile](./Dockerfile) yourself and you can use the docker [notes](./Docker_instructions.md) to help (kindly put together for us by Ernesto Casablanca).
 
-For ubuntu (tested on ubuntu 22, but may work for some other linux systems too) an installation script [install_ubuntu22.sh](./install_ubuntu22.sh) can be easily used by running in the terminal the commands:
+For your local machine if it runs ubuntu (tested on ubuntu 22, but may work for some other linux systems too) an installation script [install_ubuntu22.sh](./install_ubuntu22.sh) can be easily used by running in the terminal the commands:
 
 `chmod +x install_ubuntu22.sh` to make the file executable followed by `sudo ./install_ubuntu22.sh` to install all the packages and dependencies.
 
