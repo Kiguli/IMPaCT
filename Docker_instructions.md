@@ -2,6 +2,8 @@
 
 (With many thanks to Ernesto Casblanca for his help creating the Dockerfile and these instructions!)
 
+These instructions may require sudo access.
+
 ### Building
 
 If you go the `Docker` route, you only need to install docker as a dependency.
