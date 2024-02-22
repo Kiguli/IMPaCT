@@ -255,6 +255,18 @@ Finally, once again we highlight that the tool automatically detects if there is
 
 `void finiteHorizonSafeController(bool IMDP_lower, size_t timeHorizon);`
 
+We have also implemented the sorted approach for these algorithms which removes the need for the GLPK library, and also enables the GPU to be used for verification and synthesis. These functions are included in the source file [GPU_synthesis.cpp](./src/GPU_synthesis.cpp).
+
+`void infiniteHorizonReachControllerSorted(bool IMDP_lower);`
+
+`void infiniteHorizonSafeControllerSorted(bool IMDP_lower);`
+
+`void finiteHorizonReachControllerSorted(bool IMDP_lower, size_t timeHorizon);`
+
+`void finiteHorizonSafeControllerSorted(bool IMDP_lower, size_t timeHorizon);`
+
+To use the GPU, the Makefile needs to be updated so in line 2, `--acpp-targets="omp"` is replaced with the target for your GPU, check the AdaptiveCpp repository for your specific system (e.g. `cuda:sm_70`), also `IMDP.cpp` in line 12, should be replaced by `GPU_synthesis.cpp`. No abstraction will be possible over the GPU, so the abstractions should be loaded from file and computed seperately.
+
 # Loading and Saving Files
 
 As mentioned briefly before, **IMPaCT** is very flexible and enables the user to compute some parts of the abstraction, verification and/or synthesis elsewhere and load these into **IMPaCT** for the remaining steps. **IMPaCT** loads and saves files each in a seperate [HDF5](https://www.neonscience.org/resources/learning-hub/tutorials/about-hdf5#:~:text=Supports%20Large%2C%20Complex%20Data%3A%20HDF5,%2C%20heterogeneous%2C%20and%20complex%20datasets.) file. The field parameter is by default called `dataset`. The [HDF5](https://www.neonscience.org/resources/learning-hub/tutorials/about-hdf5#:~:text=Supports%20Large%2C%20Complex%20Data%3A%20HDF5,%2C%20heterogeneous%2C%20and%20complex%20datasets.) format is especially useful as it natively supported by many applications and languages such as [HDF5 for MATLAB](https://uk.mathworks.com/help/matlab/hdf5-files.html), [HDF5 for Python](https://docs.h5py.org/en/stable/), [HDF5 for R](https://www.bioconductor.org/packages/devel/bioc/vignettes/rhdf5/inst/doc/rhdf5.html), etc.
@@ -335,5 +347,7 @@ The Makefile also includes the instructions for when the user runs `make clean` 
 - Finally, `-o` indicates the name of the output file after compiling. The Makefile will automatically match the configuration file name to the executable file name, so for configuration file `robot2D.cpp` the executable via `-o robot2D` is called `robot2D`.
 
 To run the make file simply run `make` into the command line of the terminal pointing to the folder the configuration file is in, then type `./name` where name is the appropriate name for the executable.
+
+To use the GPU, the Makefile needs to be updated so in line 2, `--acpp-targets="omp"` is replaced with the target for your GPU, check the AdaptiveCpp repository for your specific system (e.g. `cuda:sm_70`), also `IMDP.cpp` in line 12, should be replaced by `GPU_synthesis.cpp`. No abstraction will be possible over the GPU, so the abstractions should be loaded from file and computed seperately.
 
 We hope this file has provided comprehensive details for the setup and running of our tool, please contact us with any issues or corrections based on your experiences of using **IMPaCT**.
