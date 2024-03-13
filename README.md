@@ -15,6 +15,7 @@
 - [Reporting Bugs](#reporting-bugs)
 - [Acknowledgements](#acknowledgements)
 - [License](#license)
+- [Youtube Videos about IMPaCT](https://www.youtube.com/watch?v=wwfP2ErgLcM&list=PL50OJg3FHS4fBxhua92ZS3e6bxEnFaetL&index=1&ab_channel=Kiguli)
 
 ## Related Paper
 For more information about the underlying research, you can find the related arXiv paper [here](https://arxiv.org/abs/2401.03555) or a local pdf copy in the repository.
@@ -42,6 +43,8 @@ The easiest way to install and run the tool would be using the image that can be
 For your local machine (or a virtual machine) if it runs ubuntu 22.04, or equivalent, an installation script [install_ubuntu22.sh](./install_ubuntu22.sh) can be easily used by running these terminal commands in the respective folder:
 
 `chmod +x install_ubuntu22.sh` to make the file executable followed by `sudo ./install_ubuntu22.sh` to install all the packages and dependencies.
+
+You can see a video of how to install **IMPaCT** on an Ubuntu Linux Virtual Machine [here](https://www.youtube.com/watch?v=wwfP2ErgLcM&list=PL50OJg3FHS4fBxhua92ZS3e6bxEnFaetL&index=1&ab_channel=Kiguli).
 
 You will need to install the parts for your specific GPU seperately, please see the AdaptiveCpp project for these installation details. 
 
@@ -112,6 +115,8 @@ The most helpful and descriptive example is [ex_2Drobot-R-D](./examples/ex_2Drob
 - Dealing with Absorbing states: [ex_load_safe](./examples/ex_load_safe)
 - Using the GPU [ex_GPU](./examples/ex_GPU)
 
+A Youtube video explaining the configuration files can be found [here](https://www.youtube.com/watch?v=rsU6fZU_O4c&list=PL50OJg3FHS4fBxhua92ZS3e6bxEnFaetL&index=3&ab_channel=Kiguli).
+A Youtube video explaining the Makefile setup can be found [here](https://www.youtube.com/watch?v=6kzuQC_X9WQ&list=PL50OJg3FHS4fBxhua92ZS3e6bxEnFaetL&index=2&ab_channel=Kiguli).
 ## Reporting Bugs
 Please get in contact if you wish to report any bugs, we will do our best to resolve these in a timely manner. When contacting us, please provide as many details as you can regarding the bug: e.g. what occurred, why you think it happened, and what you think the fix would be?
 
