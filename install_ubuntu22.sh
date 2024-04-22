@@ -1,5 +1,8 @@
 #!/bin/bash
 
+apt-get install unzip
+apt-get install tar
+
 # Unzip the other libraries and remove the zip files
 unzip AdaptiveCpp-develop.zip
 tar -xf armadillo-12.6.4.tar.xz

@@ -14,6 +14,10 @@ A Youtube video explaining the configuration files can be found [here](https://w
 
 A Youtube video explaining the Makefile setup can be found [here](https://www.youtube.com/watch?v=6kzuQC_X9WQ&list=PL50OJg3FHS4fBxhua92ZS3e6bxEnFaetL&index=2&ab_channel=Kiguli).
 
+## Artifact Evaluation Repeatability Committee
+ 
+If you are on the artifact evaluation repeatability committee, we have provided some instructions of how to reproduce the results of our paper in the document [Artifact-Evaluation-Instructions.pdf](./Artifact-Evaluation-Instructions).
+
 ## Table of Contents
 - [Related Paper](#related-paper)
 - [Installation](#installation)
