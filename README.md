@@ -16,7 +16,7 @@ A Youtube video explaining the Makefile setup can be found [here](https://www.yo
 
 ## Artifact Evaluation Repeatability Committee
  
-If you are on the artifact evaluation repeatability committee, we have provided some instructions of how to reproduce the results of our paper in the document [Artifact-Evaluation-Instructions.pdf](./Artifact-Evaluation-Instructions).
+If you are on the artifact evaluation repeatability committee, we have provided some instructions of how to reproduce the results of our paper in the document [Artifact-Evaluation-Instructions.pdf](./Artifact-Evaluation-Instructions.pdf).
 
 ## Table of Contents
 - [Related Paper](#related-paper)
