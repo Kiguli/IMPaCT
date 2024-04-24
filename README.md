@@ -28,7 +28,7 @@ If you are on the artifact evaluation repeatability committee, we have provided 
 - [Youtube Videos about IMPaCT](https://www.youtube.com/watch?v=wwfP2ErgLcM&list=PL50OJg3FHS4fBxhua92ZS3e6bxEnFaetL&index=1&ab_channel=Kiguli)
 
 ## Related Paper
-For more information about the underlying research, you can find the related arXiv paper [here](https://arxiv.org/abs/2401.03555) or a local pdf copy in the repository.
+The arXiv version of the paper is located [here](https://arxiv.org/abs/2401.03555).
 
 ### Authors
 - [Ben Wooding](https://woodingben.com)
