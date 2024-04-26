@@ -8,11 +8,7 @@
 
 **IMPaCT** is developed in C++ and designed using [AdaptiveCpp](https://github.com/AdaptiveCpp/AdaptiveCpp), an independent open-source implementation of SYCL, for adaptive parallelism over CPUs and GPUs of all hardware vendors, including Intel and NVIDIA. **IMPaCT** stands as the first software tool for the parallel construction of IMCs/IMDPs, empowered with the capability to leverage high-performance computing platforms and cloud computing services. Specifically, parallelism offered by **IMPaCT** effectively addresses the challenges arising from the state-explosion problem inherent in discretization-based techniques applied to large-scale stochastic systems.
 
-You can see a video of how to install **IMPaCT** on an Ubuntu Linux Virtual Machine [here](https://www.youtube.com/watch?v=wwfP2ErgLcM&list=PL50OJg3FHS4fBxhua92ZS3e6bxEnFaetL&index=1&ab_channel=Kiguli).
-
-A Youtube video explaining the configuration files can be found [here](https://www.youtube.com/watch?v=rsU6fZU_O4c&list=PL50OJg3FHS4fBxhua92ZS3e6bxEnFaetL&index=3&ab_channel=Kiguli).
-
-A Youtube video explaining the Makefile setup can be found [here](https://www.youtube.com/watch?v=6kzuQC_X9WQ&list=PL50OJg3FHS4fBxhua92ZS3e6bxEnFaetL&index=2&ab_channel=Kiguli).
+Youtube tutorial videos including how to install **IMPaCT** on an Ubuntu Linux Virtual Machine can be found [here](https://www.youtube.com/playlist?list=PL50OJg3FHS4fBxhua92ZS3e6bxEnFaetL).
 
 ## Artifact Evaluation Repeatability Committee
  
