@@ -1,6 +1,6 @@
 # IMPaCT Software Tool
 
-[![Create and publish a Docker image](https://github.com/Kiguli/IMPaCT/actions/workflows/docker.yml/badge.svg)](https://github.com/Kiguli/IMPaCT/actions/workflows/docker.yml)
+[![DOI](https://zenodo.org/badge/739478882.svg)](https://zenodo.org/doi/10.5281/zenodo.11085097) [![Create and publish a Docker image](https://github.com/Kiguli/IMPaCT/actions/workflows/docker.yml/badge.svg)](https://github.com/Kiguli/IMPaCT/actions/workflows/docker.yml)
 
 **IMPaCT**: <ins>**I**</ins>nterval <ins>**M**</ins>DP <ins>**Pa**</ins>rallel Construction for <ins>**C**</ins>ontroller Synthesis of Large-Scale S<ins>**T**</ins>ochastic Systems.
 
