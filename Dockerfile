@@ -86,5 +86,6 @@ RUN find /usr -type f -wholename '*/armadillo_bits/config.hpp' -exec sed -i 's/\
 
 COPY src src
 COPY examples examples
+COPY sorted-examples sorted-examples
 
 ENTRYPOINT [ "bash" ]
