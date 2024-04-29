@@ -29,9 +29,9 @@ RUN apt-get update && apt-get install -y \
     libopenblas-dev \
     libopenmpi-dev \
     libhdf5-serial-dev \
-    libopenblas-dev \ 
+    libopenblas-dev \
     libomp-16-dev \
-    liblapack-dev \ 
+    liblapack-dev \
     libarpack2-dev \
     libboost-all-dev \
     libclang-16-dev \

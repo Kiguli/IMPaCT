@@ -27,7 +27,7 @@ This will open a shell inside the container.
 You can then run the examples with the following commands:
 
 ```bash
-cd /impact/examples
+cd /app/examples
 cd <specific example>
 make
 ```
@@ -38,13 +38,13 @@ Furthermore, it is possible to mount a volume to the container to add more examp
 For example, if you create a folder `my-examples` in your home directory, you can mount it to the container with the following command:
 
 ```bash
-docker run --rm -it --name impact -v ~/my-examples:/impact/my-examples impact
+docker run --rm -it --name impact -v ~/my-examples:/app/examples impact
 ```
 
 And then you can run the examples with the following commands:
 
 ```bash
-cd /impact/my-examples
+cd /app/examples
 cd <specific example>
 make
 ```
@@ -61,7 +61,7 @@ The results are stored in the in the same folder the example is located in.
 To copy them to your host machine, you can use use a [volume](#mounting-a-volume) or the `docker cp` command to copy them to your host machine.
 
 ```bash
-docker cp impact:/impact/my-examples/<specific example>/<result file> .
+docker cp impact:/app/examples/<specific example>/<result file> .
 # e.g.
 # docker cp impact:/app/examples/ex_2Drobot-R-U/fig.png .
 ```
