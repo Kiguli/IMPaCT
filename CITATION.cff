@@ -21,10 +21,8 @@ preferred-citation:
   - family-names: "Lavaei"
     given-names: "Abolfazl"
     orcid: ""
-  doi: "10.48550/arXiv.2401.03555"
-  journal: "arXiv"
-  month: 1
-  start: 1 # First page number
-  end: 33 # Last page number
   title: "IMPaCT: Interval MDP Parallel Construction for Controller Synthesis of Large-Scale Stochastic Systems"
+  booktitle: "International Conference on Quantitative Evaluation of Systems and Formal Modeling and Analysis of Timed Systems"
+  pages: "249--267"
   year: 2024
+  publisher: "Springer"
