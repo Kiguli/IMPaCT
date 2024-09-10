@@ -32,14 +32,15 @@ The arXiv version of the paper is located [here](https://arxiv.org/abs/2401.0355
 
 ### Citing IMPaCT
 ```
-@misc{wooding2024impact,
+@inproceedings{wooding2024impact,
       title={IMPaCT: Interval MDP Parallel Construction for Controller Synthesis of Large-Scale Stochastic Systems}, 
       author={Ben Wooding and Abolfazl Lavaei},
+      booktitle={International Conference on Quantitative Evaluation of Systems and Formal Modeling and Analysis of Timed Systems},
+      pages={249--267},
       year={2024},
-      eprint={2401.03555},
-      archivePrefix={arXiv},
-      primaryClass={eess.SY}
+      organization={Springer}
 }
+
 ```
 
 ## Installation
