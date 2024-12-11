@@ -29,6 +29,10 @@ void IMDP::setAlgorithm(nlopt::algorithm alg){
     algo = alg;
 }
 
+void IMDP::trackMDP(bool store) {
+    storeMDP = store;
+}
+
 /* Supporter Functions for the Abstractions for Different Distributions */
 
 /// Closed form integral for 1d normal distribution CDF

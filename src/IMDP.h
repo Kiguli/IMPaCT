@@ -21,7 +21,10 @@ protected:
     vec maxAvoidM;
     mat minTransitionM;
     mat maxTransitionM;
-    
+
+    ///check for if you want to store Q values in synthesis iterations
+    bool storeMDP;
+
     /// Controller
     mat controller;
     
@@ -37,6 +40,8 @@ public:
     
     /// Set the Nonlinear Optimization Algorithm (choice of others found at: https://nlopt.readthedocs.io/en/latest/NLopt_Algorithms/, e.g. LN_COBYLA)
     void setAlgorithm(nlopt::algorithm alg);
+
+    void trackMDP(bool store);
     
     /// Matrix and Vector Abstraction Functions
     void minTransitionMatrix();
