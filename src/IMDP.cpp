@@ -59,6 +59,101 @@ double multivariateNormalPDF(double *x, size_t dim, void *params)
     return norm * exp(exponent);
 }
 
+/// Helper function to calculate probability product for diagonal distributions
+double calculateProbabilityProduct(const vec& state_end, const vec& eta, const vec& mu, const vec& sigma) {
+    double probability_product = 1.0;
+    for (size_t m = 0; m < state_end.n_rows; ++m) {
+        double x0 = state_end[m] - eta[m] / 2.0;
+        double x1 = state_end[m] + eta[m] / 2.0;
+        double probability = normal1DCDF(x0, x1, mu[m], sigma[m]);
+        probability_product *= probability;
+    }
+    return probability_product;
+}
+
+/// Helper function to perform Monte Carlo integration for offdiagonal distributions
+double performMonteCarloIntegration(const vec& mu, const mat& inv_cov, double det, const vec& state_end, const vec& eta, double dim, size_t samples) {
+    multivariateNormalParams params;
+    params.mean = mu;
+    params.inv_cov = inv_cov;
+    params.det = det;
+
+    gsl_rng *rng = gsl_rng_alloc(gsl_rng_default);
+    gsl_monte_function F;
+    F.f = &multivariateNormalPDF;
+    F.dim = mu.n_rows;
+    F.params = &params;
+
+    vector<double> lower_bounds, upper_bounds;
+    for (size_t m = 0; m < state_end.n_rows; ++m) {
+        lower_bounds.push_back(state_end[m] - eta[m] / 2.0);
+        upper_bounds.push_back(state_end[m] + eta[m] / 2.0);
+    }
+    double* lb = lower_bounds.data();
+    double* ub = upper_bounds.data();
+    double result, error;
+
+    gsl_monte_vegas_state *s = gsl_monte_vegas_alloc(mu.n_rows);
+    gsl_monte_vegas_integrate(&F, lb, ub, dim, samples, rng, s, &result, &error);
+    gsl_monte_vegas_free(s);
+    gsl_rng_free(rng);
+
+    return result;
+}
+
+/// Struct for normal distribution with 3 parameters
+struct costFunctionDataNormal3 {
+    double dim; //Used for offdiagonal
+    vec state_end;
+    vec input;
+    vec disturb;
+    vec eta;
+    mat inv_cov; // Used for offdiagonal
+    double det;  // Used for offdiagonal
+    vec sigma;   // Used for diagonal
+    function<vec(const vec&, const vec&, const vec&)> dynamics;
+    size_t samples; // Used for offdiagonal
+    bool is_diagonal; // Flag to indicate if the distribution is diagonal
+};
+
+/// Cost function for normal distribution with 3 parameters
+double costFunctionNormal3(unsigned n, const double* x, double* grad, void* my_func_data) {
+    costFunctionDataNormal3* data = static_cast<costFunctionDataNormal3*>(my_func_data);
+    vec mu = data->dynamics(conv_to<vec>::from(vector<double>(x, x + n)), data->input, data->disturb);
+
+    if (data->is_diagonal) {
+        return calculateProbabilityProduct(data->state_end, data->eta, mu, data->sigma);
+    } else {
+        return performMonteCarloIntegration(mu, data->inv_cov, data->det, data->state_end, data->eta, data->dim, data->samples);
+    }
+}
+
+/// Struct for normal distribution with 2 parameters
+struct costFunctionDataNormal2 {
+    double dim; // Used for offdiagonal
+    vec state_end;
+    vec second;
+    vec eta;
+    mat inv_cov; // Used for offdiagonal
+    double det;  // Used for offdiagonal
+    vec sigma;   // Used for diagonal
+    function<vec(const vec&, const vec&)> dynamics;
+    size_t samples; // Used for offdiagonal
+    bool is_diagonal; // Flag to indicate if the distribution is diagonal
+};
+
+/// Cost function for normal distribution with 2 parameters
+double costFunctionNormal2(unsigned n, const double* x, double* grad, void* my_func_data) {
+    costFunctionDataNormal2* data = static_cast<costFunctionDataNormal2*>(my_func_data);
+    vec mu = data->dynamics(conv_to<vec>::from(vector<double>(x, x + n)), data->second);
+
+    if (data->is_diagonal) {
+        return calculateProbabilityProduct(data->state_end, data->eta, mu, data->sigma);
+    } else {
+        return performMonteCarloIntegration(mu, data->inv_cov, data->det, data->state_end, data->eta, data->dim, data->samples);
+    }
+}
+
 /// Struct for normal distribution with 1 parameter
 struct costFunctionDataNormal1 {
     double dim; // Used for offdiagonal
@@ -78,41 +173,9 @@ double costFunctionNormal1(unsigned n, const double* x, double* grad, void* my_f
     vec mu = data->dynamics(conv_to<vec>::from(vector<double>(x, x + n)));
 
     if (data->is_diagonal) {
-        double probability_product = 1.0;
-        for (size_t m = 0; m < data->state_end.n_rows; ++m) {
-            double x0 = data->state_end[m] - data->eta[m] / 2.0;
-            double x1 = data->state_end[m] + data->eta[m] / 2.0;
-            double probability = normal1DCDF(x0, x1, mu[m], data->sigma[m]);
-            probability_product *= probability;
-        }
-        return probability_product;
+        return calculateProbabilityProduct(data->state_end, data->eta, mu, data->sigma);
     } else {
-        multivariateNormalParams params;
-        params.mean = mu;
-        params.inv_cov = data->inv_cov;
-        params.det = data->det;
-
-        gsl_rng *rng = gsl_rng_alloc(gsl_rng_default);
-        gsl_monte_function F;
-        F.f = &multivariateNormalPDF;
-        F.dim = mu.n_rows;
-        F.params = &params;
-
-        vector<double> lower_bounds, upper_bounds;
-        for (size_t m = 0; m < data->state_end.n_rows; ++m) {
-            lower_bounds.push_back(data->state_end[m] - data->eta[m] / 2.0);
-            upper_bounds.push_back(data->state_end[m] + data->eta[m] / 2.0);
-        }
-        double* lb = lower_bounds.data();
-        double* ub = upper_bounds.data();
-        double result, error;
-
-        gsl_monte_vegas_state *s = gsl_monte_vegas_alloc(mu.n_rows);
-        gsl_monte_vegas_integrate(&F, lb, ub, data->dim, data->samples, rng, s, &result, &error);
-        gsl_monte_vegas_free(s);
-        gsl_rng_free(rng);
-
-        return result;
+        return performMonteCarloIntegration(mu, data->inv_cov, data->det, data->state_end, data->eta, data->dim, data->samples);
     }
 }
 
