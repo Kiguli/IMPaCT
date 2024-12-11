@@ -57,6 +57,11 @@ protected:
     vec ws_ub;
     vec ws_eta;
     ivec ws_idx;
+
+    /// MDPs for Transitions
+    vec TargetM;
+    vec AvoidM;
+    mat TransitionM;
     
     ///Size of spaces
     size_t state_space_size = 0;
@@ -151,7 +156,15 @@ public:
     void setNoise(NoiseType n, bool diagonal = true);
     void setNoise(NoiseType n, bool diagonal, size_t monte_carlo_samples);
     void setCustomDistribution(const function<double(double *x, size_t dim, void *params)> c,size_t monte_carlo_samples);
-    
+
+    ///save and load transition matrices
+    void saveTransitionMatrix();
+    void loadTransitionMatrix(string filename);
+    void saveTargetTransitionVector();
+    void loadTargetTransitionVector(string filename);
+    void saveAvoidTransitionVector();
+    void loadAvoidTransitionVector(string filename);
+
     ///Getters for Noise Parameters
     mat getInvCov();
     double getDet();
