@@ -233,6 +233,7 @@ struct costcustom1Full{
     vec ub;
     vec eta;
     function<vec(const vec&)> dynamics;
+    function<double(double *x, size_t dim, void *params)> customPDF;
     size_t samples;
 };
 
@@ -251,7 +252,7 @@ double custom1Full(unsigned n, const double* x, double* grad, void* my_func_data
 
     gsl_rng *rng = gsl_rng_alloc(gsl_rng_default);
     gsl_monte_function F;
-    F.f = &customPDF;
+    F.f = &data->customPDF;
     F.dim = mu.n_rows;
     F.params = &params;
 
@@ -281,6 +282,7 @@ struct costcustom2Full{
     vec second;
     vec eta;
     function<vec(const vec&, const vec&)> dynamics;
+    function<double(double *x, size_t dim, void *params)> customPDF;
     size_t samples;
     size_t input_space_size;
 };
@@ -305,7 +307,7 @@ double custom2Full(unsigned n, const double* x, double* grad, void* my_func_data
 
     gsl_rng *rng = gsl_rng_alloc(gsl_rng_default);
     gsl_monte_function F;
-    F.f = &customPDF;
+    F.f = &data->customPDF;
     F.dim = mu.n_rows;
     F.params = &params;
 
@@ -358,7 +360,7 @@ double custom3Full(unsigned n, const double* x, double* grad, void* my_func_data
 
     gsl_rng *rng = gsl_rng_alloc(gsl_rng_default);
     gsl_monte_function F;
-    F.f = &customPDF;
+    F.f = &data->customPDF;
     F.dim = mu.n_rows;
     F.params = &params;
 
@@ -388,6 +390,7 @@ struct costcustom1{
     vec ub;
     vec eta;
     function<vec(const vec&)> dynamics;
+    function<double(double *x, size_t dim, void *params)> customPDF;
     size_t samples;
 };
 
@@ -407,7 +410,7 @@ double custom1(unsigned n, const double* x, double* grad, void* my_func_data) {
     
     gsl_rng *rng = gsl_rng_alloc(gsl_rng_default);
     gsl_monte_function F;
-    F.f = &customPDF;
+    F.f = &data->customPDF;
     F.dim = mu.n_rows;
     F.params = &params;
     
@@ -438,6 +441,7 @@ struct costcustom2{
     vec second;
     vec eta;
     function<vec(const vec&, const vec&)> dynamics;
+    function<double(double *x, size_t dim, void *params)> customPDF;
     size_t samples;
     size_t input_space_size;
 };
@@ -498,6 +502,7 @@ struct costcustom3{
     vec disturb;
     vec eta;
     function<vec(const vec&, const vec&, const vec&)> dynamics;
+    function<double(double *x, size_t dim, void *params)> customPDF;
     size_t samples;
 };
 

@@ -79,7 +79,9 @@ protected:
     function<vec(const vec&, const vec& , const vec&)> dynamics3;
     function<vec(const vec&, const vec&)> dynamics2;
     function<vec(const vec&)> dynamics1;
-    
+
+    function<double(double *x, size_t dim, void *params)> customPDF;
+
     ///Stopping Condition
     double epsilon = 0.00001;
     
@@ -148,7 +150,7 @@ public:
     void setStdDev(vec sig);
     void setNoise(NoiseType n, bool diagonal = true);
     void setNoise(NoiseType n, bool diagonal, size_t monte_carlo_samples);
-    void setCustomDistribution(size_t monte_carlo_samples);
+    void setCustomDistribution(const function<double(double *x, size_t dim, void *params)> c,size_t monte_carlo_samples);
     
     ///Getters for Noise Parameters
     mat getInvCov();
