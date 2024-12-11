@@ -23,6 +23,7 @@ using namespace arma;
 
 /* IMDP Functions*/
 
+
 /// Set Nonlinear Optimization Algorithm
 void IMDP::setAlgorithm(nlopt::algorithm alg){
     algo = alg;
@@ -58,73 +59,63 @@ double multivariateNormalPDF(double *x, size_t dim, void *params)
     return norm * exp(exponent);
 }
 
-/// struct for normal offdiagonal distribution with 3 parameters
-struct costFunctionDataNormaloffdiagonal3{
-    double dim;
+/// Struct for normal distribution with 3 parameters
+struct costFunctionDataNormal3 {
+    double dim; //Used for offdiagonal
     vec state_end;
     vec input;
     vec disturb;
     vec eta;
-    mat inv_cov;
-    double det;
+    mat inv_cov; // Used for offdiagonal
+    double det;  // Used for offdiagonal
+    vec sigma;   // Used for diagonal
     function<vec(const vec&, const vec&, const vec&)> dynamics;
-    size_t samples;
+    size_t samples; // Used for offdiagonal
+    bool is_diagonal; // Flag to indicate if the distribution is diagonal
 };
 
-/// normal offdiagonal cost function with 3 parameters
-double costFunctionNormaloffdiagonal3(unsigned n, const double* x, double* grad, void* my_func_data) {
-    costFunctionDataNormaloffdiagonal3* data = static_cast<costFunctionDataNormaloffdiagonal3*>(my_func_data);
+/// Cost function for normal distribution with 3 parameters
+double costFunctionNormal3(unsigned n, const double* x, double* grad, void* my_func_data) {
+    costFunctionDataNormal3* data = static_cast<costFunctionDataNormal3*>(my_func_data);
     vec mu = data->dynamics(conv_to<vec>::from(vector<double>(x, x + n)), data->input, data->disturb);
-    
-    multivariateNormalParams params;
-    params.mean = mu;
-    params.inv_cov = data->inv_cov;
-    params.det = data->det;
-    
-    gsl_rng *rng = gsl_rng_alloc(gsl_rng_default);
-    gsl_monte_function F;
-    F.f = &multivariateNormalPDF;
-    F.dim = mu.n_rows;
-    F.params = &params;
-    vector<double> lower_bounds, upper_bounds;
-    for (size_t m = 0; m < data->state_end.n_rows; ++m) {
-        lower_bounds.push_back(data->state_end[m] - data->eta[m] / 2.0);
-        upper_bounds.push_back(data->state_end[m] + data->eta[m] / 2.0);
-    }
-    double* lb = lower_bounds.data();
-    double* ub = upper_bounds.data();
-    double result, error;
-    
-    gsl_monte_vegas_state *s = gsl_monte_vegas_alloc(mu.n_rows);
-    gsl_monte_vegas_integrate(&F, lb, ub, data->dim, data->samples, rng, s, &result, &error);
-    gsl_monte_vegas_free(s);
-    gsl_rng_free(rng);
-    
-    return result;
-}
 
-/// struct for diagonal distribution with 3 parameters
-struct costFunctionDataNormaldiagonal3{
-    vec state_end;
-    vec input;
-    vec disturb;
-    vec eta;
-    vec sigma;
-    function<vec(const vec&, const vec&, const vec&)> dynamics;
-};
+    if (data->is_diagonal) {
+        double probability_product = 1.0;
+        for (size_t m = 0; m < data->state_end.n_rows; ++m) {
+            double x0 = data->state_end[m] - data->eta[m] / 2.0;
+            double x1 = data->state_end[m] + data->eta[m] / 2.0;
+            double probability = normal1DCDF(x0, x1, mu[m], data->sigma[m]);
+            probability_product *= probability;
+        }
+        return probability_product;
+    } else {
+        multivariateNormalParams params;
+        params.mean = mu;
+        params.inv_cov = data->inv_cov;
+        params.det = data->det;
 
-/// normal diagonal cost function with 3 parameters
-double costFunctionNormaldiagonal3(unsigned n, const double* x, double* grad, void* my_func_data) {
-    costFunctionDataNormaldiagonal3* data = static_cast<costFunctionDataNormaldiagonal3*>(my_func_data);
-    vec mu = data->dynamics(conv_to<vec>::from( vector<double>(x, x + n)), data->input, data->disturb);
-    double probability_product = 1.0;
-    for (size_t m = 0; m < data->state_end.n_rows; ++m) {
-        double x0 = data->state_end[m] - data->eta[m] / 2.0;
-        double x1 = data->state_end[m] + data->eta[m] / 2.0;
-        double probability = normal1DCDF(x0, x1, mu[m], data->sigma[m]);
-        probability_product *= probability;
+        gsl_rng *rng = gsl_rng_alloc(gsl_rng_default);
+        gsl_monte_function F;
+        F.f = &multivariateNormalPDF;
+        F.dim = mu.n_rows;
+        F.params = &params;
+
+        vector<double> lower_bounds, upper_bounds;
+        for (size_t m = 0; m < data->state_end.n_rows; ++m) {
+            lower_bounds.push_back(data->state_end[m] - data->eta[m] / 2.0);
+            upper_bounds.push_back(data->state_end[m] + data->eta[m] / 2.0);
+        }
+        double* lb = lower_bounds.data();
+        double* ub = upper_bounds.data();
+        double result, error;
+
+        gsl_monte_vegas_state *s = gsl_monte_vegas_alloc(mu.n_rows);
+        gsl_monte_vegas_integrate(&F, lb, ub, data->dim, data->samples, rng, s, &result, &error);
+        gsl_monte_vegas_free(s);
+        gsl_rng_free(rng);
+
+        return result;
     }
-    return probability_product;
 }
 
 /// normal offdiagonal cost function with 2 parameters
