@@ -101,7 +101,7 @@ double performMonteCarloIntegration(const vec& mu, const mat& inv_cov, double de
     return result;
 }
 
-/// Struct for normal distribution with parameters
+/// Struct for normal distribution with variable parameters
 struct costFunctionDataNormal {
     double dim; // Used for offdiagonal
     vec state_end;
@@ -112,14 +112,14 @@ struct costFunctionDataNormal {
     mat inv_cov; // Used for offdiagonal
     double det;  // Used for offdiagonal
     vec sigma;   // Used for diagonal
-    function<vec(const vec&, const vec&, const vec&)> dynamics3;
-    function<vec(const vec&, const vec&)> dynamics2;
     function<vec(const vec&)> dynamics1;
+    function<vec(const vec&, const vec&)> dynamics2;
+    function<vec(const vec&, const vec&, const vec&)> dynamics3;
     size_t samples; // Used for offdiagonal
     bool is_diagonal; // Flag to indicate if the distribution is diagonal
 };
 
-/// Cost function for normal distribution with parameters
+/// Cost function for normal distribution with variable parameters
 double costFunctionNormal(unsigned n, const double* x, double* grad, void* my_func_data) {
     costFunctionDataNormal* data = static_cast<costFunctionDataNormal*>(my_func_data);
     vec mu;
@@ -139,7 +139,9 @@ double costFunctionNormal(unsigned n, const double* x, double* grad, void* my_fu
     }
 }
 
-/// Helper function to calculate probability product for diagonal distributions with full state space
+/* cost functions for transition to full state space */
+
+/// Helper function to calculate probability product for diagonal distributions
 double calculateProbabilityProductFull(const vec& state_start, const vec& lb, const vec& ub, const vec& eta, const vec& mu, const vec& sigma) {
     double probability_product = 1.0;
     for (size_t m = 0; m < state_start.n_rows; ++m) {
@@ -151,7 +153,7 @@ double calculateProbabilityProductFull(const vec& state_start, const vec& lb, co
     return probability_product;
 }
 
-/// Helper function to perform Monte Carlo integration for offdiagonal distributions with full state space
+/// Helper function to perform Monte Carlo integration for offdiagonal distributions
 double performMonteCarloIntegrationFull(const vec& mu, const mat& inv_cov, double det, const vec& state_start, const vec& lb, const vec& ub, const vec& eta, double dim, size_t samples) {
     multivariateNormalParams params;
     params.mean = mu;
