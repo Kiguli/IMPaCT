@@ -118,76 +118,62 @@ double costFunctionNormal3(unsigned n, const double* x, double* grad, void* my_f
     }
 }
 
-/// normal offdiagonal cost function with 2 parameters
-struct costFunctionDataNormaloffdiagonal2{
-    double dim;
+/// Struct for normal distribution with 2 parameters
+struct costFunctionDataNormal2 {
+    double dim; // Used for offdiagonal
     vec state_end;
     vec second;
     vec eta;
-    mat inv_cov;
-    double det;
+    mat inv_cov; // Used for offdiagonal
+    double det;  // Used for offdiagonal
+    vec sigma;   // Used for diagonal
     function<vec(const vec&, const vec&)> dynamics;
-    size_t samples;
+    size_t samples; // Used for offdiagonal
+    bool is_diagonal; // Flag to indicate if the distribution is diagonal
 };
 
-/// cost function for normal offdiagonal cost function with 2 parameters
-double costFunctionNormaloffdiagonal2(unsigned n, const double* x, double* grad, void* my_func_data) {
-    costFunctionDataNormaloffdiagonal2* data = static_cast<costFunctionDataNormaloffdiagonal2*>(my_func_data);
+/// Cost function for normal distribution with 2 parameters
+double costFunctionNormal2(unsigned n, const double* x, double* grad, void* my_func_data) {
+    costFunctionDataNormal2* data = static_cast<costFunctionDataNormal2*>(my_func_data);
     vec mu = data->dynamics(conv_to<vec>::from(vector<double>(x, x + n)), data->second);
-    
-    multivariateNormalParams params;
-    params.mean = mu;
-    params.inv_cov = data->inv_cov;
-    params.det = data->det;
-    
-    gsl_rng *rng = gsl_rng_alloc(gsl_rng_default);
-    gsl_monte_function F;
-    F.f = &multivariateNormalPDF;
-    F.dim = mu.n_rows;
-    F.params = &params;
-    
-    vector<double> lower_bounds, upper_bounds;
-    for (size_t m = 0; m < data->state_end.n_rows; ++m) {
-        lower_bounds.push_back(data->state_end[m] - data->eta[m] / 2.0);
-        upper_bounds.push_back(data->state_end[m] + data->eta[m] / 2.0);
+
+    if (data->is_diagonal) {
+        double probability_product = 1.0;
+        for (size_t m = 0; m < data->state_end.n_rows; ++m) {
+            double x0 = data->state_end[m] - data->eta[m] / 2.0;
+            double x1 = data->state_end[m] + data->eta[m] / 2.0;
+            double probability = normal1DCDF(x0, x1, mu[m], data->sigma[m]);
+            probability_product *= probability;
+        }
+        return probability_product;
+    } else {
+        multivariateNormalParams params;
+        params.mean = mu;
+        params.inv_cov = data->inv_cov;
+        params.det = data->det;
+
+        gsl_rng *rng = gsl_rng_alloc(gsl_rng_default);
+        gsl_monte_function F;
+        F.f = &multivariateNormalPDF;
+        F.dim = mu.n_rows;
+        F.params = &params;
+
+        vector<double> lower_bounds, upper_bounds;
+        for (size_t m = 0; m < data->state_end.n_rows; ++m) {
+            lower_bounds.push_back(data->state_end[m] - data->eta[m] / 2.0);
+            upper_bounds.push_back(data->state_end[m] + data->eta[m] / 2.0);
+        }
+        double* lb = lower_bounds.data();
+        double* ub = upper_bounds.data();
+        double result, error;
+
+        gsl_monte_vegas_state *s = gsl_monte_vegas_alloc(mu.n_rows);
+        gsl_monte_vegas_integrate(&F, lb, ub, data->dim, data->samples, rng, s, &result, &error);
+        gsl_monte_vegas_free(s);
+        gsl_rng_free(rng);
+
+        return result;
     }
-    double* lb = lower_bounds.data();
-    double* ub = upper_bounds.data();
-    double result, error;
-    
-    gsl_monte_vegas_state *s = gsl_monte_vegas_alloc(mu.n_rows);
-    gsl_monte_vegas_integrate(&F, lb, ub, data->dim, data->samples, rng, s, &result, &error);
-    gsl_monte_vegas_free(s);
-    gsl_rng_free(rng);
-    
-    return result;
-}
-
-
-/// normal diagonal cost function with 2 parameters
-struct costFunctionDataNormaldiagonal2{
-    vec state_end;
-    vec second;
-    vec eta;
-    vec sigma;
-    function<vec(const vec&, const vec&)> dynamics;
-};
-
-/// cost function for normal diagonal cost function with 2 parameters
-double costFunctionNormaldiagonal2(unsigned n, const double* x, double* grad, void* my_func_data) {
-    costFunctionDataNormaldiagonal2* data = static_cast<costFunctionDataNormaldiagonal2*>(my_func_data);
-    
-    vec mu = data->dynamics(conv_to<vec>::from( vector<double>(x, x + n)), data->second);
-    
-    double probability_product = 1.0;
-    for (size_t m = 0; m < data->state_end.n_rows; ++m) {
-        double x0 = data->state_end[m] - data->eta[m] / 2.0;
-        double x1 = data->state_end[m] + data->eta[m] / 2.0;
-        
-        double probability = normal1DCDF(x0, x1, mu[m], data->sigma[m]);
-        probability_product *= probability;
-    }
-    return probability_product;
 }
 
 
