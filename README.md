@@ -1,4 +1,4 @@
-Note: some new features are being added at the moment, there may be some bugs caused by this, do see the release package on the right hand menu to use **IMPaCT** v1.0.
+Note: some new features are being added at the moment, there may be some bugs caused by this, do see the release package on the right hand menu to use **IMPaCT** v1.0 which passed the repeatability evaluation of QEST+FORMATS. The tool according to **IMPaCT** v1.0 aligns with the 2024 QEST+FORMATS research paper.
 
 # IMPaCT Software Tool
 
