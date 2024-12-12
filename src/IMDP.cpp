@@ -5,7 +5,7 @@
 #include <string>
 #include <nlopt.hpp>
 #include <iomanip>
-#include <sycl/sycl.hpp>
+#include <AdaptiveCpp/sycl/sycl.hpp>
 #include <chrono>
 #include "IMDP.h"
 #include <glpk.h>
@@ -13,7 +13,7 @@
 #include <gsl/gsl_monte.h>
 #include <gsl/gsl_monte_vegas.h>
 #include <armadillo>
-#include <hdf5.h>
+#include <hdf5/serial/hdf5.h>
 #include "custom.cpp"
 
 #include "GPU_synthesis.cpp"
@@ -237,6 +237,7 @@ struct costcustom1Full{
     vec ub;
     vec eta;
     function<vec(const vec&)> dynamics;
+    //function<double(double *x, size_t dim, void *params)> customPDF;
     function<double(double *x, size_t dim, void *params)> customPDF;
     size_t samples;
 };
@@ -256,7 +257,7 @@ double custom1Full(unsigned n, const double* x, double* grad, void* my_func_data
 
     gsl_rng *rng = gsl_rng_alloc(gsl_rng_default);
     gsl_monte_function F;
-    F.f = &data->customPDF;
+    F.f = data->customPDF;
     F.dim = mu.n_rows;
     F.params = &params;
 
@@ -287,6 +288,7 @@ struct costcustom2Full{
     vec eta;
     function<vec(const vec&, const vec&)> dynamics;
     function<double(double *x, size_t dim, void *params)> customPDF;
+    //double (*customPDF)(double *x, size_t dim, void *params);
     size_t samples;
     size_t input_space_size;
 };
@@ -311,7 +313,7 @@ double custom2Full(unsigned n, const double* x, double* grad, void* my_func_data
 
     gsl_rng *rng = gsl_rng_alloc(gsl_rng_default);
     gsl_monte_function F;
-    F.f = &data->customPDF;
+    F.f = data->customPDF;
     F.dim = mu.n_rows;
     F.params = &params;
 
@@ -343,6 +345,7 @@ struct costcustom3Full{
     vec eta;
     function<vec(const vec&, const vec&, const vec&)> dynamics;
     function<double(double *x, size_t dim, void *params)> customPDF;
+    //double (*customPDF)(double *x, size_t dim, void *params);
     size_t samples;
 };
 
@@ -364,7 +367,7 @@ double custom3Full(unsigned n, const double* x, double* grad, void* my_func_data
 
     gsl_rng *rng = gsl_rng_alloc(gsl_rng_default);
     gsl_monte_function F;
-    F.f = &data->customPDF;
+    F.f = data->customPDF;
     F.dim = mu.n_rows;
     F.params = &params;
 
@@ -395,6 +398,7 @@ struct costcustom1{
     vec eta;
     function<vec(const vec&)> dynamics;
     function<double(double *x, size_t dim, void *params)> customPDF;
+    //double (*customPDF)(double *x, size_t dim, void *params);
     size_t samples;
 };
 
@@ -414,7 +418,7 @@ double custom1(unsigned n, const double* x, double* grad, void* my_func_data) {
     
     gsl_rng *rng = gsl_rng_alloc(gsl_rng_default);
     gsl_monte_function F;
-    F.f = &data->customPDF;
+    F.f = data->customPDF;
     F.dim = mu.n_rows;
     F.params = &params;
     
@@ -446,6 +450,7 @@ struct costcustom2{
     vec eta;
     function<vec(const vec&, const vec&)> dynamics;
     function<double(double *x, size_t dim, void *params)> customPDF;
+    //double (*customPDF)(double *x, size_t dim, void *params);
     size_t samples;
     size_t input_space_size;
 };
@@ -471,7 +476,7 @@ double custom2(unsigned n, const double* x, double* grad, void* my_func_data) {
     gsl_rng *rng = gsl_rng_alloc(gsl_rng_default);
     
     gsl_monte_function F;
-    F.f = &customPDF;
+    F.f = data->customPDF;
     F.dim = mu.n_rows;
     F.params = &params;
     
@@ -507,6 +512,7 @@ struct costcustom3{
     vec eta;
     function<vec(const vec&, const vec&, const vec&)> dynamics;
     function<double(double *x, size_t dim, void *params)> customPDF;
+    //double (*customPDF)(double *x, size_t dim, void *params);
     size_t samples;
 };
 
@@ -528,7 +534,7 @@ double custom3(unsigned n, const double* x, double* grad, void* my_func_data) {
     
     gsl_rng *rng = gsl_rng_alloc(gsl_rng_default);
     gsl_monte_function F;
-    F.f = &customPDF;
+    F.f = data->customPDF;
     F.dim = mu.n_rows;
     F.params = &params;
     
@@ -593,14 +599,15 @@ void IMDP::minAvoidTransitionVector(){
                         opt.set_xtol_rel(1e-3);
                         
                         // Prepare data for costfunction
-                        costFunctionDataNormaldiagonal1Full data;
+                        costFunctionDataNormalFull data;
                         data.state_start = state_start;
                         data.lb = ss_lb;
                         data.ub = ss_ub;
                         data.eta = ss_eta;
                         data.sigma = sigma;
-                        data.dynamics = dynamics1;
-                        opt.set_max_objective(costFunctionNormaldiagonal1Full, &data);
+                        data.dynamics1 = dynamics1;
+                        data.is_diagonal = diagonal;
+                        opt.set_max_objective(costFunctionNormalFull, &data);
                         vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                         double minf;
                         try {
@@ -646,12 +653,13 @@ void IMDP::minAvoidTransitionVector(){
                             
                             // Prepare data for costfunction
                             const vec state_end = avoid_space.row(col).t();
-                            costFunctionDataNormaldiagonal1 data;
+                            costFunctionDataNormal data;
                             data.state_end = state_end;
                             data.eta = ss_eta;
                             data.sigma = sigma;
-                            data.dynamics = dynamics1;
-                            opt.set_min_objective(costFunctionNormaldiagonal1, &data);
+                            data.dynamics1 = dynamics1;
+                            data.is_diagonal = diagonal;
+                            opt.set_min_objective(costFunctionNormal, &data);
                             vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                             double minf;
                             try {
@@ -695,7 +703,7 @@ void IMDP::minAvoidTransitionVector(){
                         opt.set_xtol_rel(1e-3);
                         
                         // Prepare data for costfunction
-                        costFunctionDataNormaloffdiagonal1Full data;
+                        costFunctionDataNormalFull data;
                         data.dim = dim_x;
                         data.state_start = state_start;
                         data.lb = ss_lb;
@@ -703,9 +711,10 @@ void IMDP::minAvoidTransitionVector(){
                         data.eta = ss_eta;
                         data.inv_cov = inv_covariance_matrix;
                         data.det = covariance_matrix_determinant;
-                        data.dynamics = dynamics1;
+                        data.dynamics1 = dynamics1;
                         data.samples = calls;
-                        opt.set_max_objective(costFunctionNormaloffdiagonal1Full, &data);
+                        data.is_diagonal = diagonal;
+                        opt.set_max_objective(costFunctionNormalFull, &data);
                         vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                         double minf;
                         try {
@@ -751,15 +760,16 @@ void IMDP::minAvoidTransitionVector(){
                             
                             // Prepare data for costfunction
                             const vec state_end = target_space.row(col).t();
-                            costFunctionDataNormaloffdiagonal1 data;
+                            costFunctionDataNormal data;
                             data.dim = dim_x;
                             data.state_end = state_end;
                             data.eta = ss_eta;
                             data.inv_cov = inv_covariance_matrix;
                             data.det = covariance_matrix_determinant;
-                            data.dynamics = dynamics1;
+                            data.dynamics1 = dynamics1;
+                            data.is_diagonal = diagonal;
                             data.samples = calls;
-                            opt.set_min_objective(costFunctionNormaloffdiagonal1, &data);
+                            opt.set_min_objective(costFunctionNormal, &data);
                             vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                             double minf;
                             try {
@@ -810,6 +820,7 @@ void IMDP::minAvoidTransitionVector(){
                         data.ub = ss_ub;
                         data.eta = ss_eta;
                         data.dynamics = dynamics1;
+                        data.customPDF = customPDF;
                         data.samples = calls;
                         opt.set_max_objective(custom1Full, &data);
                         vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
@@ -863,6 +874,7 @@ void IMDP::minAvoidTransitionVector(){
                             data.state_end = state_end;
                             data.eta = ss_eta;
                             data.dynamics = dynamics1;
+                            data.customPDF = customPDF;
                             data.samples = calls;
                             opt.set_min_objective(custom1, &data);
                             vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
@@ -922,15 +934,16 @@ void IMDP::minAvoidTransitionVector(){
                         opt.set_xtol_rel(1e-3);
                         
                         // Prepare data for costfunction
-                        costFunctionDataNormaldiagonal2Full data;
+                        costFunctionDataNormalFull data;
                         data.state_start = state_start;
                         data.lb = ss_lb;
                         data.ub = ss_ub;
                         data.second = input;
                         data.eta = ss_eta;
                         data.sigma = sigma;
-                        data.dynamics = dynamics2;
-                        opt.set_max_objective(costFunctionNormaldiagonal2Full, &data);
+                        data.dynamics2 = dynamics2;
+                        data.is_diagonal = diagonal;
+                        opt.set_max_objective(costFunctionNormalFull, &data);
                         vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                         double minf;
                         try {
@@ -977,13 +990,14 @@ void IMDP::minAvoidTransitionVector(){
                             
                             // Prepare data for costfunction
                             const vec state_end = avoid_space.row(col).t();
-                            costFunctionDataNormaldiagonal2 data;
+                            costFunctionDataNormal data;
                             data.state_end = state_end;
                             data.second = input;
                             data.eta = ss_eta;
                             data.sigma = sigma;
-                            data.dynamics = dynamics2;
-                            opt.set_min_objective(costFunctionNormaldiagonal2, &data);
+                            data.dynamics2 = dynamics2;
+                            data.is_diagonal = diagonal;
+                            opt.set_min_objective(costFunctionNormal, &data);
                             vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                             double minf;
                             try {
@@ -1029,7 +1043,7 @@ void IMDP::minAvoidTransitionVector(){
                         opt.set_xtol_rel(1e-3);
                         
                         // Prepare data for costfunction
-                        costFunctionDataNormaloffdiagonal2Full data;
+                        costFunctionDataNormalFull data;
                         data.dim = dim_x;
                         data.state_start = state_start;
                         data.lb = ss_lb;
@@ -1038,9 +1052,10 @@ void IMDP::minAvoidTransitionVector(){
                         data.eta = ss_eta;
                         data.inv_cov = inv_covariance_matrix;
                         data.det = covariance_matrix_determinant;
-                        data.dynamics = dynamics2;
+                        data.dynamics2 = dynamics2;
+                        data.is_diagonal = diagonal;
                         data.samples = calls;
-                        opt.set_max_objective(costFunctionNormaloffdiagonal2Full, &data);
+                        opt.set_max_objective(costFunctionNormalFull, &data);
                         vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                         double minf;
                         try {
@@ -1087,16 +1102,17 @@ void IMDP::minAvoidTransitionVector(){
                             
                             // Prepare data for costfunction
                             const vec state_end = avoid_space.row(col).t();
-                            costFunctionDataNormaloffdiagonal2 data;
+                            costFunctionDataNormal data;
                             data.dim = dim_x;
                             data.state_end = state_end;
                             data.second = input;
                             data.eta = ss_eta;
                             data.inv_cov = inv_covariance_matrix;
                             data.det = covariance_matrix_determinant;
-                            data.dynamics = dynamics2;
+                            data.dynamics2 = dynamics2;
+                            data.is_diagonal = diagonal;
                             data.samples = calls;
-                            opt.set_min_objective(costFunctionNormaloffdiagonal2, &data);
+                            opt.set_min_objective(costFunctionNormal, &data);
                             vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                             double minf;
                             try {
@@ -1149,6 +1165,7 @@ void IMDP::minAvoidTransitionVector(){
                         data.ub = ss_ub;
                         data.second = input;
                         data.eta = ss_eta;
+                        data.customPDF = customPDF;
                         data.dynamics = dynamics2;
                         data.samples = calls;
                         data.input_space_size = input_space_size;
@@ -1208,6 +1225,7 @@ void IMDP::minAvoidTransitionVector(){
                             data.second = input;
                             data.eta = ss_eta;
                             data.dynamics = dynamics2;
+                            data.customPDF = customPDF;
                             data.samples = calls;
                             data.input_space_size = input_space_size;
                             opt.set_min_objective(custom2, &data);
@@ -1268,15 +1286,16 @@ void IMDP::minAvoidTransitionVector(){
                         opt.set_xtol_rel(1e-3);
                         
                         // Prepare data for costfunction
-                        costFunctionDataNormaldiagonal2Full data;
+                        costFunctionDataNormalFull data;
                         data.state_start = state_start;
                         data.lb = ss_lb;
                         data.ub = ss_ub;
                         data.second = disturb;
                         data.eta = ss_eta;
                         data.sigma = sigma;
-                        data.dynamics = dynamics2;
-                        opt.set_max_objective(costFunctionNormaldiagonal2Full, &data);
+                        data.dynamics2 = dynamics2;
+                        data.is_diagonal = diagonal;
+                        opt.set_max_objective(costFunctionNormalFull, &data);
                         vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                         double minf;
                         try {
@@ -1323,13 +1342,14 @@ void IMDP::minAvoidTransitionVector(){
                             
                             // Prepare data for costfunction
                             const vec state_end = avoid_space.row(col).t();
-                            costFunctionDataNormaldiagonal2 data;
+                            costFunctionDataNormal data;
                             data.state_end = state_end;
                             data.second = disturb;
                             data.eta = ss_eta;
                             data.sigma = sigma;
-                            data.dynamics = dynamics2;
-                            opt.set_min_objective(costFunctionNormaldiagonal2, &data);
+                            data.dynamics2 = dynamics2;
+                            data.is_diagonal = diagonal;
+                            opt.set_min_objective(costFunctionNormal, &data);
                             vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                             double minf;
                             try {
@@ -1375,7 +1395,7 @@ void IMDP::minAvoidTransitionVector(){
                         opt.set_xtol_rel(1e-3);
                         
                         // Prepare data for costfunction
-                        costFunctionDataNormaloffdiagonal2Full data;
+                        costFunctionDataNormalFull data;
                         data.dim = dim_x;
                         data.state_start = state_start;
                         data.lb = ss_lb;
@@ -1384,9 +1404,10 @@ void IMDP::minAvoidTransitionVector(){
                         data.eta = ss_eta;
                         data.inv_cov = inv_covariance_matrix;
                         data.det = covariance_matrix_determinant;
-                        data.dynamics = dynamics2;
+                        data.dynamics2 = dynamics2;
+                        data.is_diagonal = diagonal;
                         data.samples = calls;
-                        opt.set_max_objective(costFunctionNormaloffdiagonal2Full, &data);
+                        opt.set_max_objective(costFunctionNormalFull, &data);
                         vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                         double minf;
                         try {
@@ -1433,16 +1454,17 @@ void IMDP::minAvoidTransitionVector(){
                             
                             // Prepare data for costfunction
                             const vec state_end = avoid_space.row(col).t();
-                            costFunctionDataNormaloffdiagonal2 data;
+                            costFunctionDataNormal data;
                             data.dim = dim_x;
                             data.state_end = state_end;
                             data.second = disturb;
                             data.eta = ss_eta;
                             data.inv_cov = inv_covariance_matrix;
                             data.det = covariance_matrix_determinant;
-                            data.dynamics = dynamics2;
+                            data.dynamics2 = dynamics2;
                             data.samples = calls;
-                            opt.set_min_objective(costFunctionNormaloffdiagonal2, &data);
+                            data.is_diagonal = diagonal;
+                            opt.set_min_objective(costFunctionNormal, &data);
                             vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                             double minf;
                             try {
@@ -1496,6 +1518,7 @@ void IMDP::minAvoidTransitionVector(){
                         data.second = disturb;
                         data.eta = ss_eta;
                         data.dynamics = dynamics2;
+                        data.customPDF = customPDF;
                         data.samples = calls;
                         data.input_space_size = input_space_size;
                         opt.set_max_objective(custom2Full, &data);
@@ -1550,6 +1573,7 @@ void IMDP::minAvoidTransitionVector(){
                             data.state_start = state_start;
                             data.state_end = state_end;
                             data.second = disturb;
+                            data.customPDF = customPDF;
                             data.eta = ss_eta;
                             data.dynamics = dynamics2;
                             data.samples = calls;
@@ -1614,7 +1638,7 @@ void IMDP::minAvoidTransitionVector(){
                         opt.set_xtol_rel(1e-3);
                         
                         // Prepare data for costfunction
-                        costFunctionDataNormaldiagonal3Full data;
+                        costFunctionDataNormalFull data;
                         data.state_start = state_start;
                         data.lb = ss_lb;
                         data.ub = ss_ub;
@@ -1622,8 +1646,9 @@ void IMDP::minAvoidTransitionVector(){
                         data.input = input;
                         data.eta = ss_eta;
                         data.sigma = sigma;
-                        data.dynamics = dynamics3;
-                        opt.set_max_objective(costFunctionNormaldiagonal3Full, &data);
+                        data.dynamics3 = dynamics3;
+                        data.is_diagonal = diagonal;
+                        opt.set_max_objective(costFunctionNormalFull, &data);
                         vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                         double minf;
                         try {
@@ -1672,14 +1697,15 @@ void IMDP::minAvoidTransitionVector(){
                             
                             // Prepare data for costfunction
                             const vec state_end = avoid_space.row(col).t();
-                            costFunctionDataNormaldiagonal3 data;
+                            costFunctionDataNormal data;
                             data.state_end = state_end;
                             data.input = input;
                             data.disturb = disturb;
                             data.eta = ss_eta;
                             data.sigma = sigma;
-                            data.dynamics = dynamics3;
-                            opt.set_min_objective(costFunctionNormaldiagonal3, &data);
+                            data.dynamics3 = dynamics3;
+                            data.is_diagonal = diagonal;
+                            opt.set_min_objective(costFunctionNormal, &data);
                             vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                             double minf;
                             try {
@@ -1727,7 +1753,7 @@ void IMDP::minAvoidTransitionVector(){
                         opt.set_xtol_rel(1e-3);
                         
                         // Prepare data for costfunction
-                        costFunctionDataNormaloffdiagonal3Full data;
+                        costFunctionDataNormalFull data;
                         data.dim = dim_x;
                         data.state_start = state_start;
                         data.lb = ss_lb;
@@ -1737,9 +1763,10 @@ void IMDP::minAvoidTransitionVector(){
                         data.eta = ss_eta;
                         data.inv_cov = inv_covariance_matrix;
                         data.det = covariance_matrix_determinant;
-                        data.dynamics = dynamics3;
+                        data.dynamics3 = dynamics3;
+                        data.is_diagonal = diagonal;
                         data.samples = calls;
-                        opt.set_max_objective(costFunctionNormaloffdiagonal3Full, &data);
+                        opt.set_max_objective(costFunctionNormalFull, &data);
                         vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                         double minf;
                         try {
@@ -1788,7 +1815,7 @@ void IMDP::minAvoidTransitionVector(){
                             
                             // Prepare data for costfunction
                             const vec state_end = avoid_space.row(col).t();
-                            costFunctionDataNormaloffdiagonal3 data;
+                            costFunctionDataNormal data;
                             data.dim = dim_x;
                             data.state_end = state_end;
                             data.input = input;
@@ -1796,9 +1823,10 @@ void IMDP::minAvoidTransitionVector(){
                             data.eta = ss_eta;
                             data.inv_cov = inv_covariance_matrix;
                             data.det = covariance_matrix_determinant;
-                            data.dynamics = dynamics3;
+                            data.dynamics3 = dynamics3;
+                            data.is_diagonal = diagonal;
                             data.samples = calls;
-                            opt.set_min_objective(costFunctionNormaloffdiagonal3, &data);
+                            opt.set_min_objective(costFunctionNormal, &data);
                             vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                             double minf;
                             try {
@@ -1852,6 +1880,7 @@ void IMDP::minAvoidTransitionVector(){
                         data.lb = ss_lb;
                         data.ub = ss_ub;
                         data.disturb = disturb;
+                        data.customPDF = customPDF;
                         data.input = input;
                         data.eta = ss_eta;
                         data.dynamics = dynamics3;
@@ -1911,6 +1940,7 @@ void IMDP::minAvoidTransitionVector(){
                             data.state_end = state_end;
                             data.input = input;
                             data.disturb = disturb;
+                            data.customPDF = customPDF;
                             data.eta = ss_eta;
                             data.dynamics = dynamics3;
                             data.samples = calls;
@@ -1981,14 +2011,15 @@ void IMDP::maxAvoidTransitionVector(){
                         opt.set_xtol_rel(1e-3);
                         
                         // Prepare data for costfunction
-                        costFunctionDataNormaldiagonal1Full data;
+                        costFunctionDataNormalFull data;
                         data.state_start = state_start;
                         data.lb = ss_lb;
                         data.ub = ss_ub;
                         data.eta = ss_eta;
                         data.sigma = sigma;
-                        data.dynamics = dynamics1;
-                        opt.set_min_objective(costFunctionNormaldiagonal1Full, &data);
+                        data.dynamics1 = dynamics1;
+                        data.is_diagonal = diagonal;
+                        opt.set_min_objective(costFunctionNormalFull, &data);
                         vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                         double minf;
                         try {
@@ -2034,12 +2065,13 @@ void IMDP::maxAvoidTransitionVector(){
                             
                             // Prepare data for costfunction
                             const vec state_end = avoid_space.row(col).t();
-                            costFunctionDataNormaldiagonal1 data;
+                            costFunctionDataNormal data;
                             data.state_end = state_end;
                             data.eta = ss_eta;
                             data.sigma = sigma;
-                            data.dynamics = dynamics1;
-                            opt.set_max_objective(costFunctionNormaldiagonal1, &data);
+                            data.dynamics1 = dynamics1;
+                            data.is_diagonal = diagonal;
+                            opt.set_max_objective(costFunctionNormal, &data);
                             vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                             double minf;
                             try {
@@ -2082,7 +2114,7 @@ void IMDP::maxAvoidTransitionVector(){
                         opt.set_xtol_rel(1e-3);
                         
                         // Prepare data for costfunction
-                        costFunctionDataNormaloffdiagonal1Full data;
+                        costFunctionDataNormalFull data;
                         data.dim = dim_x;
                         data.state_start = state_start;
                         data.lb = ss_lb;
@@ -2090,9 +2122,10 @@ void IMDP::maxAvoidTransitionVector(){
                         data.eta = ss_eta;
                         data.inv_cov = inv_covariance_matrix;
                         data.det = covariance_matrix_determinant;
-                        data.dynamics = dynamics1;
+                        data.dynamics1 = dynamics1;
+                        data.is_diagonal = diagonal;
                         data.samples = calls;
-                        opt.set_min_objective(costFunctionNormaloffdiagonal1Full, &data);
+                        opt.set_min_objective(costFunctionNormalFull, &data);
                         vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                         double minf;
                         try {
@@ -2138,15 +2171,16 @@ void IMDP::maxAvoidTransitionVector(){
                             
                             // Prepare data for costfunction
                             const vec state_end = avoid_space.row(col).t();
-                            costFunctionDataNormaloffdiagonal1 data;
+                            costFunctionDataNormal data;
                             data.dim = dim_x;
                             data.state_end = state_end;
                             data.eta = ss_eta;
                             data.inv_cov = inv_covariance_matrix;
                             data.det = covariance_matrix_determinant;
-                            data.dynamics = dynamics1;
+                            data.dynamics1 = dynamics1;
+                            data.is_diagonal = diagonal;
                             data.samples = calls;
-                            opt.set_max_objective(costFunctionNormaloffdiagonal1, &data);
+                            opt.set_max_objective(costFunctionNormal, &data);
                             vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                             double minf;
                             try {
@@ -2196,6 +2230,7 @@ void IMDP::maxAvoidTransitionVector(){
                         data.ub = ss_ub;
                         data.eta = ss_eta;
                         data.dynamics = dynamics1;
+                        data.customPDF = customPDF;
                         data.samples = calls;
                         opt.set_min_objective(custom1Full, &data);
                         vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
@@ -2249,6 +2284,7 @@ void IMDP::maxAvoidTransitionVector(){
                             data.state_end = state_end;
                             data.eta = ss_eta;
                             data.dynamics = dynamics1;
+                            data.customPDF = customPDF;
                             data.samples = calls;
                             opt.set_max_objective(custom1, &data);
                             vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
@@ -2308,15 +2344,16 @@ void IMDP::maxAvoidTransitionVector(){
                         opt.set_xtol_rel(1e-3);
                         
                         // Prepare data for costfunction
-                        costFunctionDataNormaldiagonal2Full data;
+                        costFunctionDataNormalFull data;
                         data.state_start = state_start;
                         data.lb = ss_lb;
                         data.ub = ss_ub;
                         data.second = input;
                         data.eta = ss_eta;
                         data.sigma = sigma;
-                        data.dynamics = dynamics2;
-                        opt.set_min_objective(costFunctionNormaldiagonal2Full, &data);
+                        data.dynamics2 = dynamics2;
+                        data.is_diagonal = diagonal;
+                        opt.set_min_objective(costFunctionNormalFull, &data);
                         vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                         double minf;
                         try {
@@ -2363,13 +2400,14 @@ void IMDP::maxAvoidTransitionVector(){
                             
                             // Prepare data for costfunction
                             const vec state_end = avoid_space.row(col).t();
-                            costFunctionDataNormaldiagonal2 data;
+                            costFunctionDataNormal data;
                             data.state_end = state_end;
                             data.second = input;
                             data.eta = ss_eta;
                             data.sigma = sigma;
-                            data.dynamics = dynamics2;
-                            opt.set_max_objective(costFunctionNormaldiagonal2, &data);
+                            data.dynamics2 = dynamics2;
+                            data.is_diagonal = diagonal;
+                            opt.set_max_objective(costFunctionNormal, &data);
                             vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                             double minf;
                             try {
@@ -2415,7 +2453,7 @@ void IMDP::maxAvoidTransitionVector(){
                         opt.set_xtol_rel(1e-3);
                         
                         // Prepare data for costfunction
-                        costFunctionDataNormaloffdiagonal2Full data;
+                        costFunctionDataNormalFull data;
                         data.dim = dim_x;
                         data.state_start = state_start;
                         data.lb = ss_lb;
@@ -2424,9 +2462,10 @@ void IMDP::maxAvoidTransitionVector(){
                         data.eta = ss_eta;
                         data.inv_cov = inv_covariance_matrix;
                         data.det = covariance_matrix_determinant;
-                        data.dynamics = dynamics2;
+                        data.dynamics2 = dynamics2;
+                        data.is_diagonal = diagonal;
                         data.samples = calls;
-                        opt.set_min_objective(costFunctionNormaloffdiagonal2Full, &data);
+                        opt.set_min_objective(costFunctionNormalFull, &data);
                         vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                         double minf;
                         try {
@@ -2473,16 +2512,17 @@ void IMDP::maxAvoidTransitionVector(){
                             
                             // Prepare data for costfunction
                             const vec state_end = avoid_space.row(col).t();
-                            costFunctionDataNormaloffdiagonal2 data;
+                            costFunctionDataNormal data;
                             data.dim = dim_x;
                             data.state_end = state_end;
                             data.second = input;
                             data.eta = ss_eta;
                             data.inv_cov = inv_covariance_matrix;
                             data.det = covariance_matrix_determinant;
-                            data.dynamics = dynamics2;
+                            data.dynamics2 = dynamics2;
+                            data.is_diagonal = diagonal;
                             data.samples = calls;
-                            opt.set_max_objective(costFunctionNormaloffdiagonal2, &data);
+                            opt.set_max_objective(costFunctionNormal, &data);
                             vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                             double minf;
                             try {
@@ -2534,6 +2574,7 @@ void IMDP::maxAvoidTransitionVector(){
                         data.lb = ss_lb;
                         data.ub = ss_ub;
                         data.second = input;
+                        data.customPDF = customPDF;
                         data.eta = ss_eta;
                         data.dynamics = dynamics2;
                         data.samples = calls;
@@ -2589,6 +2630,7 @@ void IMDP::maxAvoidTransitionVector(){
                             data.dim = dim_x;
                             data.state_start = state_start;
                             data.state_end = state_end;
+                            data.customPDF = customPDF;
                             data.second = input;
                             data.eta = ss_eta;
                             data.dynamics = dynamics2;
@@ -2652,15 +2694,16 @@ void IMDP::maxAvoidTransitionVector(){
                         opt.set_xtol_rel(1e-3);
                         
                         // Prepare data for costfunction
-                        costFunctionDataNormaldiagonal2Full data;
+                        costFunctionDataNormalFull data;
                         data.state_start = state_start;
                         data.lb = ss_lb;
                         data.ub = ss_ub;
                         data.second = disturb;
                         data.eta = ss_eta;
                         data.sigma = sigma;
-                        data.dynamics = dynamics2;
-                        opt.set_min_objective(costFunctionNormaldiagonal2Full, &data);
+                        data.dynamics2 = dynamics2;
+                        data.is_diagonal = diagonal;
+                        opt.set_min_objective(costFunctionNormalFull, &data);
                         vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                         double minf;
                         try {
@@ -2707,13 +2750,14 @@ void IMDP::maxAvoidTransitionVector(){
                             
                             // Prepare data for costfunction
                             const vec state_end = avoid_space.row(col).t();
-                            costFunctionDataNormaldiagonal2 data;
+                            costFunctionDataNormal data;
                             data.state_end = state_end;
                             data.second = disturb;
                             data.eta = ss_eta;
                             data.sigma = sigma;
-                            data.dynamics = dynamics2;
-                            opt.set_max_objective(costFunctionNormaldiagonal2, &data);
+                            data.dynamics2 = dynamics2;
+                            data.is_diagonal = diagonal;
+                            opt.set_max_objective(costFunctionNormal, &data);
                             vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                             double minf;
                             try {
@@ -2759,7 +2803,7 @@ void IMDP::maxAvoidTransitionVector(){
                         opt.set_xtol_rel(1e-3);
                         
                         // Prepare data for costfunction
-                        costFunctionDataNormaloffdiagonal2Full data;
+                        costFunctionDataNormalFull data;
                         data.dim = dim_x;
                         data.state_start = state_start;
                         data.lb = ss_lb;
@@ -2768,9 +2812,10 @@ void IMDP::maxAvoidTransitionVector(){
                         data.eta = ss_eta;
                         data.inv_cov = inv_covariance_matrix;
                         data.det = covariance_matrix_determinant;
-                        data.dynamics = dynamics2;
+                        data.dynamics2 = dynamics2;
+                        data.is_diagonal = diagonal;
                         data.samples = calls;
-                        opt.set_min_objective(costFunctionNormaloffdiagonal2Full, &data);
+                        opt.set_min_objective(costFunctionNormalFull, &data);
                         vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                         double minf;
                         try {
@@ -2817,16 +2862,17 @@ void IMDP::maxAvoidTransitionVector(){
                             
                             // Prepare data for costfunction
                             const vec state_end = avoid_space.row(col).t();
-                            costFunctionDataNormaloffdiagonal2 data;
+                            costFunctionDataNormal data;
                             data.dim = dim_x;
                             data.state_end = state_end;
                             data.second = disturb;
                             data.eta = ss_eta;
                             data.inv_cov = inv_covariance_matrix;
                             data.det = covariance_matrix_determinant;
-                            data.dynamics = dynamics2;
+                            data.dynamics2 = dynamics2;
+                            data.is_diagonal = diagonal;
                             data.samples = calls;
-                            opt.set_max_objective(costFunctionNormaloffdiagonal2, &data);
+                            opt.set_max_objective(costFunctionNormal, &data);
                             vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                             double minf;
                             try {
@@ -2877,6 +2923,7 @@ void IMDP::maxAvoidTransitionVector(){
                         data.state_start = state_start;
                         data.lb = ss_lb;
                         data.ub = ss_ub;
+                        data.customPDF = customPDF;
                         data.second = disturb;
                         data.eta = ss_eta;
                         data.dynamics = dynamics2;
@@ -2935,6 +2982,7 @@ void IMDP::maxAvoidTransitionVector(){
                             data.state_start = state_start;
                             data.state_end = state_end;
                             data.second = disturb;
+                            data.customPDF = customPDF;
                             data.eta = ss_eta;
                             data.dynamics = dynamics2;
                             data.samples = calls;
@@ -2999,7 +3047,7 @@ void IMDP::maxAvoidTransitionVector(){
                         opt.set_xtol_rel(1e-3);
                         
                         // Prepare data for costfunction
-                        costFunctionDataNormaldiagonal3Full data;
+                        costFunctionDataNormalFull data;
                         data.state_start = state_start;
                         data.lb = ss_lb;
                         data.ub = ss_ub;
@@ -3007,8 +3055,9 @@ void IMDP::maxAvoidTransitionVector(){
                         data.input = input;
                         data.eta = ss_eta;
                         data.sigma = sigma;
-                        data.dynamics = dynamics3;
-                        opt.set_min_objective(costFunctionNormaldiagonal3Full, &data);
+                        data.dynamics3 = dynamics3;
+                        data.is_diagonal = diagonal;
+                        opt.set_min_objective(costFunctionNormalFull, &data);
                         vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                         double minf;
                         try {
@@ -3057,14 +3106,15 @@ void IMDP::maxAvoidTransitionVector(){
                             
                             // Prepare data for costfunction
                             const vec state_end = avoid_space.row(col).t();
-                            costFunctionDataNormaldiagonal3 data;
+                            costFunctionDataNormal data;
                             data.state_end = state_end;
                             data.input = input;
                             data.disturb = disturb;
                             data.eta = ss_eta;
                             data.sigma = sigma;
-                            data.dynamics = dynamics3;
-                            opt.set_max_objective(costFunctionNormaldiagonal3, &data);
+                            data.dynamics3 = dynamics3;
+                            data.is_diagonal = diagonal;
+                            opt.set_max_objective(costFunctionNormal, &data);
                             vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                             double minf;
                             try {
@@ -3114,7 +3164,7 @@ void IMDP::maxAvoidTransitionVector(){
                         opt.set_xtol_rel(1e-3);
                         
                         // Prepare data for costfunction
-                        costFunctionDataNormaloffdiagonal3Full data;
+                        costFunctionDataNormalFull data;
                         data.dim = dim_x;
                         data.state_start = state_start;
                         data.lb = ss_lb;
@@ -3124,9 +3174,10 @@ void IMDP::maxAvoidTransitionVector(){
                         data.eta = ss_eta;
                         data.inv_cov = inv_covariance_matrix;
                         data.det = covariance_matrix_determinant;
-                        data.dynamics = dynamics3;
+                        data.dynamics3 = dynamics3;
                         data.samples = calls;
-                        opt.set_min_objective(costFunctionNormaloffdiagonal3Full, &data);
+                        data.is_diagonal = diagonal;
+                        opt.set_min_objective(costFunctionNormalFull, &data);
                         vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                         double minf;
                         try {
@@ -3176,7 +3227,7 @@ void IMDP::maxAvoidTransitionVector(){
                             
                             // Prepare data for costfunction
                             const vec state_end = avoid_space.row(col).t();
-                            costFunctionDataNormaloffdiagonal3 data;
+                            costFunctionDataNormal data;
                             data.dim = dim_x;
                             data.state_end = state_end;
                             data.input = input;
@@ -3184,9 +3235,10 @@ void IMDP::maxAvoidTransitionVector(){
                             data.eta = ss_eta;
                             data.inv_cov = inv_covariance_matrix;
                             data.det = covariance_matrix_determinant;
-                            data.dynamics = dynamics3;
+                            data.dynamics3 = dynamics3;
                             data.samples = calls;
-                            opt.set_max_objective(costFunctionNormaloffdiagonal3, &data);
+                            data.is_diagonal = diagonal;
+                            opt.set_max_objective(costFunctionNormal, &data);
                             vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                             double minf;
                             try {
@@ -3240,6 +3292,7 @@ void IMDP::maxAvoidTransitionVector(){
                         data.lb = ss_lb;
                         data.ub = ss_ub;
                         data.disturb = disturb;
+                        data.customPDF = customPDF;
                         data.input = input;
                         data.eta = ss_eta;
                         data.dynamics = dynamics3;
@@ -3300,6 +3353,7 @@ void IMDP::maxAvoidTransitionVector(){
                             data.state_end = state_end;
                             data.input = input;
                             data.disturb = disturb;
+                            data.customPDF = customPDF;
                             data.eta = ss_eta;
                             data.dynamics = dynamics3;
                             data.samples = calls;
@@ -3373,12 +3427,13 @@ void IMDP::minTransitionMatrix(){
                         
                         // Prepare data for costfunction
                         const vec state_end = state_space.row(col).t();
-                        costFunctionDataNormaldiagonal1 data;
+                        costFunctionDataNormal data;
                         data.state_end = state_end;
                         data.eta = ss_eta;
                         data.sigma = sigma;
-                        data.dynamics = dynamics1;
-                        opt.set_min_objective(costFunctionNormaldiagonal1, &data);
+                        data.dynamics1 = dynamics1;
+                        data.is_diagonal = diagonal;
+                        opt.set_min_objective(costFunctionNormal, &data);
                         vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                         double minf;
                         try {
@@ -3429,15 +3484,16 @@ void IMDP::minTransitionMatrix(){
                         
                         // Prepare data for costfunction
                         const vec state_end = state_space.row(col).t();
-                        costFunctionDataNormaloffdiagonal1 data;
+                        costFunctionDataNormal data;
                         data.dim = dim_x;
                         data.state_end = state_end;
                         data.eta = ss_eta;
                         data.inv_cov = inv_covariance_matrix;
                         data.det = covariance_matrix_determinant;
-                        data.dynamics = dynamics1;
+                        data.dynamics1 = dynamics1;
+                        data.is_diagonal = diagonal;
                         data.samples = calls;
-                        opt.set_min_objective(costFunctionNormaloffdiagonal1, &data);
+                        opt.set_min_objective(costFunctionNormal, &data);
                         vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                         double minf;
                         try {
@@ -3494,6 +3550,7 @@ void IMDP::minTransitionMatrix(){
                         data.state_end = state_end;
                         data.eta = ss_eta;
                         data.dynamics = dynamics1;
+                        data.customPDF = customPDF;
                         data.samples = calls;
                         opt.set_min_objective(custom1, &data);
                         vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
@@ -3554,13 +3611,14 @@ void IMDP::minTransitionMatrix(){
                         
                         // Prepare data for costfunction
                         const vec state_end = state_space.row(col).t();
-                        costFunctionDataNormaldiagonal2 data;
+                        costFunctionDataNormal data;
                         data.state_end = state_end;
                         data.second = input;
                         data.eta = ss_eta;
                         data.sigma = sigma;
-                        data.dynamics = dynamics2;
-                        opt.set_min_objective(costFunctionNormaldiagonal2, &data);
+                        data.dynamics2 = dynamics2;
+                        data.is_diagonal = diagonal;
+                        opt.set_min_objective(costFunctionNormal, &data);
                         vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                         double minf;
                         try {
@@ -3609,16 +3667,17 @@ void IMDP::minTransitionMatrix(){
                         
                         // Prepare data for costfunction
                         const vec state_end = state_space.row(col).t();
-                        costFunctionDataNormaloffdiagonal2 data;
+                        costFunctionDataNormal data;
                         data.dim = dim_x;
                         data.state_end = state_end;
                         data.second = input;
                         data.eta = ss_eta;
                         data.inv_cov = inv_covariance_matrix;
                         data.det = covariance_matrix_determinant;
-                        data.dynamics = dynamics2;
+                        data.dynamics2 = dynamics2;
+                        data.is_diagonal = diagonal;
                         data.samples = calls;
-                        opt.set_min_objective(costFunctionNormaloffdiagonal2, &data);
+                        opt.set_min_objective(costFunctionNormal, &data);
                         vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                         double minf;
                         try {
@@ -3674,6 +3733,7 @@ void IMDP::minTransitionMatrix(){
                         data.second = input;
                         data.eta = ss_eta;
                         data.dynamics = dynamics2;
+                        data.customPDF = customPDF;
                         data.samples = calls;
                         data.input_space_size = input_space_size;
                         opt.set_min_objective(custom2, &data);
@@ -3735,13 +3795,14 @@ void IMDP::minTransitionMatrix(){
                         
                         // Prepare data for costfunction
                         const vec state_end = state_space.row(col).t();
-                        costFunctionDataNormaldiagonal2 data;
+                        costFunctionDataNormal data;
                         data.state_end = state_end;
                         data.second = disturb;
                         data.eta = ss_eta;
                         data.sigma = sigma;
-                        data.dynamics = dynamics2;
-                        opt.set_min_objective(costFunctionNormaldiagonal2, &data);
+                        data.dynamics2 = dynamics2;
+                        data.is_diagonal = diagonal;
+                        opt.set_min_objective(costFunctionNormal, &data);
                         vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                         double minf;
                         try {
@@ -3790,16 +3851,17 @@ void IMDP::minTransitionMatrix(){
                         
                         // Prepare data for costfunction
                         const vec state_end = state_space.row(col).t();
-                        costFunctionDataNormaloffdiagonal2 data;
+                        costFunctionDataNormal data;
                         data.dim = dim_x;
                         data.state_end = state_end;
                         data.second = disturb;
                         data.eta = ss_eta;
                         data.inv_cov = inv_covariance_matrix;
                         data.det = covariance_matrix_determinant;
-                        data.dynamics = dynamics2;
+                        data.dynamics2 = dynamics2;
+                        data.is_diagonal = diagonal;
                         data.samples = calls;
-                        opt.set_min_objective(costFunctionNormaloffdiagonal2, &data);
+                        opt.set_min_objective(costFunctionNormal, &data);
                         vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                         double minf;
                         try {
@@ -3855,6 +3917,7 @@ void IMDP::minTransitionMatrix(){
                         data.second = disturb;
                         data.eta = ss_eta;
                         data.dynamics = dynamics2;
+                        data.customPDF = customPDF;
                         data.samples = calls;
                         data.input_space_size = input_space_size;
                         opt.set_min_objective(custom2, &data);
@@ -3916,14 +3979,15 @@ void IMDP::minTransitionMatrix(){
                         
                         // Prepare data for costfunction
                         const vec state_end = state_space.row(col).t();
-                        costFunctionDataNormaldiagonal3 data;
+                        costFunctionDataNormal data;
                         data.state_end = state_end;
                         data.input = input;
                         data.disturb = disturb;
                         data.eta = ss_eta;
                         data.sigma = sigma;
-                        data.dynamics = dynamics3;
-                        opt.set_min_objective(costFunctionNormaldiagonal3, &data);
+                        data.dynamics3 = dynamics3;
+                        data.is_diagonal = diagonal;
+                        opt.set_min_objective(costFunctionNormal, &data);
                         vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                         double minf;
                         try {
@@ -3974,7 +4038,7 @@ void IMDP::minTransitionMatrix(){
                         
                         // Prepare data for costfunction
                         const vec state_end = state_space.row(col).t();
-                        costFunctionDataNormaloffdiagonal3 data;
+                        costFunctionDataNormal data;
                         data.dim = dim_x;
                         data.state_end = state_end;
                         data.input = input;
@@ -3982,9 +4046,10 @@ void IMDP::minTransitionMatrix(){
                         data.eta = ss_eta;
                         data.inv_cov = inv_covariance_matrix;
                         data.det = covariance_matrix_determinant;
-                        data.dynamics = dynamics3;
+                        data.dynamics3 = dynamics3;
+                        data.is_diagonal = diagonal;
                         data.samples = calls;
-                        opt.set_min_objective(costFunctionNormaloffdiagonal3, &data);
+                        opt.set_min_objective(costFunctionNormal, &data);
                         vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                         double minf;
                         try {
@@ -4043,6 +4108,7 @@ void IMDP::minTransitionMatrix(){
                         data.disturb = disturb;
                         data.eta = ss_eta;
                         data.dynamics = dynamics3;
+                        data.customPDF = customPDF;
                         data.samples = calls;
                         opt.set_min_objective(custom3, &data);
                         vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
@@ -4113,12 +4179,13 @@ void IMDP::maxTransitionMatrix(){
                         
                         // Prepare data for costfunction
                         const vec state_end = state_space.row(col).t();
-                        costFunctionDataNormaldiagonal1 data;
+                        costFunctionDataNormal data;
                         data.state_end = state_end;
                         data.eta = ss_eta;
                         data.sigma = sigma;
-                        data.dynamics = dynamics1;
-                        opt.set_max_objective(costFunctionNormaldiagonal1, &data);
+                        data.dynamics1 = dynamics1;
+                        data.is_diagonal = diagonal;
+                        opt.set_max_objective(costFunctionNormal, &data);
                         vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                         double minf;
                         try {
@@ -4165,13 +4232,14 @@ void IMDP::maxTransitionMatrix(){
                         
                         // Prepare data for costfunction
                         const vec state_end = state_space.row(col).t();
-                        costFunctionDataNormaloffdiagonal1 data;
+                        costFunctionDataNormal data;
                         data.dim = dim_x;
                         data.state_end = state_end;
                         data.eta = ss_eta;
-                        data.dynamics = dynamics1;
+                        data.dynamics1 = dynamics1;
                         data.samples = calls;
-                        opt.set_max_objective(costFunctionNormaloffdiagonal1, &data);
+                        data.is_diagonal = diagonal;
+                        opt.set_max_objective(costFunctionNormal, &data);
                         vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                         double minf;
                         try {
@@ -4227,6 +4295,7 @@ void IMDP::maxTransitionMatrix(){
                         data.state_end = state_end;
                         data.eta = ss_eta;
                         data.dynamics = dynamics1;
+                        data.customPDF = customPDF;
                         data.samples = calls;
                         opt.set_max_objective(custom1, &data);
                         vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
@@ -4287,13 +4356,14 @@ void IMDP::maxTransitionMatrix(){
                         
                         // Prepare data for costfunction
                         const vec state_end = state_space.row(col).t();
-                        costFunctionDataNormaldiagonal2 data;
+                        costFunctionDataNormal data;
                         data.state_end = state_end;
                         data.second = input;
                         data.eta = ss_eta;
                         data.sigma = sigma;
-                        data.dynamics = dynamics2;
-                        opt.set_max_objective(costFunctionNormaldiagonal2, &data);
+                        data.dynamics2 = dynamics2;
+                        data.is_diagonal = diagonal;
+                        opt.set_max_objective(costFunctionNormal, &data);
                         vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                         double minf;
                         try {
@@ -4342,16 +4412,17 @@ void IMDP::maxTransitionMatrix(){
                         
                         // Prepare data for costfunction
                         const vec state_end = state_space.row(col).t();
-                        costFunctionDataNormaloffdiagonal2 data;
+                        costFunctionDataNormal data;
                         data.dim = dim_x;
                         data.state_end = state_end;
                         data.second = input;
                         data.eta = ss_eta;
                         data.inv_cov = inv_covariance_matrix;
                         data.det = covariance_matrix_determinant;
-                        data.dynamics = dynamics2;
+                        data.dynamics2 = dynamics2;
+                        data.is_diagonal = diagonal;
                         data.samples = calls;
-                        opt.set_max_objective(costFunctionNormaloffdiagonal2, &data);
+                        opt.set_max_objective(costFunctionNormal, &data);
                         vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                         double minf;
                         try {
@@ -4406,6 +4477,7 @@ void IMDP::maxTransitionMatrix(){
                         data.second = input;
                         data.eta = ss_eta;
                         data.dynamics = dynamics2;
+                        data.customPDF = customPDF;
                         data.samples = calls;
                         data.input_space_size = input_space_size;
                         opt.set_max_objective(custom2, &data);
@@ -4466,13 +4538,14 @@ void IMDP::maxTransitionMatrix(){
                         
                         // Prepare data for costfunction
                         const vec state_end = state_space.row(col).t();
-                        costFunctionDataNormaldiagonal2 data;
+                        costFunctionDataNormal data;
                         data.state_end = state_end;
                         data.second = disturb;
                         data.eta = ss_eta;
                         data.sigma = sigma;
-                        data.dynamics = dynamics2;
-                        opt.set_max_objective(costFunctionNormaldiagonal2, &data);
+                        data.dynamics2 = dynamics2;
+                        data.is_diagonal = diagonal;
+                        opt.set_max_objective(costFunctionNormal, &data);
                         vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                         double minf;
                         try {
@@ -4521,16 +4594,17 @@ void IMDP::maxTransitionMatrix(){
                         
                         // Prepare data for costfunction
                         const vec state_end = state_space.row(col).t();
-                        costFunctionDataNormaloffdiagonal2 data;
+                        costFunctionDataNormal data;
                         data.dim = dim_x;
                         data.state_end = state_end;
                         data.second = disturb;
                         data.eta = ss_eta;
                         data.inv_cov = inv_covariance_matrix;
                         data.det = covariance_matrix_determinant;
-                        data.dynamics = dynamics2;
+                        data.dynamics2 = dynamics2;
+                        data.is_diagonal = diagonal;
                         data.samples = calls;
-                        opt.set_max_objective(costFunctionNormaloffdiagonal2, &data);
+                        opt.set_max_objective(costFunctionNormal, &data);
                         vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                         double minf;
                         try {
@@ -4586,6 +4660,7 @@ void IMDP::maxTransitionMatrix(){
                         data.second = disturb;
                         data.eta = ss_eta;
                         data.dynamics = dynamics2;
+                        data.customPDF = customPDF;
                         data.samples = calls;
                         data.input_space_size = input_space_size;
                         opt.set_max_objective(custom2, &data);
@@ -4648,14 +4723,15 @@ void IMDP::maxTransitionMatrix(){
                         
                         // Prepare data for costfunction
                         const vec state_end = state_space.row(col).t();
-                        costFunctionDataNormaldiagonal3 data;
+                        costFunctionDataNormal data;
                         data.state_end = state_end;
                         data.input = input;
                         data.disturb = disturb;
                         data.eta = ss_eta;
                         data.sigma = sigma;
-                        data.dynamics = dynamics3;
-                        opt.set_max_objective(costFunctionNormaldiagonal3, &data);
+                        data.dynamics3 = dynamics3;
+                        data.is_diagonal = diagonal;
+                        opt.set_max_objective(costFunctionNormal, &data);
                         vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                         double minf;
                         try {
@@ -4706,7 +4782,7 @@ void IMDP::maxTransitionMatrix(){
                         
                         // Prepare data for costfunction
                         const vec state_end = state_space.row(col).t();
-                        costFunctionDataNormaloffdiagonal3 data;
+                        costFunctionDataNormal data;
                         data.dim = dim_x;
                         data.state_end = state_end;
                         data.input = input;
@@ -4714,9 +4790,10 @@ void IMDP::maxTransitionMatrix(){
                         data.eta = ss_eta;
                         data.inv_cov = inv_covariance_matrix;
                         data.det = covariance_matrix_determinant;
-                        data.dynamics = dynamics3;
+                        data.dynamics3 = dynamics3;
+                        data.is_diagonal = diagonal;
                         data.samples = calls;
-                        opt.set_max_objective(costFunctionNormaloffdiagonal3, &data);
+                        opt.set_max_objective(costFunctionNormal, &data);
                         vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                         double minf;
                         try {
@@ -4775,6 +4852,7 @@ void IMDP::maxTransitionMatrix(){
                         data.disturb = disturb;
                         data.eta = ss_eta;
                         data.dynamics = dynamics3;
+                        data.customPDF = customPDF;
                         data.samples = calls;
                         opt.set_max_objective(custom3, &data);
                         vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
@@ -4843,12 +4921,13 @@ void IMDP::minTargetTransitionVector(){
                         
                         // Prepare data for costfunction
                         const vec state_end = target_space.row(col).t();
-                        costFunctionDataNormaldiagonal1 data;
+                        costFunctionDataNormal data;
                         data.state_end = state_end;
                         data.eta = ss_eta;
                         data.sigma = sigma;
-                        data.dynamics = dynamics1;
-                        opt.set_min_objective(costFunctionNormaldiagonal1, &data);
+                        data.dynamics1 = dynamics1;
+                        data.is_diagonal = diagonal;
+                        opt.set_min_objective(costFunctionNormal, &data);
                         vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                         double minf;
                         try {
@@ -4897,15 +4976,16 @@ void IMDP::minTargetTransitionVector(){
                         
                         // Prepare data for costfunction
                         const vec state_end = target_space.row(col).t();
-                        costFunctionDataNormaloffdiagonal1 data;
+                        costFunctionDataNormal data;
                         data.dim = dim_x;
                         data.state_end = state_end;
                         data.eta = ss_eta;
                         data.inv_cov = inv_covariance_matrix;
                         data.det = covariance_matrix_determinant;
-                        data.dynamics = dynamics1;
+                        data.dynamics1 = dynamics1;
+                        data.is_diagonal = diagonal;
                         data.samples = calls;
-                        opt.set_min_objective(costFunctionNormaloffdiagonal1, &data);
+                        opt.set_min_objective(costFunctionNormal, &data);
                         vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                         double minf;
                         try {
@@ -4958,6 +5038,7 @@ void IMDP::minTargetTransitionVector(){
                         data.state_end = state_end;
                         data.eta = ss_eta;
                         data.dynamics = dynamics1;
+                        data.customPDF = customPDF;
                         data.samples = calls;
                         opt.set_min_objective(custom1, &data);
                         vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
@@ -5021,13 +5102,14 @@ void IMDP::minTargetTransitionVector(){
                         
                         // Prepare data for costfunction
                         const vec state_end = target_space.row(col).t();
-                        costFunctionDataNormaldiagonal2 data;
+                        costFunctionDataNormal data;
                         data.state_end = state_end;
                         data.second = input;
                         data.eta = ss_eta;
                         data.sigma = sigma;
-                        data.dynamics = dynamics2;
-                        opt.set_min_objective(costFunctionNormaldiagonal2, &data);
+                        data.dynamics2 = dynamics2;
+                        data.is_diagonal = diagonal;
+                        opt.set_min_objective(costFunctionNormal, &data);
                         vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                         double minf;
                         try {
@@ -5077,16 +5159,17 @@ void IMDP::minTargetTransitionVector(){
                         
                         // Prepare data for costfunction
                         const vec state_end = target_space.row(col).t();
-                        costFunctionDataNormaloffdiagonal2 data;
+                        costFunctionDataNormal data;
                         data.dim = dim_x;
                         data.state_end = state_end;
                         data.second = input;
                         data.eta = ss_eta;
                         data.inv_cov = inv_covariance_matrix;
                         data.det = covariance_matrix_determinant;
-                        data.dynamics = dynamics2;
+                        data.dynamics2 = dynamics2;
                         data.samples = calls;
-                        opt.set_min_objective(costFunctionNormaloffdiagonal2, &data);
+                        data.is_diagonal = diagonal;
+                        opt.set_min_objective(costFunctionNormal, &data);
                         vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                         double minf;
                         try {
@@ -5142,6 +5225,7 @@ void IMDP::minTargetTransitionVector(){
                         data.second = input;
                         data.eta = ss_eta;
                         data.dynamics = dynamics2;
+                        data.customPDF = customPDF;
                         data.samples = calls;
                         data.input_space_size = input_space_size;
                         opt.set_min_objective(custom2, &data);
@@ -5205,13 +5289,14 @@ void IMDP::minTargetTransitionVector(){
                         
                         // Prepare data for costfunction
                         const vec state_end = target_space.row(col).t();
-                        costFunctionDataNormaldiagonal2 data;
+                        costFunctionDataNormal data;
                         data.state_end = state_end;
                         data.second = disturb;
                         data.eta = ss_eta;
                         data.sigma = sigma;
-                        data.dynamics = dynamics2;
-                        opt.set_min_objective(costFunctionNormaldiagonal2, &data);
+                        data.dynamics2 = dynamics2;
+                        data.is_diagonal = diagonal;
+                        opt.set_min_objective(costFunctionNormal, &data);
                         vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                         double minf;
                         try {
@@ -5261,16 +5346,17 @@ void IMDP::minTargetTransitionVector(){
                         
                         // Prepare data for costfunction
                         const vec state_end = target_space.row(col).t();
-                        costFunctionDataNormaloffdiagonal2 data;
+                        costFunctionDataNormal data;
                         data.dim = dim_x;
                         data.state_end = state_end;
                         data.second = disturb;
                         data.eta = ss_eta;
                         data.inv_cov = inv_covariance_matrix;
                         data.det = covariance_matrix_determinant;
-                        data.dynamics = dynamics2;
+                        data.dynamics2 = dynamics2;
+                        data.is_diagonal = diagonal;
                         data.samples = calls;
-                        opt.set_min_objective(costFunctionNormaloffdiagonal2, &data);
+                        opt.set_min_objective(costFunctionNormal, &data);
                         vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                         double minf;
                         try {
@@ -5327,6 +5413,7 @@ void IMDP::minTargetTransitionVector(){
                         data.second = disturb;
                         data.eta = ss_eta;
                         data.dynamics = dynamics2;
+                        data.customPDF = customPDF;
                         data.samples = calls;
                         data.input_space_size = input_space_size;
                         opt.set_min_objective(custom2, &data);
@@ -5391,14 +5478,15 @@ void IMDP::minTargetTransitionVector(){
                         
                         // Prepare data for costfunction
                         const vec state_end = target_space.row(col).t();
-                        costFunctionDataNormaldiagonal3 data;
+                        costFunctionDataNormal data;
                         data.state_end = state_end;
                         data.input = input;
                         data.disturb = disturb;
                         data.eta = ss_eta;
                         data.sigma = sigma;
-                        data.dynamics = dynamics3;
-                        opt.set_min_objective(costFunctionNormaldiagonal3, &data);
+                        data.dynamics3 = dynamics3;
+                        data.is_diagonal = diagonal;
+                        opt.set_min_objective(costFunctionNormal, &data);
                         vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                         double minf;
                         try {
@@ -5450,7 +5538,7 @@ void IMDP::minTargetTransitionVector(){
                         
                         // Prepare data for costfunction
                         const vec state_end = target_space.row(col).t();
-                        costFunctionDataNormaloffdiagonal3 data;
+                        costFunctionDataNormal data;
                         data.dim = dim_x;
                         data.state_end = state_end;
                         data.input = input;
@@ -5458,9 +5546,10 @@ void IMDP::minTargetTransitionVector(){
                         data.eta = ss_eta;
                         data.inv_cov = inv_covariance_matrix;
                         data.det = covariance_matrix_determinant;
-                        data.dynamics = dynamics3;
+                        data.dynamics3 = dynamics3;
+                        data.is_diagonal = diagonal;
                         data.samples = calls;
-                        opt.set_min_objective(costFunctionNormaloffdiagonal3, &data);
+                        opt.set_min_objective(costFunctionNormal, &data);
                         vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                         double minf;
                         try {
@@ -5519,6 +5608,7 @@ void IMDP::minTargetTransitionVector(){
                         data.disturb = disturb;
                         data.eta = ss_eta;
                         data.dynamics = dynamics3;
+                        data.customPDF = customPDF;
                         data.samples = calls;
                         opt.set_min_objective(custom3, &data);
                         vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
@@ -5590,12 +5680,13 @@ void IMDP::maxTargetTransitionVector(){
                         
                         // Prepare data for costfunction
                         const vec state_end = target_space.row(col).t();
-                        costFunctionDataNormaldiagonal1 data;
+                        costFunctionDataNormal data;
                         data.state_end = state_end;
                         data.eta = ss_eta;
                         data.sigma = sigma;
-                        data.dynamics = dynamics1;
-                        opt.set_max_objective(costFunctionNormaldiagonal1, &data);
+                        data.dynamics1 = dynamics1;
+                        data.is_diagonal = diagonal;
+                        opt.set_max_objective(costFunctionNormal, &data);
                         vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                         double minf;
                         try {
@@ -5643,15 +5734,16 @@ void IMDP::maxTargetTransitionVector(){
                         
                         // Prepare data for costfunction
                         const vec state_end = target_space.row(col).t();
-                        costFunctionDataNormaloffdiagonal1 data;
+                        costFunctionDataNormal data;
                         data.dim = dim_x;
                         data.state_end = state_end;
                         data.eta = ss_eta;
                         data.inv_cov = inv_covariance_matrix;
                         data.det = covariance_matrix_determinant;
-                        data.dynamics = dynamics1;
+                        data.dynamics1 = dynamics1;
+                        data.is_diagonal = diagonal;
                         data.samples = calls;
-                        opt.set_max_objective(costFunctionNormaloffdiagonal1, &data);
+                        opt.set_max_objective(costFunctionNormal, &data);
                         vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                         double minf;
                         try {
@@ -5704,6 +5796,7 @@ void IMDP::maxTargetTransitionVector(){
                         data.state_end = state_end;
                         data.eta = ss_eta;
                         data.dynamics = dynamics1;
+                        data.customPDF = customPDF;
                         data.samples = calls;
                         opt.set_max_objective(custom1, &data);
                         vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
@@ -5767,13 +5860,14 @@ void IMDP::maxTargetTransitionVector(){
                         
                         // Prepare data for costfunction
                         const vec state_end = target_space.row(col).t();
-                        costFunctionDataNormaldiagonal2 data;
+                        costFunctionDataNormal data;
                         data.state_end = state_end;
                         data.second = input;
                         data.eta = ss_eta;
                         data.sigma = sigma;
-                        data.dynamics = dynamics2;
-                        opt.set_max_objective(costFunctionNormaldiagonal2, &data);
+                        data.dynamics2 = dynamics2;
+                        data.is_diagonal = diagonal;
+                        opt.set_max_objective(costFunctionNormal, &data);
                         vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                         double minf;
                         try {
@@ -5823,16 +5917,17 @@ void IMDP::maxTargetTransitionVector(){
                         
                         // Prepare data for costfunction
                         const vec state_end = target_space.row(col).t();
-                        costFunctionDataNormaloffdiagonal2 data;
+                        costFunctionDataNormal data;
                         data.dim = dim_x;
                         data.state_end = state_end;
                         data.second = input;
                         data.eta = ss_eta;
                         data.inv_cov = inv_covariance_matrix;
                         data.det = covariance_matrix_determinant;
-                        data.dynamics = dynamics2;
+                        data.dynamics2 = dynamics2;
+                        data.is_diagonal = diagonal;
                         data.samples = calls;
-                        opt.set_max_objective(costFunctionNormaloffdiagonal2, &data);
+                        opt.set_max_objective(costFunctionNormal, &data);
                         vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                         double minf;
                         try {
@@ -5888,6 +5983,7 @@ void IMDP::maxTargetTransitionVector(){
                         data.second = input;
                         data.eta = ss_eta;
                         data.dynamics = dynamics2;
+                        data.customPDF = customPDF;
                         data.samples = calls;
                         data.input_space_size = input_space_size;
                         opt.set_max_objective(custom2, &data);
@@ -5951,13 +6047,14 @@ void IMDP::maxTargetTransitionVector(){
                         
                         // Prepare data for costfunction
                         const vec state_end = target_space.row(col).t();
-                        costFunctionDataNormaldiagonal2 data;
+                        costFunctionDataNormal data;
                         data.state_end = state_end;
                         data.second = disturb;
                         data.eta = ss_eta;
                         data.sigma = sigma;
-                        data.dynamics = dynamics2;
-                        opt.set_max_objective(costFunctionNormaldiagonal2, &data);
+                        data.dynamics2 = dynamics2;
+                        data.is_diagonal = diagonal;
+                        opt.set_max_objective(costFunctionNormal, &data);
                         vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                         double minf;
                         try {
@@ -6007,16 +6104,17 @@ void IMDP::maxTargetTransitionVector(){
                         
                         // Prepare data for costfunction
                         const vec state_end = target_space.row(col).t();
-                        costFunctionDataNormaloffdiagonal2 data;
+                        costFunctionDataNormal data;
                         data.dim = dim_x;
                         data.state_end = state_end;
                         data.second = disturb;
                         data.eta = ss_eta;
                         data.inv_cov = inv_covariance_matrix;
                         data.det = covariance_matrix_determinant;
-                        data.dynamics = dynamics2;
+                        data.dynamics2 = dynamics2;
+                        data.is_diagonal = diagonal;
                         data.samples = calls;
-                        opt.set_max_objective(costFunctionNormaloffdiagonal2, &data);
+                        opt.set_max_objective(costFunctionNormal, &data);
                         vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                         double minf;
                         try {
@@ -6072,6 +6170,7 @@ void IMDP::maxTargetTransitionVector(){
                         data.second = disturb;
                         data.eta = ss_eta;
                         data.dynamics = dynamics2;
+                        data.customPDF = customPDF;
                         data.samples = calls;
                         data.input_space_size = input_space_size;
                         opt.set_max_objective(custom2, &data);
@@ -6137,14 +6236,15 @@ void IMDP::maxTargetTransitionVector(){
                         
                         // Prepare data for costfunction
                         const vec state_end = target_space.row(col).t();
-                        costFunctionDataNormaldiagonal3 data;
+                        costFunctionDataNormal data;
                         data.state_end = state_end;
                         data.input = input;
                         data.disturb = disturb;
                         data.eta = ss_eta;
                         data.sigma = sigma;
-                        data.dynamics = dynamics3;
-                        opt.set_max_objective(costFunctionNormaldiagonal3, &data);
+                        data.dynamics3 = dynamics3;
+                        data.is_diagonal = diagonal;
+                        opt.set_max_objective(costFunctionNormal, &data);
                         vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                         double minf;
                         try {
@@ -6196,7 +6296,7 @@ void IMDP::maxTargetTransitionVector(){
                         
                         // Prepare data for costfunction
                         const vec state_end = target_space.row(col).t();
-                        costFunctionDataNormaloffdiagonal3 data;
+                        costFunctionDataNormal data;
                         data.dim = dim_x;
                         data.state_end = state_end;
                         data.input = input;
@@ -6204,9 +6304,11 @@ void IMDP::maxTargetTransitionVector(){
                         data.eta = ss_eta;
                         data.inv_cov = inv_covariance_matrix;
                         data.det = covariance_matrix_determinant;
-                        data.dynamics = dynamics3;
+                        data.is_diagonal = diagonal;
+                        data.dynamics3 = dynamics3;
                         data.samples = calls;
-                        opt.set_max_objective(costFunctionNormaloffdiagonal3, &data);
+                        data.is_diagonal = diagonal;
+                        opt.set_max_objective(costFunctionNormal, &data);
                         vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                         double minf;
                         try {
@@ -6265,6 +6367,7 @@ void IMDP::maxTargetTransitionVector(){
                         data.disturb = disturb;
                         data.eta = ss_eta;
                         data.dynamics = dynamics3;
+                        data.customPDF = customPDF;
                         data.samples = calls;
                         opt.set_max_objective(custom3, &data);
                         vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
@@ -6344,12 +6447,13 @@ void IMDP::transitionMatrixBounds(){
                             
                             // Prepare data for costfunction
                             const vec state_end = state_space.row(col).t();
-                            costFunctionDataNormaldiagonal1 data;
+                            costFunctionDataNormal data;
                             data.state_end = state_end;
                             data.eta = ss_eta;
                             data.sigma = sigma;
-                            data.dynamics = dynamics1;
-                            opt.set_min_objective(costFunctionNormaldiagonal1, &data);
+                            data.dynamics1 = dynamics1;
+                            data.is_diagonal = diagonal;
+                            opt.set_min_objective(costFunctionNormal, &data);
                             vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                             double minf;
                             try {
@@ -6404,15 +6508,16 @@ void IMDP::transitionMatrixBounds(){
                             
                             // Prepare data for costfunction
                             const vec state_end = state_space.row(col).t();
-                            costFunctionDataNormaloffdiagonal1 data;
+                            costFunctionDataNormal data;
                             data.dim = dim_x;
                             data.state_end = state_end;
                             data.eta = ss_eta;
                             data.inv_cov = inv_covariance_matrix;
                             data.det = covariance_matrix_determinant;
-                            data.dynamics = dynamics1;
+                            data.dynamics1 = dynamics1;
+                            data.is_diagonal = diagonal;
                             data.samples = calls;
-                            opt.set_min_objective(costFunctionNormaloffdiagonal1, &data);
+                            opt.set_min_objective(costFunctionNormal, &data);
                             vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                             double minf;
                             try {
@@ -6473,6 +6578,7 @@ void IMDP::transitionMatrixBounds(){
                             data.state_end = state_end;
                             data.eta = ss_eta;
                             data.dynamics = dynamics1;
+                            data.customPDF = customPDF;
                             data.samples = calls;
                             opt.set_min_objective(custom1, &data);
                             vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
@@ -6538,13 +6644,14 @@ void IMDP::transitionMatrixBounds(){
                             
                             // Prepare data for costfunction
                             const vec state_end = state_space.row(col).t();
-                            costFunctionDataNormaldiagonal2 data;
+                            costFunctionDataNormal data;
                             data.state_end = state_end;
                             data.second = input;
                             data.eta = ss_eta;
                             data.sigma = sigma;
-                            data.dynamics = dynamics2;
-                            opt.set_min_objective(costFunctionNormaldiagonal2, &data);
+                            data.dynamics2 = dynamics2;
+                            data.is_diagonal = diagonal;
+                            opt.set_min_objective(costFunctionNormal, &data);
                             vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                             double minf;
                             try {
@@ -6597,16 +6704,17 @@ void IMDP::transitionMatrixBounds(){
                             
                             // Prepare data for costfunction
                             const vec state_end = state_space.row(col).t();
-                            costFunctionDataNormaloffdiagonal2 data;
+                            costFunctionDataNormal data;
                             data.dim = dim_x;
                             data.state_end = state_end;
                             data.second = input;
                             data.eta = ss_eta;
                             data.inv_cov = inv_covariance_matrix;
                             data.det = covariance_matrix_determinant;
-                            data.dynamics = dynamics2;
+                            data.dynamics2 = dynamics2;
+                            data.is_diagonal = diagonal;
                             data.samples = calls;
-                            opt.set_min_objective(costFunctionNormaloffdiagonal2, &data);
+                            opt.set_min_objective(costFunctionNormal, &data);
                             vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                             double minf;
                             try {
@@ -6666,6 +6774,7 @@ void IMDP::transitionMatrixBounds(){
                             data.second = input;
                             data.eta = ss_eta;
                             data.dynamics = dynamics2;
+                            data.customPDF = customPDF;
                             data.samples = calls;
                             data.input_space_size = input_space_size;
                             opt.set_min_objective(custom2, &data);
@@ -6731,13 +6840,14 @@ void IMDP::transitionMatrixBounds(){
                             
                             // Prepare data for costfunction
                             const vec state_end = state_space.row(col).t();
-                            costFunctionDataNormaldiagonal2 data;
+                            costFunctionDataNormal data;
                             data.state_end = state_end;
                             data.second = disturb;
                             data.eta = ss_eta;
                             data.sigma = sigma;
-                            data.dynamics = dynamics2;
-                            opt.set_min_objective(costFunctionNormaldiagonal2, &data);
+                            data.dynamics2 = dynamics2;
+                            data.is_diagonal = diagonal;
+                            opt.set_min_objective(costFunctionNormal, &data);
                             vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                             double minf;
                             try {
@@ -6790,16 +6900,17 @@ void IMDP::transitionMatrixBounds(){
                             
                             // Prepare data for costfunction
                             const vec state_end = state_space.row(col).t();
-                            costFunctionDataNormaloffdiagonal2 data;
+                            costFunctionDataNormal data;
                             data.dim = dim_x;
                             data.state_end = state_end;
                             data.second = disturb;
                             data.eta = ss_eta;
                             data.inv_cov = inv_covariance_matrix;
                             data.det = covariance_matrix_determinant;
-                            data.dynamics = dynamics2;
+                            data.dynamics2 = dynamics2;
+                            data.is_diagonal = diagonal;
                             data.samples = calls;
-                            opt.set_min_objective(costFunctionNormaloffdiagonal2, &data);
+                            opt.set_min_objective(costFunctionNormal, &data);
                             vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                             double minf;
                             try {
@@ -6859,6 +6970,7 @@ void IMDP::transitionMatrixBounds(){
                             data.second = disturb;
                             data.eta = ss_eta;
                             data.dynamics = dynamics2;
+                            data.customPDF = customPDF;
                             data.samples = calls;
                             data.input_space_size = input_space_size;
                             opt.set_min_objective(custom2, &data);
@@ -6925,14 +7037,15 @@ void IMDP::transitionMatrixBounds(){
                             
                             // Prepare data for costfunction
                             const vec state_end = state_space.row(col).t();
-                            costFunctionDataNormaldiagonal3 data;
+                            costFunctionDataNormal data;
                             data.state_end = state_end;
                             data.input = input;
                             data.disturb = disturb;
                             data.eta = ss_eta;
                             data.sigma = sigma;
-                            data.dynamics = dynamics3;
-                            opt.set_min_objective(costFunctionNormaldiagonal3, &data);
+                            data.dynamics3 = dynamics3;
+                            data.is_diagonal = diagonal;
+                            opt.set_min_objective(costFunctionNormal, &data);
                             vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                             double minf;
                             try {
@@ -6987,7 +7100,7 @@ void IMDP::transitionMatrixBounds(){
                             
                             // Prepare data for costfunction
                             const vec state_end = state_space.row(col).t();
-                            costFunctionDataNormaloffdiagonal3 data;
+                            costFunctionDataNormal data;
                             data.dim = dim_x;
                             data.state_end = state_end;
                             data.input = input;
@@ -6995,9 +7108,10 @@ void IMDP::transitionMatrixBounds(){
                             data.eta = ss_eta;
                             data.inv_cov = inv_covariance_matrix;
                             data.det = covariance_matrix_determinant;
-                            data.dynamics = dynamics3;
+                            data.dynamics3 = dynamics3;
+                            data.is_diagonal = diagonal;
                             data.samples = calls;
-                            opt.set_min_objective(costFunctionNormaloffdiagonal3, &data);
+                            opt.set_min_objective(costFunctionNormal, &data);
                             vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                             double minf;
                             try {
@@ -7061,6 +7175,7 @@ void IMDP::transitionMatrixBounds(){
                             data.disturb = disturb;
                             data.eta = ss_eta;
                             data.dynamics = dynamics3;
+                            data.customPDF = customPDF;
                             data.samples = calls;
                             opt.set_min_objective(custom3, &data);
                             vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
@@ -7129,12 +7244,13 @@ void IMDP::targetTransitionVectorBounds(){
                             for (size_t j = 0; j < target_space.n_rows; ++j) {
                                 // Prepare data for costfunction
                                 const vec state_end = target_space.row(j).t();
-                                costFunctionDataNormaldiagonal1 data;
+                                costFunctionDataNormal data;
                                 data.state_end = state_end;
                                 data.eta = ss_eta;
                                 data.sigma = sigma;
-                                data.dynamics = dynamics1;
-                                opt.set_min_objective(costFunctionNormaldiagonal1, &data);
+                                data.dynamics1 = dynamics1;
+                                data.is_diagonal = diagonal;
+                                opt.set_min_objective(costFunctionNormal, &data);
                                 vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                                 double minf;
                                 try {
@@ -7183,15 +7299,16 @@ void IMDP::targetTransitionVectorBounds(){
                             for (size_t j = 0; j < target_space.n_rows; ++j) {
                                 // Prepare data for costfunction
                                 const vec state_end = target_space.row(j).t();
-                                costFunctionDataNormaloffdiagonal1 data;
+                                costFunctionDataNormal data;
                                 data.dim = dim_x;
                                 data.state_end = state_end;
                                 data.eta = ss_eta;
                                 data.inv_cov = inv_covariance_matrix;
                                 data.det = covariance_matrix_determinant;
-                                data.dynamics = dynamics1;
+                                data.dynamics1 = dynamics1;
+                                data.is_diagonal = diagonal;
                                 data.samples = calls;
-                                opt.set_min_objective(costFunctionNormaloffdiagonal1, &data);
+                                opt.set_min_objective(costFunctionNormal, &data);
                                 vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                                 double minf;
                                 try {
@@ -7247,6 +7364,7 @@ void IMDP::targetTransitionVectorBounds(){
                                 data.state_end = state_end;
                                 data.eta = ss_eta;
                                 data.dynamics = dynamics1;
+                                data.customPDF = customPDF;
                                 data.samples = calls;
                                 opt.set_min_objective(custom1, &data);
                                 vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
@@ -7310,13 +7428,14 @@ void IMDP::targetTransitionVectorBounds(){
                             for (size_t j = 0; j < target_space.n_rows; ++j) {
                                 // Prepare data for costfunction
                                 const vec state_end = target_space.row(j).t();
-                                costFunctionDataNormaldiagonal2 data;
+                                costFunctionDataNormal data;
                                 data.state_end = state_end;
                                 data.second = input;
                                 data.eta = ss_eta;
                                 data.sigma = sigma;
-                                data.dynamics = dynamics2;
-                                opt.set_min_objective(costFunctionNormaldiagonal2, &data);
+                                data.dynamics2 = dynamics2;
+                                data.is_diagonal = diagonal;
+                                opt.set_min_objective(costFunctionNormal, &data);
                                 vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                                 double minf;
                                 try {
@@ -7367,16 +7486,17 @@ void IMDP::targetTransitionVectorBounds(){
                             for (size_t j = 0; j < target_space.n_rows; ++j) {
                                 // Prepare data for costfunction
                                 const vec state_end = target_space.row(j).t();
-                                costFunctionDataNormaloffdiagonal2 data;
+                                costFunctionDataNormal data;
                                 data.dim = dim_x;
                                 data.state_end = state_end;
                                 data.second = input;
                                 data.eta = ss_eta;
                                 data.inv_cov = inv_covariance_matrix;
                                 data.det = covariance_matrix_determinant;
-                                data.dynamics = dynamics2;
+                                data.dynamics2 = dynamics2;
+                                data.is_diagonal = diagonal;
                                 data.samples = calls;
-                                opt.set_min_objective(costFunctionNormaloffdiagonal2, &data);
+                                opt.set_min_objective(costFunctionNormal, &data);
                                 vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                                 double minf;
                                 try {
@@ -7434,6 +7554,7 @@ void IMDP::targetTransitionVectorBounds(){
                                 data.second = input;
                                 data.eta = ss_eta;
                                 data.dynamics = dynamics2;
+                                data.customPDF = customPDF;
                                 data.samples = calls;
                                 data.input_space_size = input_space_size;
                                 opt.set_min_objective(custom2, &data);
@@ -7499,13 +7620,14 @@ void IMDP::targetTransitionVectorBounds(){
                             for (size_t j = 0; j < target_space.n_rows; ++j) {
                                 // Prepare data for costfunction
                                 const vec state_end = target_space.row(j).t();
-                                costFunctionDataNormaldiagonal2 data;
+                                costFunctionDataNormal data;
                                 data.state_end = state_end;
                                 data.second = disturb;
                                 data.eta = ss_eta;
                                 data.sigma = sigma;
-                                data.dynamics = dynamics2;
-                                opt.set_min_objective(costFunctionNormaldiagonal2, &data);
+                                data.dynamics2 = dynamics2;
+                                data.is_diagonal = diagonal;
+                                opt.set_min_objective(costFunctionNormal, &data);
                                 vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                                 double minf;
                                 try {
@@ -7557,16 +7679,17 @@ void IMDP::targetTransitionVectorBounds(){
                             for (size_t j = 0; j < target_space.n_rows; ++j) {
                                 // Prepare data for costfunction
                                 const vec state_end = target_space.row(j).t();
-                                costFunctionDataNormaloffdiagonal2 data;
+                                costFunctionDataNormal data;
                                 data.dim = dim_x;
                                 data.state_end = state_end;
                                 data.second = disturb;
                                 data.eta = ss_eta;
                                 data.inv_cov = inv_covariance_matrix;
                                 data.det = covariance_matrix_determinant;
-                                data.dynamics = dynamics2;
+                                data.dynamics2 = dynamics2;
+                                data.is_diagonal = diagonal;
                                 data.samples = calls;
-                                opt.set_min_objective(costFunctionNormaloffdiagonal2, &data);
+                                opt.set_min_objective(costFunctionNormal, &data);
                                 vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                                 double minf;
                                 try {
@@ -7626,6 +7749,7 @@ void IMDP::targetTransitionVectorBounds(){
                                 data.second = disturb;
                                 data.eta = ss_eta;
                                 data.dynamics = dynamics2;
+                                data.customPDF = customPDF;
                                 data.samples = calls;
                                 data.input_space_size = input_space_size;
                                 opt.set_min_objective(custom2, &data);
@@ -7691,14 +7815,15 @@ void IMDP::targetTransitionVectorBounds(){
                             for (size_t j = 0; j < target_space.n_rows; ++j) {
                                 // Prepare data for costfunction
                                 const vec state_end = target_space.row(j).t();
-                                costFunctionDataNormaldiagonal3 data;
+                                costFunctionDataNormal data;
                                 data.state_end = state_end;
                                 data.input = input;
                                 data.disturb = disturb;
                                 data.eta = ss_eta;
                                 data.sigma = sigma;
-                                data.dynamics = dynamics3;
-                                opt.set_min_objective(costFunctionNormaldiagonal3, &data);
+                                data.dynamics3 = dynamics3;
+                                data.is_diagonal = diagonal;
+                                opt.set_min_objective(costFunctionNormal, &data);
                                 vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                                 double minf;
                                 if(minf <= 1e-28){
@@ -7751,7 +7876,7 @@ void IMDP::targetTransitionVectorBounds(){
                             for (size_t j = 0; j < target_space.n_rows; ++j) {
                                 // Prepare data for costfunction
                                 const vec state_end = target_space.row(j).t();
-                                costFunctionDataNormaloffdiagonal3 data;
+                                costFunctionDataNormal data;
                                 data.dim = dim_x;
                                 data.state_end = state_end;
                                 data.input = input;
@@ -7759,9 +7884,10 @@ void IMDP::targetTransitionVectorBounds(){
                                 data.eta = ss_eta;
                                 data.inv_cov = inv_covariance_matrix;
                                 data.det = covariance_matrix_determinant;
-                                data.dynamics = dynamics3;
+                                data.dynamics3 = dynamics3;
+                                data.is_diagonal = diagonal;
                                 data.samples = calls;
-                                opt.set_min_objective(costFunctionNormaloffdiagonal3, &data);
+                                opt.set_min_objective(costFunctionNormal, &data);
                                 vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                                 double minf;
                                 try {
@@ -7823,6 +7949,7 @@ void IMDP::targetTransitionVectorBounds(){
                                 data.disturb = disturb;
                                 data.eta = ss_eta;
                                 data.dynamics = dynamics3;
+                                data.customPDF = customPDF;
                                 data.samples = calls;
                                 opt.set_min_objective(custom3, &data);
                                 vector<double> initial_guess = conv_to<vector<double>>::from( state_start);

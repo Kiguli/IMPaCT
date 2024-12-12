@@ -5,8 +5,8 @@
 #include <string>
 #include <nlopt.hpp>
 #include <iomanip>
-#include <hdf5.h>
-#include <CL/sycl.hpp>
+#include <hdf5/serial/hdf5.h>
+#include <AdaptiveCpp/CL/sycl.hpp>
 #include <chrono>
 #include "MDP.h"
 #include <gsl/gsl_rng.h>

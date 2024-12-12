@@ -73,7 +73,7 @@ auto customPDF = [](double *x, size_t dim, void *params) -> double{
         }
     }
     return norm * exp(exponent);
-}
+};
 
 /*
  ################################# MAIN FUNCTION ##############################################

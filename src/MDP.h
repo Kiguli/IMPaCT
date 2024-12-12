@@ -146,16 +146,16 @@ public:
     void setTargetAvoidSpace(const function<bool(const vec&)>& target_condition,const function<bool(const vec&)>& avoid_condition, bool remove);
     
     ///Setters for Dynamics
-    void setDynamics(const function<vec(const vec&, const vec&, const vec&)> d);
-    void setDynamics(const function<vec(const vec&, const vec&)> d);
-    void setDynamics(const function<vec(const vec&)> d);
+    void setDynamics(function<vec(const vec&, const vec&, const vec&)> d);
+    void setDynamics(function<vec(const vec&, const vec&)> d);
+    void setDynamics(function<vec(const vec&)> d);
     
     ///Setters for Noise and Integration Parameters
     void setInvCovDet(mat inv_cov, double det);
     void setStdDev(vec sig);
     void setNoise(NoiseType n, bool diagonal = true);
     void setNoise(NoiseType n, bool diagonal, size_t monte_carlo_samples);
-    void setCustomDistribution(const function<double(double *x, size_t dim, void *params)> c,size_t monte_carlo_samples);
+    void setCustomDistribution(function<double(double *x, size_t dim, void *params)> c,size_t monte_carlo_samples);
 
     ///save and load transition matrices
     void saveTransitionMatrix();

@@ -6,10 +6,10 @@
 #include <string>
 #include <nlopt.hpp>
 #include <iomanip>
-#include <sycl/sycl.hpp>
+#include <AdaptiveCpp/sycl/sycl.hpp>
 #include <chrono>
 #include <armadillo>
-#include <hdf5.h>
+#include <hdf5/serial/hdf5.h>
 
 using namespace std;
 using namespace arma;
