@@ -464,7 +464,7 @@ vec MDP::getStdDev(){
 }
 
 ///Setter for Custom Distribution
-void MDP::setCustomDistribution(const function<double(double *x, size_t dim, void *params)> c, size_t monte_carlo_samples){
+void MDP::setCustomDistribution(double (*c)(double*, size_t, void*), size_t monte_carlo_samples){
     calls = monte_carlo_samples;
     customPDF = c;
     cout << "custom PDF stored and samples stored" << endl;

@@ -238,7 +238,8 @@ struct costcustom1Full{
     vec eta;
     function<vec(const vec&)> dynamics;
     //function<double(double *x, size_t dim, void *params)> customPDF;
-    function<double(double *x, size_t dim, void *params)> customPDF;
+    //function<double(double *x, size_t dim, void *params)> customPDF;
+    double (*customPDF)(double *x, size_t dim, void *params);
     size_t samples;
 };
 
@@ -287,8 +288,8 @@ struct costcustom2Full{
     vec second;
     vec eta;
     function<vec(const vec&, const vec&)> dynamics;
-    function<double(double *x, size_t dim, void *params)> customPDF;
-    //double (*customPDF)(double *x, size_t dim, void *params);
+    //function<double(double *x, size_t dim, void *params)> customPDF;
+    double (*customPDF)(double *x, size_t dim, void *params);
     size_t samples;
     size_t input_space_size;
 };
@@ -344,8 +345,8 @@ struct costcustom3Full{
     vec disturb;
     vec eta;
     function<vec(const vec&, const vec&, const vec&)> dynamics;
-    function<double(double *x, size_t dim, void *params)> customPDF;
-    //double (*customPDF)(double *x, size_t dim, void *params);
+    //function<double(double *x, size_t dim, void *params)> customPDF;
+    double (*customPDF)(double *x, size_t dim, void *params);
     size_t samples;
 };
 
@@ -397,8 +398,8 @@ struct costcustom1{
     vec ub;
     vec eta;
     function<vec(const vec&)> dynamics;
-    function<double(double *x, size_t dim, void *params)> customPDF;
-    //double (*customPDF)(double *x, size_t dim, void *params);
+    //function<double(double *x, size_t dim, void *params)> customPDF;
+    double (*customPDF)(double *x, size_t dim, void *params);
     size_t samples;
 };
 
@@ -449,8 +450,8 @@ struct costcustom2{
     vec second;
     vec eta;
     function<vec(const vec&, const vec&)> dynamics;
-    function<double(double *x, size_t dim, void *params)> customPDF;
-    //double (*customPDF)(double *x, size_t dim, void *params);
+    //function<double(double *x, size_t dim, void *params)> customPDF;
+    double (*customPDF)(double *x, size_t dim, void *params);
     size_t samples;
     size_t input_space_size;
 };
@@ -511,8 +512,8 @@ struct costcustom3{
     vec disturb;
     vec eta;
     function<vec(const vec&, const vec&, const vec&)> dynamics;
-    function<double(double *x, size_t dim, void *params)> customPDF;
-    //double (*customPDF)(double *x, size_t dim, void *params);
+    //function<double(double *x, size_t dim, void *params)> customPDF;
+    double (*customPDF)(double *x, size_t dim, void *params);
     size_t samples;
 };
 
