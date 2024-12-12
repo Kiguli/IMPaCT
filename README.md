@@ -1,3 +1,5 @@
+Note: some new features are being added at the moment, there may be some bugs caused by this, do see the release package on the right hand menu to use **IMPaCT** v1.0.
+
 # IMPaCT Software Tool
 
 [![DOI](https://zenodo.org/badge/739478882.svg)](https://zenodo.org/doi/10.5281/zenodo.11085097) [![Create and publish a Docker image](https://github.com/Kiguli/IMPaCT/actions/workflows/docker.yml/badge.svg)](https://github.com/Kiguli/IMPaCT/actions/workflows/docker.yml)[![CC BY 4.0][cc-by-shield]][cc-by]
