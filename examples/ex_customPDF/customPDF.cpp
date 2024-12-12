@@ -99,7 +99,7 @@ int main() {
     /*###### set dynamics and noise ######*/
     mdp.setDynamics(dynamics);
     mdp.setNoise(NoiseType::CUSTOM);
-    mdp.setCustomDistribution(customPDF,1000);
+    mdp.setCustomDistribution(customPDF,1000); //note this is updated from the original IMPaCT release
     
     /* ###### calculate abstraction for target vectors ######*/
     mdp.targetTransitionVectorBounds();
