@@ -57,6 +57,11 @@ protected:
     vec ws_ub;
     vec ws_eta;
     ivec ws_idx;
+
+    /// MDPs for Transitions
+    vec TargetM;
+    vec AvoidM;
+    mat TransitionM;
     
     ///Size of spaces
     size_t state_space_size = 0;
@@ -79,7 +84,10 @@ protected:
     function<vec(const vec&, const vec& , const vec&)> dynamics3;
     function<vec(const vec&, const vec&)> dynamics2;
     function<vec(const vec&)> dynamics1;
-    
+
+    //double customPDF(double *x, size_t dim, void *params);
+    double (*customPDF)(double*, size_t, void*);
+
     ///Stopping Condition
     double epsilon = 0.00001;
     
@@ -139,17 +147,25 @@ public:
     void setTargetAvoidSpace(const function<bool(const vec&)>& target_condition,const function<bool(const vec&)>& avoid_condition, bool remove);
     
     ///Setters for Dynamics
-    void setDynamics(const function<vec(const vec&, const vec&, const vec&)> d);
-    void setDynamics(const function<vec(const vec&, const vec&)> d);
-    void setDynamics(const function<vec(const vec&)> d);
+    void setDynamics(function<vec(const vec&, const vec&, const vec&)> d);
+    void setDynamics(function<vec(const vec&, const vec&)> d);
+    void setDynamics(function<vec(const vec&)> d);
     
     ///Setters for Noise and Integration Parameters
     void setInvCovDet(mat inv_cov, double det);
     void setStdDev(vec sig);
     void setNoise(NoiseType n, bool diagonal = true);
     void setNoise(NoiseType n, bool diagonal, size_t monte_carlo_samples);
-    void setCustomDistribution(size_t monte_carlo_samples);
-    
+    void setCustomDistribution(double (*c)(double*, size_t, void*),size_t monte_carlo_samples);
+
+    ///save and load transition matrices
+    void saveTransitionMatrix();
+    void loadTransitionMatrix(string filename);
+    void saveTargetTransitionVector();
+    void loadTargetTransitionVector(string filename);
+    void saveAvoidTransitionVector();
+    void loadAvoidTransitionVector(string filename);
+
     ///Getters for Noise Parameters
     mat getInvCov();
     double getDet();

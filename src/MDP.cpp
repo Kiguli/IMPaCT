@@ -5,8 +5,8 @@
 #include <string>
 #include <nlopt.hpp>
 #include <iomanip>
-#include <hdf5.h>
-#include <CL/sycl.hpp>
+#include <hdf5/serial/hdf5.h>
+#include <AdaptiveCpp/CL/sycl.hpp>
 #include <chrono>
 #include "MDP.h"
 #include <gsl/gsl_rng.h>
@@ -464,9 +464,10 @@ vec MDP::getStdDev(){
 }
 
 ///Setter for Custom Distribution
-void MDP::setCustomDistribution(size_t monte_carlo_samples){
+void MDP::setCustomDistribution(double (*c)(double*, size_t, void*), size_t monte_carlo_samples){
     calls = monte_carlo_samples;
-    cout << "custom distribution function stored and samples stored" << endl;
+    customPDF = c;
+    cout << "custom PDF stored and samples stored" << endl;
 }
 
 /* Filter Functions (probably not used unless not removing states from state space) */
@@ -515,4 +516,56 @@ void MDP::filterTargetAvoid(mat& base_space, const function<bool(const vec&)>& t
     }
     cout << "Avoid space size: " << countA << endl;
     cout << "Target space size: " << countT << endl;
+}
+
+/* Load and Save Transition Matrices */
+///Save minimal transition matrix
+void MDP::saveTransitionMatrix(){
+    if (TransitionM.empty()){
+        cout << "Transition Matrix is empty, can't save file." << endl;
+    }else{
+        TransitionM.save("tm.h5", hdf5_binary);
+    }
+}
+
+///Load minimal transition matrix
+void MDP::loadTransitionMatrix(string filename){
+    bool ok = TransitionM.load(filename);
+    if (ok == false){
+        cout << "Issue loading transition matrix!" << endl;
+    }
+}
+
+///Save maximal target transition vector
+void MDP::saveTargetTransitionVector(){
+    if (TargetM.empty()){
+        cout << "Target Transition Vector is empty, can't save file." << endl;
+    }else{
+        TargetM.save("ttm.h5", hdf5_binary);
+    }
+}
+
+///Load maximal target transition vector
+void MDP::loadTargetTransitionVector(string filename){
+    bool ok = TargetM.load(filename);
+    if (ok == false){
+        cout << "Issue loading target transition Vector!" << endl;
+    }
+}
+
+///Save maximal avoid transition vector
+void MDP::saveAvoidTransitionVector(){
+    if (AvoidM.empty()){
+        cout << "Avoid Transition Vector is empty, can't save file." << endl;
+    }else{
+        AvoidM.save("atm.h5", hdf5_binary);
+    }
+}
+
+///Load maximal avoid transition vector
+void MDP::loadAvoidTransitionVector(string filename){
+    bool ok = AvoidM.load(filename);
+    if (ok == false){
+        cout << "Issue loading avoid transition Vector!" << endl;
+    }
 }
