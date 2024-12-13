@@ -5,6 +5,7 @@ clc
 %% read in files
 ss = h5read('ss.h5','/dataset');
 target = h5read('ts.h5','/dataset');
+avoid = h5read('as.h5','/dataset');
 is = h5read('is.h5','/dataset');
 controller = h5read('controller.h5','/dataset');
 

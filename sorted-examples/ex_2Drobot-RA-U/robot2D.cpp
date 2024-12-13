@@ -26,11 +26,11 @@ const int dim_w = 0;
 // States
 const vec ss_lb = {-10, -10};
 const vec ss_ub = {10, 10};
-const vec ss_eta = {0.5, 0.5};
+const vec ss_eta = {1, 1};
 // Inputs
 const vec is_lb = {-1,-1};
 const vec is_ub = {1, 1};
-const vec is_eta = {0.1, 0.1};
+const vec is_eta = {0.2, 0.2};
 
 //standard deviation of each dimension
 const vec sigma = {sqrt(1/1.3333), sqrt(1/1.3333)};
@@ -67,6 +67,7 @@ int main() {
     mdp.saveStateSpace();
     mdp.saveInputSpace();
     mdp.saveTargetSpace();
+    mdp.saveAvoidSpace();
     
     /*###### set dynamics and noise ######*/
     mdp.setDynamics(dynamics);
