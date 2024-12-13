@@ -10598,7 +10598,7 @@ void IMDP::finiteHorizonReachControllerSortedStoreMDP(bool IMDP_lower, size_t ti
                                 accTargetM[i] += (1.0-s);
                             }else{
                                 temp0 += accdTT[i];
-                                accTargetM += accdTT[i];
+                                accTargetM[i] += accdTT[i];
                             }
 
                             cdfAccessor0[i] =  temp0;
