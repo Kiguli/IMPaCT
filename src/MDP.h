@@ -150,7 +150,8 @@ public:
     void setDynamics(function<vec(const vec&, const vec&, const vec&)> d);
     void setDynamics(function<vec(const vec&, const vec&)> d);
     void setDynamics(function<vec(const vec&)> d);
-    
+
+
     ///Setters for Noise and Integration Parameters
     void setInvCovDet(mat inv_cov, double det);
     void setStdDev(vec sig);
@@ -165,6 +166,7 @@ public:
     void loadTargetTransitionVector(string filename);
     void saveAvoidTransitionVector();
     void loadAvoidTransitionVector(string filename);
+    void trackMDP(bool store);
 
     ///Getters for Noise Parameters
     mat getInvCov();

@@ -29,10 +29,6 @@ void IMDP::setAlgorithm(nlopt::algorithm alg){
     algo = alg;
 }
 
-void IMDP::trackMDP(bool store) {
-    storeMDP = store;
-}
-
 /* Supporter Functions for the Abstractions for Different Distributions */
 
 /// Closed form integral for 1d normal distribution CDF
@@ -388,6 +384,8 @@ double custom3Full(unsigned n, const double* x, double* grad, void* my_func_data
 
     return result;
 }
+
+
 
 /// custom cost function with 1 dimension
 struct costcustom1{
