@@ -144,6 +144,7 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
     cout << "Finding control policy for infinite horizon reach controller using sorted approach... " << endl;
 
     int total_rows = 0;
+    int total_cols = 0;
     uvec U_pos;
     mat input_and_state0;
     mat input_and_state1;
@@ -151,12 +152,15 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
 
     if (input_space_size == 0 && disturb_space_size == 0){
         total_rows = state_space_size;
+        total_cols = dim_x;
     }else if (input_space_size == 0) {
         total_rows = state_space_size * disturb_space_size;
+        total_cols = dim_x;
     }else if (disturb_space_size==0) {
         total_rows = state_space_size * input_space_size;
         U_pos.set_size(state_space_size);
         U_pos.fill(fill::zeros);
+        total_cols = dim_x+dim_u;
     }else {
         total_rows = state_space_size * input_space_size *disturb_space_size;
         U_pos.set_size(state_space_size);
@@ -165,6 +169,7 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
         input_and_state0.fill(fill::zeros);
         input_and_state1.set_size(input_space_size*state_space_size);
         input_and_state1.fill(fill::zeros);
+        total_cols = dim_x+dim_u;
     }
 
 
@@ -359,29 +364,69 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
             cout << endl;
             cout << "control policy for lower bound found, finding upper bound." << endl;
 
-    if (input_space_size == 0 && disturb_space_size == 0){
+    if (input_space_size == 0 && disturb_space_size == 0) {
+        total_rows = state_space_size;
+    }else if (disturb_space_size == 0) {
+        total_rows = state_space_size;
+    }else if (input_space_size == 0) {
+        total_rows = state_space_size*disturb_space_size;
+    }else {
+        total_rows = state_space_size*disturb_space_size;
+    }
             vec second0(state_space_size, 1, fill::zeros);
-            mat secondnew0(state_space_size, 1, fill::zeros);
+            mat secondnew0(total_rows, 1, fill::zeros);
             vec second1(state_space_size, 1, fill::ones);
-            mat secondnew1(state_space_size, 1, fill::zeros);
+            mat secondnew1(total_rows, 1, fill::zeros);
             max_diff = 1.0;
             min_diff = 1.0;
             converge = 0;
             cout << "second loop iterations: " << endl;
-            mat tempTmin(state_space_size, state_space_size, fill::zeros);
-            mat tempTmax(state_space_size, state_space_size, fill::zeros);
-            vec tempTTmin(state_space_size, 1, fill::zeros);
-            vec tempTTmax(state_space_size, 1, fill::zeros);
-            vec tempATmax(state_space_size, 1, fill::zeros);
-            vec tempATmin(state_space_size, 1, fill::zeros);
-
-            cout << "Create reduced matrix where input is fixed." << endl;
-                tempTmin = minTransitionM;
-                tempTmax = maxTransitionM;
-                tempTTmin= minTargetM;
-                tempTTmax= maxTargetM;
-                tempATmin = minAvoidM;
-                tempATmax = maxAvoidM;
+            mat tempTmin(total_rows, state_space_size, fill::zeros);
+            mat tempTmax(total_rows, state_space_size, fill::zeros);
+            vec tempTTmin(total_rows, 1, fill::zeros);
+            vec tempTTmax(total_rows, 1, fill::zeros);
+            vec tempATmax(total_rows, 1, fill::zeros);
+            vec tempATmin(total_rows, 1, fill::zeros);
+if (input_space_size == 0 && disturb_space_size == 0) {
+    //cout << "Create reduced matrix where input is fixed." << endl;
+    //TODO: this seems memory inefficient
+    tempTmin = minTransitionM;
+    tempTmax = maxTransitionM;
+    tempTTmin= minTargetM;
+    tempTTmax= maxTargetM;
+    tempATmin = minAvoidM;
+    tempATmax = maxAvoidM;
+}else if (disturb_space_size == 0) {
+    cout << "Create reduced matrix where input is fixed." << endl;
+    for (size_t i = 0; i < state_space_size; i++){
+        tempTmin.row(i) = minTransitionM.row(U_pos(i)*state_space_size+i);
+        tempTmax.row(i) = maxTransitionM.row(U_pos(i)*state_space_size+i);
+        tempTTmin(i)= minTargetM(U_pos(i)*state_space_size+i);
+        tempTTmax(i)= maxTargetM(U_pos(i)*state_space_size+i);
+        tempATmin(i) = minAvoidM(U_pos(i)*state_space_size+i);
+        tempATmax(i) = maxAvoidM(U_pos(i)*state_space_size+i);
+    }
+}else if (input_space_size == 0) {
+    //TODO: this seems memory inefficient
+    tempTmin = minTransitionM;
+    tempTmax = maxTransitionM;
+    tempTTmin= minTargetM;
+    tempTTmax= maxTargetM;
+    tempATmin = minAvoidM;
+    tempATmax = maxAvoidM;
+}else {
+    cout << "Create reduced matrix where input is fixed." << endl;
+    for (size_t j = 0; j < disturb_space_size; j++){
+        for (size_t i = 0; i < state_space_size; i++){
+            tempTmin.row(j*state_space_size+i) = minTransitionM.row(j*input_space_size*state_space_size+U_pos(i)*state_space_size+i);
+            tempTmax.row(j*state_space_size+i) = maxTransitionM.row(j*input_space_size*state_space_size+U_pos(i)*state_space_size+i);
+            tempTTmin(j*state_space_size+i)= minTargetM(j*input_space_size*state_space_size+U_pos(i)*state_space_size+i);
+            tempTTmax(j*state_space_size+i)= maxTargetM(j*input_space_size*state_space_size+U_pos(i)*state_space_size+i);
+            tempATmin(j*state_space_size+i)= minAvoidM(j*input_space_size*state_space_size+U_pos(i)*state_space_size+i);
+            tempATmax(j*state_space_size+i)= maxAvoidM(j*input_space_size*state_space_size+U_pos(i)*state_space_size+i);
+        }
+    }
+}
 
             cout << "Matrix Fixed" << endl;
             while (max_diff > epsilon) {
@@ -449,7 +494,7 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                         auto accdAT = bufdAT.get_access<sycl::access::mode::read>(cgh);
 
                         //ASSUMING MAXIMAL LP SOLVING
-                        cgh.parallel_for<class maxTarget_kernel>(sycl::range<1>(state_space_size), [=](sycl::id<1> i) {
+                        cgh.parallel_for<class maxTarget_kernel>(sycl::range<1>(total_rows), [=](sycl::id<1> i) {
                             // set base values to be equal to the minimal transition probabilities
 
                             double temp1 = 0;
@@ -463,9 +508,9 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                             s = s + accminAT[i];
 
                             for (size_t col = 0; col < state_space_size; col++) {
-                                temp0 += accminT[(col*state_space_size) +i]*accs0[col];
-                                temp1 += accminT[(col*state_space_size) +i]*accs1[col];
-                                s = s+ accminT[(col*state_space_size) +i];
+                                temp0 += accminT[(col*total_rows) +i]*accs0[col];
+                                temp1 += accminT[(col*total_rows) +i]*accs1[col];
+                                s = s+ accminT[(col*total_rows) +i];
                             }
                             if (IMDP_lower==true) {
                                 if ((1.0-s) <= accdTT[i]){
@@ -488,15 +533,15 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
 
                             for(size_t col = 0; col < state_space_size; col++){
                                 size_t val = accsort[col];
-                                if ((1.0-s) <= accdT[(val*state_space_size) +i]){
+                                if ((1.0-s) <= accdT[(val*total_rows) +i]){
                                     temp0 += (1.0-s)*accs0[val];
                                     temp1 += (1.0-s)*accs1[val];
                                     s = 1.0;
                                     break;
                                 }else {
-                                    temp0 += accdT[(val*state_space_size) +i]*accs0[val];
-                                    temp1 += accdT[(val*state_space_size) +i]*accs1[val];
-                                    s = s+ accdT[(val*state_space_size) +i];
+                                    temp0 += accdT[(val*total_rows) +i]*accs0[val];
+                                    temp1 += accdT[(val*total_rows) +i]*accs1[val];
+                                    s = s+ accdT[(val*total_rows) +i];
                                 }
                             }
                             if (IMDP_lower==true) {
@@ -517,553 +562,18 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                     });
                 }
                 Q.wait_and_throw();
-                if((approx_equal(second1, secondnew1, "absdiff", 1e-8)) and ((approx_equal(second0, secondnew0, "absdiff", 1e-8)))){
-                    cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is an absorbing state in the solution, try running the finite Horizon solution using this number of steps." << endl;
-                    break;
-                }
-                second0 = secondnew0;
-                second1 = secondnew1;
 
-                max_diff = max(abs(second1-second0));
-                min_diff = min(abs(second1-second0));
-            }
-            cout << endl;
-            cout << "Upper bound found." << endl;
-
-            controller.set_size(state_space_size, dim_x + 2);
-            controller.cols(0,dim_x-1) = state_space;
-            controller.col(dim_x) = first0;
-            controller.col(dim_x + 1) = second1;
-
-    }else if (disturb_space_size == 0){
-
-            vec second0(state_space_size, 1, fill::zeros);
-            mat secondnew0(state_space_size, 1, fill::zeros);
-            vec second1(state_space_size, 1, fill::ones);
-            mat secondnew1(state_space_size, 1, fill::zeros);
-            max_diff = 1.0;
-            min_diff = 1.0;
-            converge = 0;
-            cout << "second loop iterations: " << endl;
-            mat tempTmin(state_space_size, state_space_size, fill::zeros);
-            mat tempTmax(state_space_size, state_space_size, fill::zeros);
-            vec tempTTmin(state_space_size, 1, fill::zeros);
-            vec tempTTmax(state_space_size, 1, fill::zeros);
-            vec tempATmax(state_space_size, 1, fill::zeros);
-            vec tempATmin(state_space_size, 1, fill::zeros);
-
-            cout << "Create reduced matrix where input is fixed." << endl;
-            for (size_t i = 0; i < state_space_size; i++){
-                tempTmin.row(i) = minTransitionM.row(U_pos(i)*state_space_size+i);
-                tempTmax.row(i) = maxTransitionM.row(U_pos(i)*state_space_size+i);
-                tempTTmin(i)= minTargetM(U_pos(i)*state_space_size+i);
-                tempTTmax(i)= maxTargetM(U_pos(i)*state_space_size+i);
-                tempATmin(i) = minAvoidM(U_pos(i)*state_space_size+i);
-                tempATmax(i) = maxAvoidM(U_pos(i)*state_space_size+i);
-            }
-
-            cout << "Matrix Fixed" << endl;
-            while (max_diff > epsilon) {
-                converge++;
-                cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
-
-
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(second1);
-
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [IMDP_lower](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    if (IMDP_lower==true) {
-                        return a.second > b.second;
-                    }else {
-                        return a.second < b.second;
-                    }
-                });
-
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
-
-                //Get difference between max and min for incrementing values
-                mat diffT = tempTmax-tempTmin;
-                vec diffR = tempTTmax - tempTTmin;
-                vec diffA = tempATmax - tempATmin;
-
-
-                sycl::queue Q;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
-                    sycl::buffer<double> cdfBuffer0(secondnew0.memptr(),secondnew0.n_rows);
-                    sycl::buffer<double> cdfBuffer1(secondnew1.memptr(),secondnew1.n_rows);
-                    sycl::buffer<double> bufs1(second1.memptr(),second1.n_rows);
-                    sycl::buffer<double> bufs0(second0.memptr(),second0.n_rows);
-                    sycl::buffer<double> bufminT(tempTmin.memptr(),tempTmin.n_rows*tempTmin.n_cols);
-                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
-                    sycl::buffer<double> bufminTT(tempTTmin.memptr(),tempTTmin.n_rows);
-                    sycl::buffer<double> bufdTT(diffR.memptr(),diffR.n_rows);
-                    sycl::buffer<double> bufminAT(tempATmin.memptr(),tempATmin.n_rows);
-                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
-
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                    Q.submit([&](sycl::handler& cgh) {
-                        auto accsort = bufsort.get_access<sycl::access::mode::read>(cgh);
-                        auto cdfAccessor0 = cdfBuffer0.get_access<sycl::access::mode::discard_write>(cgh);
-                        auto cdfAccessor1 = cdfBuffer1.get_access<sycl::access::mode::discard_write>(cgh);
-                        auto accs1 = bufs1.get_access<sycl::access::mode::read>(cgh);
-                        auto accs0 = bufs0.get_access<sycl::access::mode::read>(cgh);
-                        auto accminT = bufminT.get_access<sycl::access::mode::read>(cgh);
-                        auto accdT = bufdT.get_access<sycl::access::mode::read>(cgh);
-                        auto accminTT = bufminTT.get_access<sycl::access::mode::read>(cgh);
-                        auto accdTT = bufdTT.get_access<sycl::access::mode::read>(cgh);
-                        auto accminAT = bufminAT.get_access<sycl::access::mode::read>(cgh);
-                        auto accdAT = bufdAT.get_access<sycl::access::mode::read>(cgh);
-
-                        //ASSUMING MAXIMAL LP SOLVING
-                        cgh.parallel_for<class maxTarget_kernel>(sycl::range<1>(state_space_size), [=](sycl::id<1> i) {
-                            // set base values to be equal to the minimal transition probabilities
-
-                            double temp1 = 0;
-                            double temp0 = 0;
-                            double s = 0.0;
-
-                            temp0 += accminTT[i];
-                            temp1 += accminTT[i];
-                            s = s + accminTT[i];
-
-                            s = s + accminAT[i];
-
-                            for (size_t col = 0; col < state_space_size; col++) {
-                                temp0 += accminT[(col*state_space_size) +i]*accs0[col];
-                                temp1 += accminT[(col*state_space_size) +i]*accs1[col];
-                                s = s+ accminT[(col*state_space_size) +i];
-                            }
-
-                            if (IMDP_lower==true) {
-                                if ((1.0-s) <= accdTT[i]){
-                                    temp0 += (1.0-s);
-                                    temp1 += (1.0-s);
-                                    s = 1.0;
-                                }else{
-                                    temp0 += accdTT[i];
-                                    temp1 += accdTT[i];
-                                    s+= accdTT[i];
-                                }
-                            }else {
-                                if ((1.0-s) <= accdAT[i]){
-                                    s = 1.0;
-                                }else{
-                                    s+= accdAT[i];
-                                }
-                            }
-
-
-                            for(size_t col = 0; col < state_space_size; col++){
-                                size_t val = accsort[col];
-                                if ((1.0-s) <= accdT[(val*state_space_size) +i]){
-                                    temp0 += (1.0-s)*accs0[val];
-                                    temp1 += (1.0-s)*accs1[val];
-                                    s = 1.0;
-                                    break;
-                                }else {
-                                    temp0 += accdT[(val*state_space_size) +i]*accs0[val];
-                                    temp1 += accdT[(val*state_space_size) +i]*accs1[val];
-                                    s = s+ accdT[(val*state_space_size) +i];
-                                }
-                            }
-
-                            if (IMDP_lower==true) {
-                                // no action, Q-value = 0
-                            }else {
-                                if ((1.0-s) <= accdTT[i]){
-                                    temp0 += (1.0-s);
-                                    temp1 += (1.0-s);
-                                }else{
-                                    temp0 += accdTT[i];
-                                    temp1 += accdTT[i];
-                                }
-                            }
-
-                            cdfAccessor0[i] =  temp0;
-                            cdfAccessor1[i] =  temp1;
-                        });
-                    });
-                }
-                Q.wait_and_throw();
-                if((approx_equal(second1, secondnew1, "absdiff", 1e-8)) and ((approx_equal(second0, secondnew0, "absdiff", 1e-8)))){
-                    cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is an absorbing state in the solution, try running the finite Horizon solution using this number of steps." << endl;
-                    break;
-                }
-                second0 = secondnew0;
-                second1 = secondnew1;
-
-                max_diff = max(abs(second1-second0));
-                min_diff = min(abs(second1-second0));
-            }
-            cout << endl;
-            cout << "Upper bound found." << endl;
-
-            controller.set_size(state_space_size, dim_x + dim_u + 2);
-            controller.cols(0,dim_x-1) = state_space;
-            controller.col(dim_x+dim_u) = first0;
-            controller.col(dim_x+dim_u + 1) = second1;
-            for (size_t i = 0; i < state_space_size; ++i) {
-                controller.row(i).cols(dim_x, dim_x + dim_u - 1) = input_space.row(U_pos(i));
-            }
-    }else if (input_space_size==0) {
-
-        vec second0(state_space_size, 1, fill::zeros);
-        mat secondnew0(state_space_size*disturb_space_size, 1, fill::zeros);
-        vec second1(state_space_size, 1, fill::ones);
-        mat secondnew1(state_space_size*disturb_space_size, 1, fill::zeros);
-        max_diff = 1.0;
-        min_diff = 1.0;
-        converge = 0;
-        cout << "second loop iterations: " << endl;
-        while (max_diff > epsilon) {
-            converge++;
-            cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
-
-            std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(second1);
-
-            // Create a vector of pairs containing the original values and their indices
-            std::vector<std::pair<int, double>> indexed_values;
-            for (int i = 0; i < original_values.size(); ++i) {
-                indexed_values.push_back(std::make_pair(i, original_values[i]));
-            }
-
-            // Sort the vector based on the values
-            std::sort(indexed_values.begin(), indexed_values.end(),
-                      [IMDP_lower](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                if (IMDP_lower) {
-                    return a.second > b.second;
+                vec check0;
+                vec check1;
+                if (disturb_space_size == 0) {
+                    check0 = secondnew0;
+                    check1 = secondnew1;
                 }else {
-                    return a.second < b.second;
+                    secondnew0.reshape(state_space_size,disturb_space_size);
+                    secondnew1.reshape(state_space_size,disturb_space_size);
+                    check0 = conv_to<colvec>::from(min(secondnew0,1));
+                    check1 = conv_to<colvec>::from(min(secondnew1,1));
                 }
-            });
-
-            // Extract the sorted indices
-            std::vector<int> sorted_indices;
-            for (const auto& pair : indexed_values) {
-                sorted_indices.push_back(pair.first);
-            }
-
-            //Get difference between max and min for incrementing values
-            mat diffT = maxTransitionM-minTransitionM;
-            vec diffR = maxTargetM - minTargetM;
-            vec diffA = maxAvoidM - minAvoidM;
-
-            sycl::queue queue;
-            {
-                // Create a SYCL buffer to store the space
-                sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
-                sycl::buffer<double> cdfBuffer0(secondnew0.memptr(),secondnew0.n_rows);
-                sycl::buffer<double> cdfBuffer1(secondnew1.memptr(),secondnew1.n_rows);
-                sycl::buffer<double> buff1(second1.memptr(),second1.n_rows);
-                sycl::buffer<double> buff0(second0.memptr(),second0.n_rows);
-                sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
-                sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
-                sycl::buffer<double> bufminTT(minTargetM.memptr(),minTargetM.n_rows);
-                sycl::buffer<double> bufdTT(diffR.memptr(),diffR.n_rows);
-                sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
-                sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
-
-                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                queue.submit([&](sycl::handler& cgh) {
-                    auto accsort = bufsort.get_access<sycl::access::mode::read>(cgh);
-                    auto cdfAccessor0 = cdfBuffer0.get_access<sycl::access::mode::read_write>(cgh);
-                    auto cdfAccessor1 = cdfBuffer1.get_access<sycl::access::mode::read_write>(cgh);
-                    auto accf1 = buff1.get_access<sycl::access::mode::read>(cgh);
-                    auto accf0 = buff0.get_access<sycl::access::mode::read>(cgh);
-                    auto accminT = bufminT.get_access<sycl::access::mode::read>(cgh);
-                    auto accdT = bufdT.get_access<sycl::access::mode::read>(cgh);
-                    auto accminTT = bufminTT.get_access<sycl::access::mode::read>(cgh);
-                    auto accdTT = bufdTT.get_access<sycl::access::mode::read>(cgh);
-                    auto accminAT = bufminAT.get_access<sycl::access::mode::read>(cgh);
-                    auto accdAT = bufdAT.get_access<sycl::access::mode::read>(cgh);
-
-                    //ASSUMING MINIMAL LP SOLVING
-                    cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size*disturb_space_size), [=](sycl::id<1> i) {
-                        double s;
-                        double temp1;
-                        double temp0;
-
-                        temp1 = 0;
-                        temp0 = 0;
-                        s = 0.0;
-
-                        temp0 += accminTT[i];
-                        temp1 += accminTT[i];
-                        s = s + accminTT[i];
-
-                        s = s + accminAT[i];
-
-                        for (size_t col = 0; col < state_space_size; col++) {
-                            temp0 += accminT[(col*state_space_size*disturb_space_size) +i]*accf0[col];
-                            temp1 += accminT[(col*state_space_size*disturb_space_size) +i]*accf1[col];
-                            s = s+ accminT[(col*state_space_size*disturb_space_size) +i];
-                        }
-
-                        // optimize transitions to target set
-                        if (IMDP_lower==true) {
-                            if ((1.0-s) <= accdTT[i]){
-                                temp0 += (1.0-s);
-                                temp1 += (1.0-s);
-                                s=1.0;
-                            }else{
-                                temp0 += accdTT[i];
-                                temp1 += accdTT[i];
-                                s += accdTT[i];
-                            }
-                        }else {
-                            if ((1.0-s) <= accdAT[i]){
-                                s = 1.0;
-                            }else{
-                                s = s+accdAT[i];
-                            }
-                        }
-
-
-                        for(size_t col = 0; col < state_space_size; col++){
-                            size_t val = accsort[col];
-                            if ((1.0-s) <= accdT[(val*state_space_size*disturb_space_size) +i]){
-                                temp0 += (1.0-s)*accf0[val];
-                                temp1 += (1.0-s)*accf1[val];
-                                s = 1.0;
-                                break;
-                            }else {
-                                temp0 += accdT[(val*state_space_size*disturb_space_size) +i]*accf0[val];
-                                temp1 += accdT[(val*state_space_size*disturb_space_size) +i]*accf1[val];
-                                s = s+ accdT[(val*state_space_size*disturb_space_size) +i];
-                            }
-                        }
-
-                        // optimize transition to target set
-                        if (IMDP_lower==true) {
-                            //no action Q-value = 0
-                        }else {
-                            if ((1.0-s) <= accdTT[i]){
-                                temp0 += (1.0-s);
-                                temp1 += (1.0-s);
-                            }else{
-                                temp0 += accdTT[i];
-                                temp1 += accdTT[i];
-                            }
-                        }
-
-                        cdfAccessor0[i] =  temp0;
-                        cdfAccessor1[i] =  temp1;
-
-                    });
-                });
-            }
-            queue.wait_and_throw();
-
-            /*Resize to minimise over disturbance - worst case scenario*/
-            secondnew0.reshape(state_space_size,disturb_space_size);
-            secondnew1.reshape(state_space_size,disturb_space_size);
-            vec check0 = conv_to< colvec >::from(min(secondnew0,1));
-            vec check1 = conv_to< colvec >::from(min(secondnew1,1));
-
-
-            if((approx_equal(second1, check1, "absdiff", 1e-8)) and ((approx_equal(second0, check0, "absdiff", 1e-8)))){
-                cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is an absorbing state in the solution, try running the finite Horizon solution using this number of steps." << endl;
-                break;
-            }
-            second0 = check0;
-            second1 = check1;
-
-            max_diff = max(abs(second1-second0));
-            min_diff = min(abs(second1-second0));
-        }
-        cout << endl;
-        cout << "Upper bound found." << endl;
-
-        controller.set_size(state_space_size, dim_x + 2);
-        controller.cols(0,dim_x-1) = state_space;
-        controller.col(dim_x) = first0;
-        controller.col(dim_x + 1) = second1;
-    }else{
-            vec second0(state_space_size, 1, fill::zeros);
-            mat secondnew0(state_space_size*disturb_space_size, 1, fill::zeros);
-            vec second1(state_space_size, 1, fill::ones);
-            mat secondnew1(state_space_size*disturb_space_size, 1, fill::zeros);
-            max_diff = 1.0;
-            min_diff = 1.0;
-            converge = 0;
-            cout << "second loop iterations: " << endl;
-            mat tempTmin(state_space_size*disturb_space_size, state_space_size, fill::zeros);
-            mat tempTmax(state_space_size*disturb_space_size, state_space_size, fill::zeros);
-            vec tempTTmin(state_space_size*disturb_space_size, 1, fill::zeros);
-            vec tempTTmax(state_space_size*disturb_space_size, 1, fill::zeros);
-            vec tempATmax(state_space_size*disturb_space_size, 1, fill::zeros);
-            vec tempATmin(state_space_size*disturb_space_size, 1, fill::zeros);
-
-            cout << "Create reduced matrix where input is fixed." << endl;
-            for (size_t j = 0; j < disturb_space_size; j++){
-                for (size_t i = 0; i < state_space_size; i++){
-                    tempTmin.row(j*state_space_size+i) = minTransitionM.row(j*input_space_size*state_space_size+U_pos(i)*state_space_size+i);
-                    tempTmax.row(j*state_space_size+i) = maxTransitionM.row(j*input_space_size*state_space_size+U_pos(i)*state_space_size+i);
-                    tempTTmin(j*state_space_size+i)= minTargetM(j*input_space_size*state_space_size+U_pos(i)*state_space_size+i);
-                    tempTTmax(j*state_space_size+i)= maxTargetM(j*input_space_size*state_space_size+U_pos(i)*state_space_size+i);
-                    tempATmin(j*state_space_size+i)= minAvoidM(j*input_space_size*state_space_size+U_pos(i)*state_space_size+i);
-                    tempATmax(j*state_space_size+i)= maxAvoidM(j*input_space_size*state_space_size+U_pos(i)*state_space_size+i);
-                }
-            }
-
-            cout << "Matrix Fixed" << endl;
-            while (max_diff > epsilon) {
-                converge++;
-                cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
-
-
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(second1);
-
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [IMDP_lower](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    if (IMDP_lower) {
-                        return a.second > b.second;
-                    }else {
-                        return a.second < b.second;
-                    }
-                });
-
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
-
-                //Get difference between max and min for incrementing values
-                mat diffT = tempTmax-tempTmin;
-                vec diffR = tempTTmax - tempTTmin;
-                vec diffA = tempATmax - tempATmin;
-
-
-                sycl::queue Q;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
-                    sycl::buffer<double> cdfBuffer0(secondnew0.memptr(),secondnew0.n_rows);
-                    sycl::buffer<double> cdfBuffer1(secondnew1.memptr(),secondnew1.n_rows);
-                    sycl::buffer<double> bufs1(second1.memptr(),second1.n_rows);
-                    sycl::buffer<double> bufs0(second0.memptr(),second0.n_rows);
-                    sycl::buffer<double> bufminT(tempTmin.memptr(),tempTmin.n_rows*tempTmin.n_cols);
-                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
-                    sycl::buffer<double> bufminTT(tempTTmin.memptr(),tempTTmin.n_rows);
-                    sycl::buffer<double> bufdTT(diffR.memptr(),diffR.n_rows);
-                    sycl::buffer<double> bufminAT(tempATmin.memptr(),tempATmin.n_rows);
-                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
-
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                    Q.submit([&](sycl::handler& cgh) {
-                        auto accsort = bufsort.get_access<sycl::access::mode::read>(cgh);
-                        auto cdfAccessor0 = cdfBuffer0.get_access<sycl::access::mode::discard_write>(cgh);
-                        auto cdfAccessor1 = cdfBuffer1.get_access<sycl::access::mode::discard_write>(cgh);
-                        auto accs1 = bufs1.get_access<sycl::access::mode::read>(cgh);
-                        auto accs0 = bufs0.get_access<sycl::access::mode::read>(cgh);
-                        auto accminT = bufminT.get_access<sycl::access::mode::read>(cgh);
-                        auto accdT = bufdT.get_access<sycl::access::mode::read>(cgh);
-                        auto accminTT = bufminTT.get_access<sycl::access::mode::read>(cgh);
-                        auto accdTT = bufdTT.get_access<sycl::access::mode::read>(cgh);
-                        auto accminAT = bufminAT.get_access<sycl::access::mode::read>(cgh);
-                        auto accdAT = bufdAT.get_access<sycl::access::mode::read>(cgh);
-
-                        //ASSUMING MAXIMAL LP SOLVING
-                        cgh.parallel_for<class maxTarget_kernel>(sycl::range<1>(state_space_size*disturb_space_size), [=](sycl::id<1> i) {
-                            // set base values to be equal to the minimal transition probabilities
-                            double s;
-                            double temp1;
-                            double temp0;
-
-                            temp1 = 0;
-                            temp0 = 0;
-                            s = 0.0;
-
-                            temp0 += accminTT[i];
-                            temp1 += accminTT[i];
-                            s = s + accminTT[i];
-
-                            s = s + accminAT[i];
-
-                            for (size_t col = 0; col < state_space_size; col++) {
-                                temp0 += accminT[(col*state_space_size*disturb_space_size) +i]*accs0[col];
-                                temp1 += accminT[(col*state_space_size*disturb_space_size) +i]*accs1[col];
-                                s = s+ accminT[(col*state_space_size*disturb_space_size) +i];
-                            }
-
-                            if (IMDP_lower) {
-                                if ((1.0-s) <= accdTT[i]){
-                                    temp0 += (1.0-s);
-                                    temp1 += (1.0-s);
-                                    s = 1.0;
-                                }else{
-                                    temp0 += accdTT[i];
-                                    temp1 += accdTT[i];
-                                    s+= accdTT[i];
-                                }
-                            }else {
-                                if ((1.0-s) <= accdAT[i]){
-                                    s = 1.0;
-                                }else{
-                                    s+= accdAT[i];
-                                }
-                            }
-
-
-                            for(size_t col = 0; col < state_space_size; col++){
-                                size_t val = accsort[col];
-                                if ((1.0-s) <= accdT[(val*state_space_size) +i]){
-                                    temp0 += (1.0-s)*accs0[val];
-                                    temp1 += (1.0-s)*accs1[val];
-                                    s = 1.0;
-                                    break;
-                                }else {
-                                    temp0 += accdT[(val*state_space_size*disturb_space_size) +i]*accs0[val];
-                                    temp1 += accdT[(val*state_space_size*disturb_space_size) +i]*accs1[val];
-                                    s = s+ accdT[(val*state_space_size*disturb_space_size) +i];
-                                }
-                            }
-
-                            if (IMDP_lower) {
-                                //no action, Q-value = 0
-                            }else {
-                                if ((1.0-s) <= accdTT[i]){
-                                    temp0 += (1.0-s);
-                                    temp1 += (1.0-s);
-                                }else{
-                                    temp0 += accdTT[i];
-                                    temp1 += accdTT[i];
-                                }
-                            }
-
-                            cdfAccessor0[i] =  temp0;
-                            cdfAccessor1[i] =  temp1;
-                        });
-                    });
-                }
-                Q.wait_and_throw();
-
-                /*Resize to maximise over disturbance - best case scenario*/
-                secondnew0.reshape(state_space_size,disturb_space_size);
-                secondnew1.reshape(state_space_size,disturb_space_size);
-                vec check0 = conv_to< colvec >::from(min(secondnew0,1));
-                vec check1 = conv_to< colvec >::from(min(secondnew1,1));
 
                 if((approx_equal(second1, check1, "absdiff", 1e-8)) and ((approx_equal(second0, check0, "absdiff", 1e-8)))){
                     cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is an absorbing state in the solution, try running the finite Horizon solution using this number of steps." << endl;
@@ -1078,14 +588,16 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
             cout << endl;
             cout << "Upper bound found." << endl;
 
-            controller.set_size(state_space_size, dim_x + dim_u + 2);
-            controller.cols(0,dim_x-1) = state_space;
-            controller.col(dim_x+dim_u) = first0;
-            controller.col(dim_x+dim_u + 1) = second1;
-            for (size_t i = 0; i < state_space_size; ++i) {
-                controller.row(i).cols(dim_x, dim_x + dim_u - 1) = input_space.row(U_pos(i));
+            controller.set_size(state_space_size, total_cols + 2);
+            controller.cols(0,total_cols-1) = state_space;
+            controller.col(total_cols) = first0;
+            controller.col(total_cols + 1) = second1;
+
+            if (disturb_space_size == 0) {
+                for (size_t i = 0; i < state_space_size; ++i) {
+                    controller.row(i).cols(dim_x, total_cols - 1) = input_space.row(U_pos(i));
+                }
             }
-    }
     auto end = chrono::steady_clock::now();
     auto duration = chrono::duration_cast<chrono::milliseconds>(end - start);
     cout << "Execution time: " << duration.count()/1000.0 << " seconds" << endl;
