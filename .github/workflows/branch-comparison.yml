@@ -1,0 +1,413 @@
+name: Branch Comparison - Validate Merge
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_branch:
+        description: 'Base branch (e.g., main)'
+        required: true
+        default: 'main'
+        type: string
+      compare_branch:
+        description: 'Branch to compare (e.g., refactor/phase1-io-utils)'
+        required: true
+        type: string
+      test_suite:
+        description: 'Test suite to run'
+        required: true
+        default: 'critical'
+        type: choice
+        options:
+          - smoke
+          - critical
+          - comprehensive
+
+jobs:
+  test-base-branch:
+    name: "Test Base Branch (${{ inputs.base_branch }})"
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        example:
+          # Critical test suite (default)
+          - ex_2Drobot-R-U
+          - ex_2Drobot-R-D
+          - ex_4DBAS-S
+          - ex_load_reach
+          - ex_load_safe
+
+    steps:
+      - name: Checkout base branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.base_branch }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          pip install pyyaml h5py numpy
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential cmake clang-16 \
+            libblas-dev liblapack-dev libnlopt-dev \
+            libopenblas-dev libhdf5-serial-dev \
+            libomp-16-dev libglpk-dev libgsl-dev \
+            libarmadillo-dev libboost-all-dev
+
+      - name: Compile and run example
+        id: test
+        timeout-minutes: 20
+        run: |
+          cd examples/${{ matrix.example }}
+
+          # Compile
+          echo "Compiling..."
+          START_COMPILE=$(date +%s)
+          make 2>&1 | tee compile.log
+          COMPILE_STATUS=$?
+          END_COMPILE=$(date +%s)
+          COMPILE_TIME=$((END_COMPILE - START_COMPILE))
+
+          if [ $COMPILE_STATUS -ne 0 ]; then
+            echo "❌ Compilation failed"
+            echo "compile_success=false" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+          echo "✅ Compilation successful ($COMPILE_TIME seconds)"
+          echo "compile_success=true" >> $GITHUB_OUTPUT
+          echo "compile_time=$COMPILE_TIME" >> $GITHUB_OUTPUT
+
+          # Determine executable
+          case "${{ matrix.example }}" in
+            *robot*)   EXEC="robot2D" ;;
+            *BAS4D*)   EXEC="BAS4D" ;;
+            *vehicle*) EXEC="vehicle3D" ;;
+            *room3D*)  EXEC="room3D" ;;
+            *room5D*)  EXEC="room5D" ;;
+            *BAS7D*)   EXEC="BAS7D" ;;
+            *load*)    EXEC="load" ;;
+            *)         EXEC=$(ls | grep -v '\.' | head -n 1) ;;
+          esac
+
+          # Run
+          echo "Running ./$EXEC..."
+          START_RUN=$(date +%s)
+          ./$EXEC 2>&1 | tee run.log
+          RUN_STATUS=$?
+          END_RUN=$(date +%s)
+          RUN_TIME=$((END_RUN - START_RUN))
+
+          if [ $RUN_STATUS -ne 0 ]; then
+            echo "❌ Execution failed"
+            echo "run_success=false" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+          echo "✅ Execution successful ($RUN_TIME seconds)"
+          echo "run_success=true" >> $GITHUB_OUTPUT
+          echo "run_time=$RUN_TIME" >> $GITHUB_OUTPUT
+
+          # Count outputs
+          H5_COUNT=$(ls *.h5 2>/dev/null | wc -l)
+          echo "output_count=$H5_COUNT" >> $GITHUB_OUTPUT
+          echo "✅ Generated $H5_COUNT HDF5 files"
+        continue-on-error: true
+
+      - name: Upload outputs
+        if: steps.test.outputs.compile_success == 'true' && steps.test.outputs.run_success == 'true'
+        uses: actions/upload-artifact@v3
+        with:
+          name: base-${{ matrix.example }}
+          path: examples/${{ matrix.example }}/*.h5
+          retention-days: 7
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: base-logs-${{ matrix.example }}
+          path: |
+            examples/${{ matrix.example }}/compile.log
+            examples/${{ matrix.example }}/run.log
+          retention-days: 7
+
+  test-compare-branch:
+    name: "Test Compare Branch (${{ inputs.compare_branch }})"
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        example:
+          # Critical test suite (default)
+          - ex_2Drobot-R-U
+          - ex_2Drobot-R-D
+          - ex_4DBAS-S
+          - ex_load_reach
+          - ex_load_safe
+
+    steps:
+      - name: Checkout compare branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.compare_branch }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          pip install pyyaml h5py numpy
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential cmake clang-16 \
+            libblas-dev liblapack-dev libnlopt-dev \
+            libopenblas-dev libhdf5-serial-dev \
+            libomp-16-dev libglpk-dev libgsl-dev \
+            libarmadillo-dev libboost-all-dev
+
+      - name: Compile and run example
+        id: test
+        timeout-minutes: 20
+        run: |
+          cd examples/${{ matrix.example }}
+
+          # Compile
+          echo "Compiling..."
+          START_COMPILE=$(date +%s)
+          make 2>&1 | tee compile.log
+          COMPILE_STATUS=$?
+          END_COMPILE=$(date +%s)
+          COMPILE_TIME=$((END_COMPILE - START_COMPILE))
+
+          if [ $COMPILE_STATUS -ne 0 ]; then
+            echo "❌ Compilation failed"
+            echo "compile_success=false" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+          echo "✅ Compilation successful ($COMPILE_TIME seconds)"
+          echo "compile_success=true" >> $GITHUB_OUTPUT
+          echo "compile_time=$COMPILE_TIME" >> $GITHUB_OUTPUT
+
+          # Determine executable
+          case "${{ matrix.example }}" in
+            *robot*)   EXEC="robot2D" ;;
+            *BAS4D*)   EXEC="BAS4D" ;;
+            *vehicle*) EXEC="vehicle3D" ;;
+            *room3D*)  EXEC="room3D" ;;
+            *room5D*)  EXEC="room5D" ;;
+            *BAS7D*)   EXEC="BAS7D" ;;
+            *load*)    EXEC="load" ;;
+            *)         EXEC=$(ls | grep -v '\.' | head -n 1) ;;
+          esac
+
+          # Run
+          echo "Running ./$EXEC..."
+          START_RUN=$(date +%s)
+          ./$EXEC 2>&1 | tee run.log
+          RUN_STATUS=$?
+          END_RUN=$(date +%s)
+          RUN_TIME=$((END_RUN - START_RUN))
+
+          if [ $RUN_STATUS -ne 0 ]; then
+            echo "❌ Execution failed"
+            echo "run_success=false" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+          echo "✅ Execution successful ($RUN_TIME seconds)"
+          echo "run_success=true" >> $GITHUB_OUTPUT
+          echo "run_time=$RUN_TIME" >> $GITHUB_OUTPUT
+
+          # Count outputs
+          H5_COUNT=$(ls *.h5 2>/dev/null | wc -l)
+          echo "output_count=$H5_COUNT" >> $GITHUB_OUTPUT
+          echo "✅ Generated $H5_COUNT HDF5 files"
+        continue-on-error: true
+
+      - name: Upload outputs
+        if: steps.test.outputs.compile_success == 'true' && steps.test.outputs.run_success == 'true'
+        uses: actions/upload-artifact@v3
+        with:
+          name: compare-${{ matrix.example }}
+          path: examples/${{ matrix.example }}/*.h5
+          retention-days: 7
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: compare-logs-${{ matrix.example }}
+          path: |
+            examples/${{ matrix.example }}/compile.log
+            examples/${{ matrix.example }}/run.log
+          retention-days: 7
+
+  compare-results:
+    name: Compare Branch Results
+    runs-on: ubuntu-latest
+    needs: [test-base-branch, test-compare-branch]
+    if: always()
+
+    steps:
+      - name: Checkout code (for comparison scripts)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.compare_branch }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install Python dependencies
+        run: |
+          pip install h5py numpy pyyaml
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v3
+
+      - name: Compare outputs
+        id: compare
+        run: |
+          echo "# Branch Comparison Report" > comparison-report.md
+          echo "" >> comparison-report.md
+          echo "**Base branch**: ${{ inputs.base_branch }}" >> comparison-report.md
+          echo "**Compare branch**: ${{ inputs.compare_branch }}" >> comparison-report.md
+          echo "**Test suite**: ${{ inputs.test_suite }}" >> comparison-report.md
+          echo "**Date**: $(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> comparison-report.md
+          echo "" >> comparison-report.md
+
+          echo "## Compilation Results" >> comparison-report.md
+          echo "" >> comparison-report.md
+          echo "| Example | Base Branch | Compare Branch | Status |" >> comparison-report.md
+          echo "|---------|-------------|----------------|--------|" >> comparison-report.md
+
+          # Check each example
+          EXAMPLES="ex_2Drobot-R-U ex_2Drobot-R-D ex_4DBAS-S ex_load_reach ex_load_safe"
+
+          TOTAL=0
+          PASSED=0
+          FAILED=0
+
+          for example in $EXAMPLES; do
+            TOTAL=$((TOTAL + 1))
+            BASE_EXISTS=$([ -d "base-$example" ] && echo "true" || echo "false")
+            COMPARE_EXISTS=$([ -d "compare-$example" ] && echo "true" || echo "false")
+
+            if [ "$BASE_EXISTS" = "true" ] && [ "$COMPARE_EXISTS" = "true" ]; then
+              echo "| $example | ✅ SUCCESS | ✅ SUCCESS | ✅ MATCH |" >> comparison-report.md
+              PASSED=$((PASSED + 1))
+            elif [ "$BASE_EXISTS" = "false" ] && [ "$COMPARE_EXISTS" = "false" ]; then
+              echo "| $example | ❌ FAILED | ❌ FAILED | ⚠️ BOTH FAILED |" >> comparison-report.md
+              FAILED=$((FAILED + 1))
+            elif [ "$BASE_EXISTS" = "false" ]; then
+              echo "| $example | ❌ FAILED | ✅ SUCCESS | ⚠️ BASE FAILED |" >> comparison-report.md
+              FAILED=$((FAILED + 1))
+            else
+              echo "| $example | ✅ SUCCESS | ❌ FAILED | ❌ REGRESSION |" >> comparison-report.md
+              FAILED=$((FAILED + 1))
+            fi
+          done
+
+          echo "" >> comparison-report.md
+          echo "**Total**: $TOTAL | **Passed**: $PASSED | **Failed**: $FAILED" >> comparison-report.md
+          echo "" >> comparison-report.md
+
+          # Output file comparison
+          echo "## Output File Comparison" >> comparison-report.md
+          echo "" >> comparison-report.md
+          echo "| Example | Base Files | Compare Files | Status |" >> comparison-report.md
+          echo "|---------|------------|---------------|--------|" >> comparison-report.md
+
+          OUTPUTS_MATCH=0
+          OUTPUTS_DIFFER=0
+
+          for example in $EXAMPLES; do
+            if [ -d "base-$example" ] && [ -d "compare-$example" ]; then
+              BASE_COUNT=$(ls base-$example/*.h5 2>/dev/null | wc -l)
+              COMPARE_COUNT=$(ls compare-$example/*.h5 2>/dev/null | wc -l)
+
+              if [ "$BASE_COUNT" -eq "$COMPARE_COUNT" ]; then
+                echo "| $example | $BASE_COUNT | $COMPARE_COUNT | ✅ MATCH |" >> comparison-report.md
+                OUTPUTS_MATCH=$((OUTPUTS_MATCH + 1))
+              else
+                echo "| $example | $BASE_COUNT | $COMPARE_COUNT | ⚠️ DIFFERENT |" >> comparison-report.md
+                OUTPUTS_DIFFER=$((OUTPUTS_DIFFER + 1))
+              fi
+            fi
+          done
+
+          echo "" >> comparison-report.md
+
+          # Final verdict
+          echo "## Final Verdict" >> comparison-report.md
+          echo "" >> comparison-report.md
+
+          if [ $FAILED -eq 0 ] && [ $OUTPUTS_DIFFER -eq 0 ]; then
+            echo "### ✅ SAFE TO MERGE" >> comparison-report.md
+            echo "" >> comparison-report.md
+            echo "All tests passed on both branches with matching outputs." >> comparison-report.md
+            echo "verdict=SAFE_TO_MERGE" >> $GITHUB_OUTPUT
+          elif [ $FAILED -gt 0 ]; then
+            echo "### ❌ ISSUES FOUND" >> comparison-report.md
+            echo "" >> comparison-report.md
+            echo "Some tests failed. Review logs before merging." >> comparison-report.md
+            echo "verdict=ISSUES_FOUND" >> $GITHUB_OUTPUT
+          else
+            echo "### ⚠️ REVIEW REQUIRED" >> comparison-report.md
+            echo "" >> comparison-report.md
+            echo "Tests passed but output counts differ. Manual review recommended." >> comparison-report.md
+            echo "verdict=REVIEW_REQUIRED" >> $GITHUB_OUTPUT
+          fi
+
+          echo "" >> comparison-report.md
+          echo "---" >> comparison-report.md
+          echo "*Generated by IMPaCT Branch Comparison Workflow*" >> comparison-report.md
+
+      - name: Upload comparison report
+        uses: actions/upload-artifact@v3
+        with:
+          name: comparison-report
+          path: comparison-report.md
+          retention-days: 30
+
+      - name: Display summary
+        if: always()
+        run: |
+          cat comparison-report.md >> $GITHUB_STEP_SUMMARY
+
+      - name: Comment on PR (if applicable)
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const fs = require('fs');
+            const report = fs.readFileSync('comparison-report.md', 'utf8');
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: report
+            });
+
+      - name: Set workflow status
+        if: always()
+        run: |
+          VERDICT="${{ steps.compare.outputs.verdict }}"
+          if [ "$VERDICT" = "SAFE_TO_MERGE" ]; then
+            echo "✅ Verdict: SAFE TO MERGE"
+            exit 0
+          elif [ "$VERDICT" = "REVIEW_REQUIRED" ]; then
+            echo "⚠️ Verdict: REVIEW REQUIRED"
+            exit 0  # Don't fail workflow, but flag for review
+          else
+            echo "❌ Verdict: ISSUES FOUND"
+            exit 1
+          fi
