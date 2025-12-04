@@ -1,0 +1,258 @@
+# IMPaCT Test Configuration
+# Configuration for automated testing of IMPaCT examples
+
+# Global settings
+global:
+  numerical_tolerance: 1.0e-12  # Tolerance for floating-point comparisons
+  performance_regression_threshold: 0.10  # 10% performance regression threshold
+
+# Example configurations
+examples:
+  # Small examples - fast tests (< 2 minutes each)
+  small:
+    - name: ex_2Drobot-R-U
+      path: examples/ex_2Drobot-R-U
+      executable: robot2D
+      compile_timeout: 300  # 5 minutes
+      run_timeout: 120      # 2 minutes
+      expected_outputs:
+        - ss.h5
+        - is.h5
+        - ts.h5
+        - minttm.h5
+        - maxttm.h5
+        - mintm.h5
+        - maxtm.h5
+        - controller.h5
+      description: "2D robot reachability (undisturbed)"
+
+    - name: ex_2Drobot-R-D
+      path: examples/ex_2Drobot-R-D
+      executable: robot2D
+      compile_timeout: 300
+      run_timeout: 180      # 3 minutes (slower due to noise)
+      expected_outputs:
+        - ss.h5
+        - is.h5
+        - ts.h5
+        - minttm.h5
+        - maxttm.h5
+        - mintm.h5
+        - maxtm.h5
+        - controller.h5
+      description: "2D robot reachability (disturbed with noise)"
+
+    - name: ex_4DBAS-S
+      path: examples/ex_4DBAS-S
+      executable: BAS4D
+      compile_timeout: 300
+      run_timeout: 300      # 5 minutes
+      expected_outputs:
+        - ss.h5
+        - is.h5
+        - as.h5
+        - minatm.h5
+        - maxatm.h5
+        - mintm.h5
+        - maxtm.h5
+        - controller.h5
+      description: "4D building automation (safety)"
+
+    - name: ex_customPDF
+      path: examples/ex_customPDF
+      executable: robot2D
+      compile_timeout: 300
+      run_timeout: 300
+      expected_outputs:
+        - ss.h5
+        - is.h5
+        - ts.h5
+        - controller.h5
+      description: "Custom PDF distributions"
+
+    - name: ex_multivariateNormalPDF
+      path: examples/ex_multivariateNormalPDF
+      executable: robot2D
+      compile_timeout: 300
+      run_timeout: 300
+      expected_outputs:
+        - ss.h5
+        - is.h5
+        - ts.h5
+        - controller.h5
+      description: "Multivariate normal distributions"
+
+  # Medium examples - moderate runtime (2-10 minutes)
+  medium:
+    - name: ex_2Drobot-RA-U
+      path: examples/ex_2Drobot-RA-U
+      executable: robot2D
+      compile_timeout: 300
+      run_timeout: 600      # 10 minutes
+      expected_outputs:
+        - ss.h5
+        - is.h5
+        - ts.h5
+        - as.h5
+        - controller.h5
+      description: "2D robot reach-avoid (undisturbed)"
+
+    - name: ex_2Drobot-RA-D
+      path: examples/ex_2Drobot-RA-D
+      executable: robot2D
+      compile_timeout: 300
+      run_timeout: 600
+      expected_outputs:
+        - ss.h5
+        - is.h5
+        - ts.h5
+        - as.h5
+        - controller.h5
+      description: "2D robot reach-avoid (disturbed)"
+
+    - name: ex_3Dvehicle-RA
+      path: examples/ex_3Dvehicle-RA
+      executable: vehicle3D
+      compile_timeout: 300
+      run_timeout: 900      # 15 minutes
+      expected_outputs:
+        - ss.h5
+        - is.h5
+        - ts.h5
+        - as.h5
+        - controller.h5
+      description: "3D vehicle reach-avoid"
+
+  # Large examples - long runtime (10+ minutes)
+  large:
+    - name: ex_3Droom-S
+      path: examples/ex_3Droom-S
+      executable: room3D
+      compile_timeout: 300
+      run_timeout: 1200     # 20 minutes
+      expected_outputs:
+        - ss.h5
+        - is.h5
+        - as.h5
+        - controller.h5
+      description: "3D room temperature (safety)"
+
+    - name: ex_5Droom-S
+      path: examples/ex_5Droom-S
+      executable: room5D
+      compile_timeout: 300
+      run_timeout: 1800     # 30 minutes
+      expected_outputs:
+        - ss.h5
+        - is.h5
+        - as.h5
+        - controller.h5
+      description: "5D room model"
+
+    - name: ex_7DBAS-S
+      path: examples/ex_7DBAS-S
+      executable: BAS7D
+      compile_timeout: 300
+      run_timeout: 2400     # 40 minutes
+      expected_outputs:
+        - ss.h5
+        - as.h5
+        - controller.h5
+      description: "7D building automation (verification mode)"
+
+    - name: ex_14Dstochy-S
+      path: examples/ex_14Dstochy-S
+      executable: stochy14D
+      compile_timeout: 300
+      run_timeout: 3600     # 60 minutes
+      expected_outputs:
+        - ss.h5
+        - controller.h5
+      description: "14D stochastic system (stress test)"
+
+  # Special cases - data loading tests
+  special:
+    - name: ex_load_reach
+      path: examples/ex_load_reach
+      executable: load
+      compile_timeout: 300
+      run_timeout: 60       # 1 minute (just loading)
+      expected_outputs:
+        - controller.h5
+      pre_existing_data: true  # Uses pre-computed data
+      description: "Load functionality test (reachability)"
+
+    - name: ex_load_safe
+      path: examples/ex_load_safe
+      executable: load
+      compile_timeout: 300
+      run_timeout: 60
+      expected_outputs:
+        - controller.h5
+      pre_existing_data: true
+      description: "Load functionality test (safety)"
+
+    - name: ex_GPU
+      path: examples/ex_GPU
+      executable: robot2D
+      compile_timeout: 300
+      run_timeout: 300
+      expected_outputs:
+        - ss.h5
+        - is.h5
+        - ts.h5
+        - controller.h5
+      requires_gpu: true
+      description: "GPU-accelerated synthesis"
+
+# Test suites - define which examples to run for different scenarios
+test_suites:
+  smoke:
+    description: "Quick smoke tests (3 examples, ~5 minutes)"
+    examples:
+      - ex_2Drobot-R-U
+      - ex_2Drobot-R-D
+      - ex_4DBAS-S
+
+  comprehensive:
+    description: "Full test suite (all examples except GPU, ~2 hours)"
+    examples:
+      - ex_2Drobot-R-U
+      - ex_2Drobot-R-D
+      - ex_4DBAS-S
+      - ex_customPDF
+      - ex_multivariateNormalPDF
+      - ex_2Drobot-RA-U
+      - ex_2Drobot-RA-D
+      - ex_3Dvehicle-RA
+      - ex_3Droom-S
+      - ex_5Droom-S
+      - ex_7DBAS-S
+      - ex_14Dstochy-S
+      - ex_load_reach
+      - ex_load_safe
+
+  critical:
+    description: "Critical tests for Phase 1 I/O validation (~15 minutes)"
+    examples:
+      - ex_2Drobot-R-U     # Basic test
+      - ex_2Drobot-R-D     # Noise test
+      - ex_load_reach      # Load function test (CRITICAL for Phase 1)
+      - ex_load_safe       # Load function test (CRITICAL for Phase 1)
+      - ex_4DBAS-S         # Safety test
+
+# Output validation rules
+validation:
+  file_size:
+    min_size_bytes: 100         # Minimum expected file size
+    max_size_gb: 10             # Maximum expected file size
+
+  numerical_comparison:
+    methods:
+      - exact          # Byte-for-byte comparison (fastest)
+      - element_wise   # Element-by-element with tolerance
+      - statistical    # Statistical measures (mean, max diff)
+
+  performance:
+    baseline_multiplier: 1.1    # Allow 10% slower than baseline
+    improvement_threshold: 0.05  # Report improvements > 5%

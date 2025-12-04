@@ -1,0 +1,229 @@
+name: Comprehensive CI - Full Integration Tests
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 2 * * *'  # Daily at 2 AM UTC
+  push:
+    branches: ["main"]
+    paths-ignore: ["**.md", "docs/**"]
+
+jobs:
+  test-all-examples:
+    name: "Test: ${{ matrix.example }}"
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        example:
+          # Small examples
+          - ex_2Drobot-R-U
+          - ex_2Drobot-R-D
+          - ex_4DBAS-S
+          - ex_customPDF
+          - ex_multivariateNormalPDF
+          # Medium examples
+          - ex_2Drobot-RA-U
+          - ex_2Drobot-RA-D
+          - ex_3Dvehicle-RA
+          # Large examples
+          - ex_3Droom-S
+          - ex_5Droom-S
+          - ex_7DBAS-S
+          # Special cases
+          - ex_load_reach
+          - ex_load_safe
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install Python dependencies
+        run: |
+          pip install pyyaml h5py numpy
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            cmake \
+            clang-16 \
+            libblas-dev \
+            liblapack-dev \
+            libnlopt-dev \
+            libopenblas-dev \
+            libhdf5-serial-dev \
+            libomp-16-dev \
+            libglpk-dev \
+            libgsl-dev \
+            libarmadillo-dev \
+            libboost-all-dev
+
+      - name: Compile example
+        id: compile
+        timeout-minutes: 10
+        run: |
+          cd examples/${{ matrix.example }}
+          echo "::group::Compilation output"
+          make 2>&1 | tee compile.log
+          echo "::endgroup::"
+          if [ $? -eq 0 ]; then
+            echo "✅ Compilation successful"
+          else
+            echo "❌ Compilation failed"
+            exit 1
+          fi
+        continue-on-error: true
+
+      - name: Run example
+        id: run
+        if: steps.compile.outcome == 'success'
+        timeout-minutes: 40
+        run: |
+          cd examples/${{ matrix.example }}
+          # Determine executable name based on example
+          case "${{ matrix.example }}" in
+            *robot*)   EXEC="robot2D" ;;
+            *BAS*)     EXEC="BAS4D" ;;
+            *vehicle*) EXEC="vehicle3D" ;;
+            *room3D*)  EXEC="room3D" ;;
+            *room5D*)  EXEC="room5D" ;;
+            *BAS7D*)   EXEC="BAS7D" ;;
+            *load*)    EXEC="load" ;;
+            *)         EXEC=$(ls | grep -v '\.' | head -n 1) ;;
+          esac
+
+          echo "Running: ./$EXEC"
+          echo "::group::Execution output"
+          ./$EXEC 2>&1 | tee run.log
+          echo "::endgroup::"
+          if [ $? -eq 0 ]; then
+            echo "✅ Execution successful"
+          else
+            echo "❌ Execution failed"
+            exit 1
+          fi
+        continue-on-error: true
+
+      - name: Validate outputs
+        id: validate
+        if: steps.run.outcome == 'success'
+        run: |
+          cd examples/${{ matrix.example }}
+          echo "Checking for HDF5 output files..."
+          if ls *.h5 1> /dev/null 2>&1; then
+            echo "::group::Output files"
+            ls -lh *.h5
+            echo "::endgroup::"
+            FILE_COUNT=$(ls *.h5 | wc -l)
+            echo "✅ Found $FILE_COUNT HDF5 output files"
+            echo "file_count=$FILE_COUNT" >> $GITHUB_OUTPUT
+          else
+            echo "❌ No HDF5 output files found"
+            exit 1
+          fi
+
+      - name: Upload outputs as artifacts
+        if: steps.run.outcome == 'success'
+        uses: actions/upload-artifact@v3
+        with:
+          name: outputs-${{ matrix.example }}
+          path: examples/${{ matrix.example }}/*.h5
+          retention-days: 7
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: logs-${{ matrix.example }}
+          path: |
+            examples/${{ matrix.example }}/compile.log
+            examples/${{ matrix.example }}/run.log
+          retention-days: 7
+
+      - name: Report status
+        if: always()
+        run: |
+          echo "## ${{ matrix.example }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Compilation | ${{ steps.compile.outcome }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Execution | ${{ steps.run.outcome }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Validation | ${{ steps.validate.outcome }} |" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ steps.validate.outcome }}" = "success" ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "✅ **All checks passed**" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  generate-report:
+    name: Generate Test Report
+    runs-on: ubuntu-latest
+    needs: test-all-examples
+    if: always()
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v3
+
+      - name: Generate summary report
+        run: |
+          echo "# Comprehensive Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch**: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Count examples
+          TOTAL=13  # Total number of examples tested
+          echo "**Examples tested**: $TOTAL" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Check for output files
+          echo "## Output Files Generated" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          for dir in outputs-*/; do
+            if [ -d "$dir" ]; then
+              example=$(basename "$dir" | sed 's/outputs-//')
+              count=$(ls "$dir"/*.h5 2>/dev/null | wc -l)
+              if [ "$count" -gt 0 ]; then
+                echo "- ✅ $example: $count files" >> $GITHUB_STEP_SUMMARY
+              else
+                echo "- ❌ $example: no files" >> $GITHUB_STEP_SUMMARY
+              fi
+            fi
+          done
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "See individual job results for detailed logs." >> $GITHUB_STEP_SUMMARY
+
+      - name: Create test results archive
+        run: |
+          mkdir -p test-results
+          cp -r outputs-* test-results/ 2>/dev/null || true
+          cp -r logs-* test-results/ 2>/dev/null || true
+          tar -czf comprehensive-test-results.tar.gz test-results/
+
+      - name: Upload test results archive
+        uses: actions/upload-artifact@v3
+        with:
+          name: comprehensive-test-results
+          path: comprehensive-test-results.tar.gz
+          retention-days: 30

@@ -34,9 +34,47 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
 
       - name: Build and push Docker image
+        id: build
         uses: docker/build-push-action@v5
         with:
           context: .
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
+  test-docker-image:
+    runs-on: ubuntu-latest
+    needs: build-and-push-image
+    permissions:
+      contents: read
+      packages: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull and test Docker image
+        run: |
+          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:main
+
+          echo "Testing Docker image with ex_2Drobot-R-U..."
+          docker run --rm ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:main /bin/bash -c "
+            cd /app/examples/ex_2Drobot-R-U &&
+            make &&
+            ./robot2D &&
+            ls -lh *.h5
+          "
+
+          if [ $? -eq 0 ]; then
+            echo "✅ Docker image test passed"
+          else
+            echo "❌ Docker image test failed"
+            exit 1
+          fi
