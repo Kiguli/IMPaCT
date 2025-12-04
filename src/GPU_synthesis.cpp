@@ -1,4 +1,5 @@
 #include "IMDP.h"
+#include "IO_utils.h"
 #include <iostream>
 #include <vector>
 #include <functional>
@@ -14,125 +15,8 @@
 using namespace std;
 using namespace arma;
 
-
-///Save minimal target transition vector
-void IMDP::saveMinTargetTransitionVector(){
-    if (minTargetM.empty()){
-        cout << "Min Target Transition Vector is empty, can't save file." << endl;
-    }else{
-        minTargetM.save("minttm.h5", hdf5_binary);
-    }
-}
-
-///Load minimal target transition vector
-void IMDP::loadMinTargetTransitionVector(string filename){
-    bool ok = minTargetM.load(filename);
-    if (ok == false){
-        cout << "Issue loading minimum target transition Vector!" << endl;
-    }
-}
-
-///Save minimal avoid transition vector
-void IMDP::saveMinAvoidTransitionVector(){
-    if (minAvoidM.empty()){
-        cout << "Min Avoid Transition Vector is empty, can't save file." << endl;
-    }else{
-        minAvoidM.save("minatm.h5", hdf5_binary);
-    }
-}
-
-///Load minimal avoid transition vector
-void IMDP::loadMinAvoidTransitionVector(string filename){
-    bool ok = minAvoidM.load(filename);
-    if (ok == false){
-        cout << "Issue loading minimum avoid transition Vector!" << endl;
-    }
-}
-
-///Save minimal transition matrix
-void IMDP::saveMinTransitionMatrix(){
-    if (minTransitionM.empty()){
-        cout << "Min Transition Matrix is empty, can't save file." << endl;
-    }else{
-        minTransitionM.save("mintm.h5", hdf5_binary);
-    }
-}
-
-///Load minimal transition matrix
-void IMDP::loadMinTransitionMatrix(string filename){
-    bool ok = minTransitionM.load(filename);
-    if (ok == false){
-        cout << "Issue loading minimum transition matrix!" << endl;
-    }
-}
-
-///Save maximal target transition vector
-void IMDP::saveMaxTargetTransitionVector(){
-    if (maxTargetM.empty()){
-        cout << "Max Target Transition Vector is empty, can't save file." << endl;
-    }else{
-        maxTargetM.save("maxttm.h5", hdf5_binary);
-    }
-}
-
-///Load maximal target transition vector
-void IMDP::loadMaxTargetTransitionVector(string filename){
-    bool ok = maxTargetM.load(filename);
-    if (ok == false){
-        cout << "Issue loading maximum target transition Vector!" << endl;
-    }
-}
-
-///Save maximal avoid transition vector
-void IMDP::saveMaxAvoidTransitionVector(){
-    if (maxAvoidM.empty()){
-        cout << "Max Avoid Transition Vector is empty, can't save file." << endl;
-    }else{
-        maxAvoidM.save("maxatm.h5", hdf5_binary);
-    }
-}
-
-///Load maximal avoid transition vector
-void IMDP::loadMaxAvoidTransitionVector(string filename){
-    bool ok = maxAvoidM.load(filename);
-    if (ok == false){
-        cout << "Issue loading maximum avoid transition Vector!" << endl;
-    }
-}
-
-///Save maximal transition matrix
-void IMDP::saveMaxTransitionMatrix(){
-    if (maxTransitionM.empty()){
-        cout << "Max Transition Matrix is empty, can't save file." << endl;
-    }else{
-        maxTransitionM.save("maxtm.h5", hdf5_binary);
-    }
-}
-
-///Load maximal transition matrix
-void IMDP::loadMaxTransitionMatrix(string filename){
-    bool ok = maxTransitionM.load(filename);
-    if (ok == false){
-        cout << "Issue loading maximum transition matrix!" << endl;
-    }
-}
-
-///Save Controller
-void IMDP::saveController(){
-    if (controller.empty()){
-        cout << "Controller is empty, can't save file." << endl;
-    }else{
-        controller.save("controller.h5", hdf5_binary);
-    }
-}
-
-/// Load Controller
-void IMDP::loadController(string filename){
-    bool ok = controller.load(filename);
-    if (ok == false){
-        cout << "Issue loading controller!" << endl;
-    }
-}
+// NOTE: Save/Load functions have been moved to IO_utils.h
+// See IMDP.cpp for the wrapper implementations using IMPaCT_IO namespace
 
 /// Destructor
 IMDP::~IMDP(){

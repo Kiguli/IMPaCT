@@ -8,6 +8,7 @@
 #include <sycl/sycl.hpp>
 #include <chrono>
 #include "IMDP.h"
+#include "IO_utils.h"
 #include <glpk.h>
 #include <gsl/gsl_rng.h>
 #include <gsl/gsl_monte.h>
@@ -26,6 +27,80 @@ using namespace arma;
 /// Set Nonlinear Optimization Algorithm
 void IMDP::setAlgorithm(nlopt::algorithm alg){
     algo = alg;
+}
+
+/*****************************************************************************
+ * Save/Load Functions - Refactored to use IO_utils (Phase 1 Refactoring)
+ *****************************************************************************/
+
+/// Save minimal target transition vector
+void IMDP::saveMinTargetTransitionVector() {
+    IMPaCT_IO::saveData(minTargetM, "minttm.h5", "Min Target Transition Vector");
+}
+
+/// Load minimal target transition vector
+void IMDP::loadMinTargetTransitionVector(string filename) {
+    IMPaCT_IO::loadData(minTargetM, filename, "minimum target transition Vector");
+}
+
+/// Save minimal avoid transition vector
+void IMDP::saveMinAvoidTransitionVector() {
+    IMPaCT_IO::saveData(minAvoidM, "minatm.h5", "Min Avoid Transition Vector");
+}
+
+/// Load minimal avoid transition vector
+void IMDP::loadMinAvoidTransitionVector(string filename) {
+    IMPaCT_IO::loadData(minAvoidM, filename, "minimum avoid transition Vector");
+}
+
+/// Save minimal transition matrix
+void IMDP::saveMinTransitionMatrix() {
+    IMPaCT_IO::saveData(minTransitionM, "mintm.h5", "Min Transition Matrix");
+}
+
+/// Load minimal transition matrix
+void IMDP::loadMinTransitionMatrix(string filename) {
+    IMPaCT_IO::loadData(minTransitionM, filename, "minimum transition matrix");
+}
+
+/// Save maximal target transition vector
+void IMDP::saveMaxTargetTransitionVector() {
+    IMPaCT_IO::saveData(maxTargetM, "maxttm.h5", "Max Target Transition Vector");
+}
+
+/// Load maximal target transition vector
+void IMDP::loadMaxTargetTransitionVector(string filename) {
+    IMPaCT_IO::loadData(maxTargetM, filename, "maximum target transition Vector");
+}
+
+/// Save maximal avoid transition vector
+void IMDP::saveMaxAvoidTransitionVector() {
+    IMPaCT_IO::saveData(maxAvoidM, "maxatm.h5", "Max Avoid Transition Vector");
+}
+
+/// Load maximal avoid transition vector
+void IMDP::loadMaxAvoidTransitionVector(string filename) {
+    IMPaCT_IO::loadData(maxAvoidM, filename, "maximum avoid transition Vector");
+}
+
+/// Save maximal transition matrix
+void IMDP::saveMaxTransitionMatrix() {
+    IMPaCT_IO::saveData(maxTransitionM, "maxtm.h5", "Max Transition Matrix");
+}
+
+/// Load maximal transition matrix
+void IMDP::loadMaxTransitionMatrix(string filename) {
+    IMPaCT_IO::loadData(maxTransitionM, filename, "maximum transition matrix");
+}
+
+/// Save Controller
+void IMDP::saveController() {
+    IMPaCT_IO::saveData(controller, "controller.h5", "Controller");
+}
+
+/// Load Controller
+void IMDP::loadController(string filename) {
+    IMPaCT_IO::loadData(controller, filename, "controller");
 }
 
 /* Supporter Functions for the Abstractions for Different Distributions */
