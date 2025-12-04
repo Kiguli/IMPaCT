@@ -24,6 +24,9 @@ BASE_BRANCH="${1:-main}"
 COMPARE_BRANCH="${2:-refactor/phase1-io-utils}"
 RESULTS_DIR="test_results"
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+
+# Create results directory first
+mkdir -p "$RESULTS_DIR"
 LOG_FILE="${RESULTS_DIR}/docker_comparison_${TIMESTAMP}.log"
 
 # Colors for output
