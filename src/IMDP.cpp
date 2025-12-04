@@ -10,6 +10,7 @@
 #include "IMDP.h"
 #include "IO_utils.h"
 #include "cost_functions.h"
+#include "optimization_utils.h"
 #include <glpk.h>
 #include <gsl/gsl_rng.h>
 #include <gsl/gsl_monte.h>
@@ -120,6 +121,7 @@ void IMDP::loadController(string filename) {
  * ============================================================================= */
 
 using namespace IMPaCT_CostFunctions;
+using namespace IMPaCT_Optimization;
 
 
 /* CUSTOM DISTRIBUTIONS */
