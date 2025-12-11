@@ -26,7 +26,7 @@ If you are on the artifact evaluation repeatability committee, we have provided 
 - [Youtube Videos about IMPaCT](https://www.youtube.com/watch?v=wwfP2ErgLcM&list=PL50OJg3FHS4fBxhua92ZS3e6bxEnFaetL&index=1&ab_channel=Kiguli)
 
 ## Related Paper
-The arXiv version of the paper is located [here](https://arxiv.org/abs/2401.03555).
+The arXiv version of the paper is located [here](https://arxiv.org/abs/2401.03555), the HSCC 2024 Poster is located [here](https://dl.acm.org/doi/10.1145/3641513.3652532), and the QEST+FORMATS 2024 conference version is located [here](https://dl.acm.org/doi/10.1007/978-3-031-68416-6_15).
 
 ### Authors
 - [Ben Wooding](https://woodingben.com)
@@ -34,13 +34,21 @@ The arXiv version of the paper is located [here](https://arxiv.org/abs/2401.0355
 
 ### Citing IMPaCT
 ```
-@inproceedings{wooding2024impact,
+@inproceedings{wooding2024qestformats,
       title={IMPaCT: Interval MDP Parallel Construction for Controller Synthesis of Large-Scale Stochastic Systems}, 
       author={Ben Wooding and Abolfazl Lavaei},
       booktitle={International Conference on Quantitative Evaluation of Systems and Formal Modeling and Analysis of Timed Systems},
       pages={249--267},
       year={2024},
       organization={Springer}
+}
+
+@inproceedings{wooding2024hscc,
+  title={IMPaCT: A parallelized software tool for IMDP construction and controller synthesis with convergence guarantees},
+  author={Wooding, Ben and Lavaei, Abolfazl},
+  booktitle={Proceedings of the 27th ACM International Conference on Hybrid Systems: Computation and Control},
+  pages={1--2},
+  year={2024}
 }
 
 ```
