@@ -132,7 +132,7 @@ jobs:
 
       - name: Upload outputs as artifacts
         if: steps.run.outcome == 'success'
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: outputs-${{ matrix.example }}
           path: examples/${{ matrix.example }}/*.h5
@@ -140,7 +140,7 @@ jobs:
 
       - name: Upload logs
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: logs-${{ matrix.example }}
           path: |
@@ -180,7 +180,7 @@ jobs:
           python-version: '3.10'
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
 
       - name: Generate summary report
         run: |
@@ -222,7 +222,7 @@ jobs:
           tar -czf comprehensive-test-results.tar.gz test-results/
 
       - name: Upload test results archive
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: comprehensive-test-results
           path: comprehensive-test-results.tar.gz

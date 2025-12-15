@@ -99,7 +99,7 @@ jobs:
 
       - name: Upload outputs
         if: steps.run.outcome == 'success'
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: outputs-${{ matrix.example }}
           path: examples/${{ matrix.example }}/*.h5
