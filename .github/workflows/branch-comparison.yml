@@ -23,20 +23,9 @@ on:
           - comprehensive
 
 jobs:
-  test-base-branch:
-    name: "Test Base Branch (${{ inputs.base_branch }})"
+  build-base-image:
+    name: "Build Base Image (${{ inputs.base_branch }})"
     runs-on: ubuntu-latest
-
-    strategy:
-      fail-fast: false
-      matrix:
-        example:
-          # Critical test suite (default)
-          - ex_2Drobot-R-U
-          - ex_2Drobot-R-D
-          - ex_4DBAS-S
-          - ex_load_reach
-          - ex_load_safe
 
     steps:
       - name: Checkout base branch
@@ -44,112 +33,33 @@ jobs:
         with:
           ref: ${{ inputs.base_branch }}
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
         with:
-          python-version: '3.10'
+          context: .
+          push: false
+          load: true
+          tags: impact:base-${{ github.run_id }}
+          cache-from: type=gha,scope=base-${{ inputs.base_branch }}
+          cache-to: type=gha,mode=max,scope=base-${{ inputs.base_branch }}
 
-      - name: Install dependencies
+      - name: Save Docker image
         run: |
-          pip install pyyaml h5py numpy
-          sudo apt-get update
-          sudo apt-get install -y \
-            build-essential cmake clang-16 \
-            libblas-dev liblapack-dev libnlopt-dev \
-            libopenblas-dev libhdf5-serial-dev \
-            libomp-16-dev libglpk-dev libgsl-dev \
-            libarmadillo-dev libboost-all-dev
+          docker save impact:base-${{ github.run_id }} -o base-image.tar
 
-      - name: Compile and run example
-        id: test
-        timeout-minutes: 20
-        run: |
-          cd examples/${{ matrix.example }}
-
-          # Compile
-          echo "Compiling..."
-          START_COMPILE=$(date +%s)
-          make 2>&1 | tee compile.log
-          COMPILE_STATUS=$?
-          END_COMPILE=$(date +%s)
-          COMPILE_TIME=$((END_COMPILE - START_COMPILE))
-
-          if [ $COMPILE_STATUS -ne 0 ]; then
-            echo "❌ Compilation failed"
-            echo "compile_success=false" >> $GITHUB_OUTPUT
-            exit 1
-          fi
-          echo "✅ Compilation successful ($COMPILE_TIME seconds)"
-          echo "compile_success=true" >> $GITHUB_OUTPUT
-          echo "compile_time=$COMPILE_TIME" >> $GITHUB_OUTPUT
-
-          # Determine executable
-          case "${{ matrix.example }}" in
-            *robot*)   EXEC="robot2D" ;;
-            *BAS4D*)   EXEC="BAS4D" ;;
-            *vehicle*) EXEC="vehicle3D" ;;
-            *room3D*)  EXEC="room3D" ;;
-            *room5D*)  EXEC="room5D" ;;
-            *BAS7D*)   EXEC="BAS7D" ;;
-            *load*)    EXEC="load" ;;
-            *)         EXEC=$(ls | grep -v '\.' | head -n 1) ;;
-          esac
-
-          # Run
-          echo "Running ./$EXEC..."
-          START_RUN=$(date +%s)
-          ./$EXEC 2>&1 | tee run.log
-          RUN_STATUS=$?
-          END_RUN=$(date +%s)
-          RUN_TIME=$((END_RUN - START_RUN))
-
-          if [ $RUN_STATUS -ne 0 ]; then
-            echo "❌ Execution failed"
-            echo "run_success=false" >> $GITHUB_OUTPUT
-            exit 1
-          fi
-          echo "✅ Execution successful ($RUN_TIME seconds)"
-          echo "run_success=true" >> $GITHUB_OUTPUT
-          echo "run_time=$RUN_TIME" >> $GITHUB_OUTPUT
-
-          # Count outputs
-          H5_COUNT=$(ls *.h5 2>/dev/null | wc -l)
-          echo "output_count=$H5_COUNT" >> $GITHUB_OUTPUT
-          echo "✅ Generated $H5_COUNT HDF5 files"
-        continue-on-error: true
-
-      - name: Upload outputs
-        if: steps.test.outputs.compile_success == 'true' && steps.test.outputs.run_success == 'true'
+      - name: Upload Docker image
         uses: actions/upload-artifact@v4
         with:
-          name: base-${{ matrix.example }}
-          path: examples/${{ matrix.example }}/*.h5
-          retention-days: 7
+          name: base-docker-image
+          path: base-image.tar
+          retention-days: 1
 
-      - name: Upload logs
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: base-logs-${{ matrix.example }}
-          path: |
-            examples/${{ matrix.example }}/compile.log
-            examples/${{ matrix.example }}/run.log
-          retention-days: 7
-
-  test-compare-branch:
-    name: "Test Compare Branch (${{ inputs.compare_branch }})"
+  build-compare-image:
+    name: "Build Compare Image (${{ inputs.compare_branch }})"
     runs-on: ubuntu-latest
-
-    strategy:
-      fail-fast: false
-      matrix:
-        example:
-          # Critical test suite (default)
-          - ex_2Drobot-R-U
-          - ex_2Drobot-R-D
-          - ex_4DBAS-S
-          - ex_load_reach
-          - ex_load_safe
 
     steps:
       - name: Checkout compare branch
@@ -157,86 +67,202 @@ jobs:
         with:
           ref: ${{ inputs.compare_branch }}
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.10'
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-      - name: Install dependencies
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: false
+          load: true
+          tags: impact:compare-${{ github.run_id }}
+          cache-from: type=gha,scope=compare-${{ inputs.compare_branch }}
+          cache-to: type=gha,mode=max,scope=compare-${{ inputs.compare_branch }}
+
+      - name: Save Docker image
         run: |
-          pip install pyyaml h5py numpy
-          sudo apt-get update
-          sudo apt-get install -y \
-            build-essential cmake clang-16 \
-            libblas-dev liblapack-dev libnlopt-dev \
-            libopenblas-dev libhdf5-serial-dev \
-            libomp-16-dev libglpk-dev libgsl-dev \
-            libarmadillo-dev libboost-all-dev
+          docker save impact:compare-${{ github.run_id }} -o compare-image.tar
+
+      - name: Upload Docker image
+        uses: actions/upload-artifact@v4
+        with:
+          name: compare-docker-image
+          path: compare-image.tar
+          retention-days: 1
+
+  test-base-branch:
+    name: "Test Base: ${{ matrix.example }}"
+    runs-on: ubuntu-latest
+    needs: build-base-image
+
+    strategy:
+      fail-fast: false
+      matrix:
+        example:
+          - ex_2Drobot-R-U
+          - ex_2Drobot-R-D
+          - ex_4DBAS-S
+          - ex_load_reach
+          - ex_load_safe
+
+    steps:
+      - name: Download Docker image
+        uses: actions/download-artifact@v4
+        with:
+          name: base-docker-image
+
+      - name: Load Docker image
+        run: |
+          docker load -i base-image.tar
 
       - name: Compile and run example
         id: test
         timeout-minutes: 20
         run: |
-          cd examples/${{ matrix.example }}
-
-          # Compile
-          echo "Compiling..."
-          START_COMPILE=$(date +%s)
-          make 2>&1 | tee compile.log
-          COMPILE_STATUS=$?
-          END_COMPILE=$(date +%s)
-          COMPILE_TIME=$((END_COMPILE - START_COMPILE))
-
-          if [ $COMPILE_STATUS -ne 0 ]; then
-            echo "❌ Compilation failed"
-            echo "compile_success=false" >> $GITHUB_OUTPUT
-            exit 1
-          fi
-          echo "✅ Compilation successful ($COMPILE_TIME seconds)"
-          echo "compile_success=true" >> $GITHUB_OUTPUT
-          echo "compile_time=$COMPILE_TIME" >> $GITHUB_OUTPUT
-
-          # Determine executable
+          # Determine executable name
           case "${{ matrix.example }}" in
             *robot*)   EXEC="robot2D" ;;
-            *BAS4D*)   EXEC="BAS4D" ;;
+            *BAS4D*|*4DBAS*)  EXEC="BAS4D" ;;
             *vehicle*) EXEC="vehicle3D" ;;
             *room3D*)  EXEC="room3D" ;;
             *room5D*)  EXEC="room5D" ;;
             *BAS7D*)   EXEC="BAS7D" ;;
             *load*)    EXEC="load" ;;
-            *)         EXEC=$(ls | grep -v '\.' | head -n 1) ;;
+            *)         EXEC="" ;;
           esac
 
-          # Run
-          echo "Running ./$EXEC..."
-          START_RUN=$(date +%s)
-          ./$EXEC 2>&1 | tee run.log
-          RUN_STATUS=$?
-          END_RUN=$(date +%s)
-          RUN_TIME=$((END_RUN - START_RUN))
+          # Create output directories
+          mkdir -p outputs logs
 
-          if [ $RUN_STATUS -ne 0 ]; then
-            echo "❌ Execution failed"
-            echo "run_success=false" >> $GITHUB_OUTPUT
+          # Run in Docker
+          docker run --rm \
+            -v $(pwd)/outputs:/outputs \
+            -v $(pwd)/logs:/logs \
+            impact:base-${{ github.run_id }} \
+            -c "
+              cd /app/examples/${{ matrix.example }} && \
+              echo '=== Compiling ===' && \
+              make 2>&1 | tee /logs/compile.log && \
+              echo '=== Running ===' && \
+              if [ -n '$EXEC' ]; then
+                ./$EXEC 2>&1 | tee /logs/run.log
+              else
+                FOUND_EXEC=\$(ls | grep -v '\\.' | head -n 1)
+                ./\$FOUND_EXEC 2>&1 | tee /logs/run.log
+              fi && \
+              echo '=== Copying outputs ===' && \
+              cp *.h5 /outputs/ 2>/dev/null || echo 'No HDF5 files found'
+            "
+
+          # Check results
+          H5_COUNT=$(ls outputs/*.h5 2>/dev/null | wc -l)
+          echo "output_count=$H5_COUNT" >> $GITHUB_OUTPUT
+          if [ "$H5_COUNT" -gt 0 ]; then
+            echo "success=true" >> $GITHUB_OUTPUT
+          else
+            echo "success=false" >> $GITHUB_OUTPUT
             exit 1
           fi
-          echo "✅ Execution successful ($RUN_TIME seconds)"
-          echo "run_success=true" >> $GITHUB_OUTPUT
-          echo "run_time=$RUN_TIME" >> $GITHUB_OUTPUT
-
-          # Count outputs
-          H5_COUNT=$(ls *.h5 2>/dev/null | wc -l)
-          echo "output_count=$H5_COUNT" >> $GITHUB_OUTPUT
-          echo "✅ Generated $H5_COUNT HDF5 files"
         continue-on-error: true
 
       - name: Upload outputs
-        if: steps.test.outputs.compile_success == 'true' && steps.test.outputs.run_success == 'true'
+        if: steps.test.outputs.success == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: base-${{ matrix.example }}
+          path: outputs/*.h5
+          retention-days: 7
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: base-logs-${{ matrix.example }}
+          path: logs/
+          retention-days: 7
+
+  test-compare-branch:
+    name: "Test Compare: ${{ matrix.example }}"
+    runs-on: ubuntu-latest
+    needs: build-compare-image
+
+    strategy:
+      fail-fast: false
+      matrix:
+        example:
+          - ex_2Drobot-R-U
+          - ex_2Drobot-R-D
+          - ex_4DBAS-S
+          - ex_load_reach
+          - ex_load_safe
+
+    steps:
+      - name: Download Docker image
+        uses: actions/download-artifact@v4
+        with:
+          name: compare-docker-image
+
+      - name: Load Docker image
+        run: |
+          docker load -i compare-image.tar
+
+      - name: Compile and run example
+        id: test
+        timeout-minutes: 20
+        run: |
+          # Determine executable name
+          case "${{ matrix.example }}" in
+            *robot*)   EXEC="robot2D" ;;
+            *BAS4D*|*4DBAS*)  EXEC="BAS4D" ;;
+            *vehicle*) EXEC="vehicle3D" ;;
+            *room3D*)  EXEC="room3D" ;;
+            *room5D*)  EXEC="room5D" ;;
+            *BAS7D*)   EXEC="BAS7D" ;;
+            *load*)    EXEC="load" ;;
+            *)         EXEC="" ;;
+          esac
+
+          # Create output directories
+          mkdir -p outputs logs
+
+          # Run in Docker
+          docker run --rm \
+            -v $(pwd)/outputs:/outputs \
+            -v $(pwd)/logs:/logs \
+            impact:compare-${{ github.run_id }} \
+            -c "
+              cd /app/examples/${{ matrix.example }} && \
+              echo '=== Compiling ===' && \
+              make 2>&1 | tee /logs/compile.log && \
+              echo '=== Running ===' && \
+              if [ -n '$EXEC' ]; then
+                ./$EXEC 2>&1 | tee /logs/run.log
+              else
+                FOUND_EXEC=\$(ls | grep -v '\\.' | head -n 1)
+                ./\$FOUND_EXEC 2>&1 | tee /logs/run.log
+              fi && \
+              echo '=== Copying outputs ===' && \
+              cp *.h5 /outputs/ 2>/dev/null || echo 'No HDF5 files found'
+            "
+
+          # Check results
+          H5_COUNT=$(ls outputs/*.h5 2>/dev/null | wc -l)
+          echo "output_count=$H5_COUNT" >> $GITHUB_OUTPUT
+          if [ "$H5_COUNT" -gt 0 ]; then
+            echo "success=true" >> $GITHUB_OUTPUT
+          else
+            echo "success=false" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+        continue-on-error: true
+
+      - name: Upload outputs
+        if: steps.test.outputs.success == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: compare-${{ matrix.example }}
-          path: examples/${{ matrix.example }}/*.h5
+          path: outputs/*.h5
           retention-days: 7
 
       - name: Upload logs
@@ -244,9 +270,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: compare-logs-${{ matrix.example }}
-          path: |
-            examples/${{ matrix.example }}/compile.log
-            examples/${{ matrix.example }}/run.log
+          path: logs/
           retention-days: 7
 
   compare-results:
@@ -302,16 +326,16 @@ jobs:
             COMPARE_EXISTS=$([ -d "compare-$example" ] && echo "true" || echo "false")
 
             if [ "$BASE_EXISTS" = "true" ] && [ "$COMPARE_EXISTS" = "true" ]; then
-              echo "| $example | ✅ SUCCESS | ✅ SUCCESS | ✅ MATCH |" >> comparison-report.md
+              echo "| $example | SUCCESS | SUCCESS | MATCH |" >> comparison-report.md
               PASSED=$((PASSED + 1))
             elif [ "$BASE_EXISTS" = "false" ] && [ "$COMPARE_EXISTS" = "false" ]; then
-              echo "| $example | ❌ FAILED | ❌ FAILED | ⚠️ BOTH FAILED |" >> comparison-report.md
+              echo "| $example | FAILED | FAILED | BOTH FAILED |" >> comparison-report.md
               FAILED=$((FAILED + 1))
             elif [ "$BASE_EXISTS" = "false" ]; then
-              echo "| $example | ❌ FAILED | ✅ SUCCESS | ⚠️ BASE FAILED |" >> comparison-report.md
+              echo "| $example | FAILED | SUCCESS | BASE FAILED |" >> comparison-report.md
               FAILED=$((FAILED + 1))
             else
-              echo "| $example | ✅ SUCCESS | ❌ FAILED | ❌ REGRESSION |" >> comparison-report.md
+              echo "| $example | SUCCESS | FAILED | REGRESSION |" >> comparison-report.md
               FAILED=$((FAILED + 1))
             fi
           done
@@ -335,10 +359,10 @@ jobs:
               COMPARE_COUNT=$(ls compare-$example/*.h5 2>/dev/null | wc -l)
 
               if [ "$BASE_COUNT" -eq "$COMPARE_COUNT" ]; then
-                echo "| $example | $BASE_COUNT | $COMPARE_COUNT | ✅ MATCH |" >> comparison-report.md
+                echo "| $example | $BASE_COUNT | $COMPARE_COUNT | MATCH |" >> comparison-report.md
                 OUTPUTS_MATCH=$((OUTPUTS_MATCH + 1))
               else
-                echo "| $example | $BASE_COUNT | $COMPARE_COUNT | ⚠️ DIFFERENT |" >> comparison-report.md
+                echo "| $example | $BASE_COUNT | $COMPARE_COUNT | DIFFERENT |" >> comparison-report.md
                 OUTPUTS_DIFFER=$((OUTPUTS_DIFFER + 1))
               fi
             fi
@@ -351,17 +375,17 @@ jobs:
           echo "" >> comparison-report.md
 
           if [ $FAILED -eq 0 ] && [ $OUTPUTS_DIFFER -eq 0 ]; then
-            echo "### ✅ SAFE TO MERGE" >> comparison-report.md
+            echo "### SAFE TO MERGE" >> comparison-report.md
             echo "" >> comparison-report.md
             echo "All tests passed on both branches with matching outputs." >> comparison-report.md
             echo "verdict=SAFE_TO_MERGE" >> $GITHUB_OUTPUT
           elif [ $FAILED -gt 0 ]; then
-            echo "### ❌ ISSUES FOUND" >> comparison-report.md
+            echo "### ISSUES FOUND" >> comparison-report.md
             echo "" >> comparison-report.md
             echo "Some tests failed. Review logs before merging." >> comparison-report.md
             echo "verdict=ISSUES_FOUND" >> $GITHUB_OUTPUT
           else
-            echo "### ⚠️ REVIEW REQUIRED" >> comparison-report.md
+            echo "### REVIEW REQUIRED" >> comparison-report.md
             echo "" >> comparison-report.md
             echo "Tests passed but output counts differ. Manual review recommended." >> comparison-report.md
             echo "verdict=REVIEW_REQUIRED" >> $GITHUB_OUTPUT
@@ -402,12 +426,12 @@ jobs:
         run: |
           VERDICT="${{ steps.compare.outputs.verdict }}"
           if [ "$VERDICT" = "SAFE_TO_MERGE" ]; then
-            echo "✅ Verdict: SAFE TO MERGE"
+            echo "Verdict: SAFE TO MERGE"
             exit 0
           elif [ "$VERDICT" = "REVIEW_REQUIRED" ]; then
-            echo "⚠️ Verdict: REVIEW REQUIRED"
+            echo "Verdict: REVIEW REQUIRED"
             exit 0  # Don't fail workflow, but flag for review
           else
-            echo "❌ Verdict: ISSUES FOUND"
+            echo "Verdict: ISSUES FOUND"
             exit 1
           fi
