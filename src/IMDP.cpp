@@ -634,13 +634,8 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
                         } else {
                             opt.set_min_objective(costFunctionNormalFull, &data);
                         }
-                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                         double minf;
-                        try {
-                            nlopt::result result = opt.optimize(initial_guess, minf);
-                        } catch (exception& e) {
-                            cout << "nlopt failed: " << e.what() << endl;
-                        }
+                        executeOptimization(opt, state_start, minf);
                         double ans = 1.0 - minf;
                         cdfAccessor[index] = ans;
                     });
@@ -678,13 +673,8 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
                             } else {
                                 opt.set_max_objective(costFunctionNormal, &data);
                             }
-                            vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                             double minf;
-                            try {
-                                nlopt::result result = opt.optimize(initial_guess, minf);
-                            } catch (exception& e) {
-                                cout << "nlopt failed: " << e.what() << endl;
-                            }
+                            executeOptimization(opt, state_start, minf);
                             cdfAccessor[index] = minf;
                         });
                     });
@@ -724,13 +714,8 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
                         } else {
                             opt.set_min_objective(costFunctionNormalFull, &data);
                         }
-                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                         double minf;
-                        try {
-                            nlopt::result result = opt.optimize(initial_guess, minf);
-                        } catch (exception& e) {
-                            cout << "nlopt failed: " << e.what() << endl;
-                        }
+                        executeOptimization(opt, state_start, minf);
                         double ans = 1.0 - minf;
                         cdfAccessor[i] = ans;
                     });
@@ -770,13 +755,8 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
                             } else {
                                 opt.set_max_objective(costFunctionNormal, &data);
                             }
-                            vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                             double minf;
-                            try {
-                                nlopt::result result = opt.optimize(initial_guess, minf);
-                            } catch (exception& e) {
-                                cout << "nlopt failed: " << e.what() << endl;
-                            }
+                            executeOptimization(opt, state_start, minf);
                             cdfAccessor[index] = minf;
                         });
                     });
@@ -814,13 +794,8 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
                         } else {
                             opt.set_min_objective(custom1Full, &data);
                         }
-                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                         double minf;
-                        try {
-                            nlopt::result result = opt.optimize(initial_guess, minf);
-                        } catch (exception& e) {
-                            cout << "nlopt failed: " << e.what() << endl;
-                        }
+                        executeOptimization(opt, state_start, minf);
                         double ans = 1.0 - minf;
                         cdfAccessor[i] = ans;
                     });
@@ -859,13 +834,8 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
                             } else {
                                 opt.set_max_objective(custom1, &data);
                             }
-                            vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                             double minf;
-                            try {
-                                nlopt::result result = opt.optimize(initial_guess, minf);
-                            } catch (exception& e) {
-                                cout << "nlopt failed: " << e.what() << endl;
-                            }
+                            executeOptimization(opt, state_start, minf);
                             cdfAccessor[index] = minf;
                         });
                     });
@@ -918,13 +888,8 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
                         } else {
                             opt.set_min_objective(costFunctionNormalFull, &data);
                         }
-                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                         double minf;
-                        try {
-                            nlopt::result result = opt.optimize(initial_guess, minf);
-                        } catch (exception& e) {
-                            cout << "nlopt failed: " << e.what() << endl;
-                        }
+                        executeOptimization(opt, state_start, minf);
                         double ans = 1.0 - minf;
                         cdfAccessor[index] = ans;
                     });
@@ -964,13 +929,8 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
                             } else {
                                 opt.set_max_objective(costFunctionNormal, &data);
                             }
-                            vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                             double minf;
-                            try {
-                                nlopt::result result = opt.optimize(initial_guess, minf);
-                            } catch (exception& e) {
-                                cout << "nlopt failed: " << e.what() << endl;
-                            }
+                            executeOptimization(opt, state_start, minf);
                             cdfAccessor[index] = minf;
                         });
                     });
@@ -1013,13 +973,8 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
                         } else {
                             opt.set_min_objective(costFunctionNormalFull, &data);
                         }
-                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                         double minf;
-                        try {
-                            nlopt::result result = opt.optimize(initial_guess, minf);
-                        } catch (exception& e) {
-                            cout << "nlopt failed: " << e.what() << endl;
-                        }
+                        executeOptimization(opt, state_start, minf);
                         double ans = 1.0 - minf;
                         cdfAccessor[index] = ans;
                     });
@@ -1062,13 +1017,8 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
                             } else {
                                 opt.set_max_objective(costFunctionNormal, &data);
                             }
-                            vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                             double minf;
-                            try {
-                                nlopt::result result = opt.optimize(initial_guess, minf);
-                            } catch (exception& e) {
-                                cout << "nlopt failed: " << e.what() << endl;
-                            }
+                            executeOptimization(opt, state_start, minf);
                             cdfAccessor[index] = minf;
                         });
                     });
@@ -1109,13 +1059,8 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
                         } else {
                             opt.set_min_objective(custom2Full, &data);
                         }
-                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                         double minf;
-                        try {
-                            nlopt::result result = opt.optimize(initial_guess, minf);
-                        } catch (exception& e) {
-                            cout << "nlopt failed: " << e.what() << endl;
-                        }
+                        executeOptimization(opt, state_start, minf);
                         double ans = 1.0 - minf;
                         cdfAccessor[index] = ans;
                     });
@@ -1158,13 +1103,8 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
                             } else {
                                 opt.set_max_objective(custom2, &data);
                             }
-                            vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                             double minf;
-                            try {
-                                nlopt::result result = opt.optimize(initial_guess, minf);
-                            } catch (exception& e) {
-                                cout << "nlopt failed: " << e.what() << endl;
-                            }
+                            executeOptimization(opt, state_start, minf);
                             cdfAccessor[index] = minf;
                         });
                     });
@@ -1217,13 +1157,8 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
                         } else {
                             opt.set_min_objective(costFunctionNormalFull, &data);
                         }
-                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                         double minf;
-                        try {
-                            nlopt::result result = opt.optimize(initial_guess, minf);
-                        } catch (exception& e) {
-                            cout << "nlopt failed: " << e.what() << endl;
-                        }
+                        executeOptimization(opt, state_start, minf);
                         double ans = 1.0 - minf;
                         cdfAccessor[index] = ans;
                     });
@@ -1263,13 +1198,8 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
                             } else {
                                 opt.set_max_objective(costFunctionNormal, &data);
                             }
-                            vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                             double minf;
-                            try {
-                                nlopt::result result = opt.optimize(initial_guess, minf);
-                            } catch (exception& e) {
-                                cout << "nlopt failed: " << e.what() << endl;
-                            }
+                            executeOptimization(opt, state_start, minf);
                             cdfAccessor[index] = minf;
                         });
                     });
@@ -1312,13 +1242,8 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
                         } else {
                             opt.set_min_objective(costFunctionNormalFull, &data);
                         }
-                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                         double minf;
-                        try {
-                            nlopt::result result = opt.optimize(initial_guess, minf);
-                        } catch (exception& e) {
-                            cout << "nlopt failed: " << e.what() << endl;
-                        }
+                        executeOptimization(opt, state_start, minf);
                         double ans = 1.0 - minf;
                         cdfAccessor[index] = ans;
                     });
@@ -1361,13 +1286,8 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
                             } else {
                                 opt.set_max_objective(costFunctionNormal, &data);
                             }
-                            vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                             double minf;
-                            try {
-                                nlopt::result result = opt.optimize(initial_guess, minf);
-                            } catch (exception& e) {
-                                cout << "nlopt failed: " << e.what() << endl;
-                            }
+                            executeOptimization(opt, state_start, minf);
                             cdfAccessor[index] = minf;
                         });
                     });
@@ -1408,13 +1328,8 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
                         } else {
                             opt.set_min_objective(custom2Full, &data);
                         }
-                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                         double minf;
-                        try {
-                            nlopt::result result = opt.optimize(initial_guess, minf);
-                        } catch (exception& e) {
-                            cout << "nlopt failed: " << e.what() << endl;
-                        }
+                        executeOptimization(opt, state_start, minf);
                         double ans = 1.0 - minf;
                         cdfAccessor[index] = ans;
                     });
@@ -1457,13 +1372,8 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
                             } else {
                                 opt.set_max_objective(custom2, &data);
                             }
-                            vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                             double minf;
-                            try {
-                                nlopt::result result = opt.optimize(initial_guess, minf);
-                            } catch (exception& e) {
-                                cout << "nlopt failed: " << e.what() << endl;
-                            }
+                            executeOptimization(opt, state_start, minf);
                             cdfAccessor[index] = minf;
                         });
                     });
@@ -1519,13 +1429,8 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
                         } else {
                             opt.set_min_objective(costFunctionNormalFull, &data);
                         }
-                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                         double minf;
-                        try {
-                            nlopt::result result = opt.optimize(initial_guess, minf);
-                        } catch (exception& e) {
-                            cout << "nlopt failed: " << e.what() << endl;
-                        }
+                        executeOptimization(opt, state_start, minf);
                         double ans = 1.0 - minf;
                         cdfAccessor[index] = ans;
                     });
@@ -1568,13 +1473,8 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
                             } else {
                                 opt.set_max_objective(costFunctionNormal, &data);
                             }
-                            vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                             double minf;
-                            try {
-                                nlopt::result result = opt.optimize(initial_guess, minf);
-                            } catch (exception& e) {
-                                cout << "nlopt failed: " << e.what() << endl;
-                            }
+                            executeOptimization(opt, state_start, minf);
                             cdfAccessor[index] = minf;
                         });
                     });
@@ -1620,13 +1520,8 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
                         } else {
                             opt.set_min_objective(costFunctionNormalFull, &data);
                         }
-                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                         double minf;
-                        try {
-                            nlopt::result result = opt.optimize(initial_guess, minf);
-                        } catch (exception& e) {
-                            cout << "nlopt failed: " << e.what() << endl;
-                        }
+                        executeOptimization(opt, state_start, minf);
                         double ans = 1.0 - minf;
                         cdfAccessor[index] = ans;
                     });
@@ -1672,13 +1567,8 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
                             } else {
                                 opt.set_max_objective(costFunctionNormal, &data);
                             }
-                            vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                             double minf;
-                            try {
-                                nlopt::result result = opt.optimize(initial_guess, minf);
-                            } catch (exception& e) {
-                                cout << "nlopt failed: " << e.what() << endl;
-                            }
+                            executeOptimization(opt, state_start, minf);
                             cdfAccessor[index] = minf;
                         });
                     });
@@ -1722,13 +1612,8 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
                         } else {
                             opt.set_min_objective(custom3Full, &data);
                         }
-                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                         double minf;
-                        try {
-                            nlopt::result result = opt.optimize(initial_guess, minf);
-                        } catch (exception& e) {
-                            cout << "nlopt failed: " << e.what() << endl;
-                        }
+                        executeOptimization(opt, state_start, minf);
                         double ans = 1.0 - minf;
                         cdfAccessor[index] = ans;
                     });
@@ -1773,13 +1658,8 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
                             } else {
                                 opt.set_max_objective(custom3, &data);
                             }
-                            vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                             double minf;
-                            try {
-                                nlopt::result result = opt.optimize(initial_guess, minf);
-                            } catch (exception& e) {
-                                cout << "nlopt failed: " << e.what() << endl;
-                            }
+                            executeOptimization(opt, state_start, minf);
                             cdfAccessor[index] = minf;
                         });
                     });
@@ -1858,13 +1738,8 @@ void IMDP::transitionMatrixImpl(mat& output, bool is_min){
                         } else {
                             opt.set_max_objective(costFunctionNormal, &data);
                         }
-                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                         double minf;
-                        try {
-                            nlopt::result result = opt.optimize(initial_guess, minf);
-                        } catch (exception& e) {
-                            cout << "nlopt failed: " << e.what() << endl;
-                        }
+                        executeOptimization(opt, state_start, minf);
                         cdfAccessor[index] = minf;
                     });
                 });
@@ -1914,13 +1789,8 @@ void IMDP::transitionMatrixImpl(mat& output, bool is_min){
                         } else {
                             opt.set_max_objective(costFunctionNormal, &data);
                         }
-                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                         double minf;
-                        try {
-                            nlopt::result result = opt.optimize(initial_guess, minf);
-                        } catch (exception& e) {
-                            cout << "nlopt failed: " << e.what() << endl;
-                        }
+                        executeOptimization(opt, state_start, minf);
                         cdfAccessor[index] = minf;
                     });
                 });
@@ -1969,13 +1839,8 @@ void IMDP::transitionMatrixImpl(mat& output, bool is_min){
                         } else {
                             opt.set_max_objective(custom1, &data);
                         }
-                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                         double minf;
-                        try {
-                            nlopt::result result = opt.optimize(initial_guess, minf);
-                        } catch (exception& e) {
-                            cout << "nlopt failed: " << e.what() << endl;
-                        }
+                        executeOptimization(opt, state_start, minf);
                         cdfAccessor[index] = minf;
                     });
                 });
@@ -2031,13 +1896,8 @@ void IMDP::transitionMatrixImpl(mat& output, bool is_min){
                         } else {
                             opt.set_max_objective(costFunctionNormal, &data);
                         }
-                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                         double minf;
-                        try {
-                            nlopt::result result = opt.optimize(initial_guess, minf);
-                        } catch (exception& e) {
-                            cout << "nlopt failed: " << e.what() << endl;
-                        }
+                        executeOptimization(opt, state_start, minf);
                         cdfAccessor[index] = minf;
                     });
                 });
@@ -2086,13 +1946,8 @@ void IMDP::transitionMatrixImpl(mat& output, bool is_min){
                         } else {
                             opt.set_max_objective(costFunctionNormal, &data);
                         }
-                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                         double minf;
-                        try {
-                            nlopt::result result = opt.optimize(initial_guess, minf);
-                        } catch (exception& e) {
-                            cout << "nlopt failed: " << e.what() << endl;
-                        }
+                        executeOptimization(opt, state_start, minf);
                         cdfAccessor[index] = minf;
                     });
                 });
@@ -2141,13 +1996,8 @@ void IMDP::transitionMatrixImpl(mat& output, bool is_min){
                         } else {
                             opt.set_max_objective(custom2, &data);
                         }
-                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                         double minf;
-                        try {
-                            nlopt::result result = opt.optimize(initial_guess, minf);
-                        } catch (exception& e) {
-                            cout << "nlopt failed: " << e.what() << endl;
-                        }
+                        executeOptimization(opt, state_start, minf);
                         cdfAccessor[index] = minf;
 
                     });
@@ -2203,13 +2053,8 @@ void IMDP::transitionMatrixImpl(mat& output, bool is_min){
                         } else {
                             opt.set_max_objective(costFunctionNormal, &data);
                         }
-                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                         double minf;
-                        try {
-                            nlopt::result result = opt.optimize(initial_guess, minf);
-                        } catch (exception& e) {
-                            cout << "nlopt failed: " << e.what() << endl;
-                        }
+                        executeOptimization(opt, state_start, minf);
                         cdfAccessor[index] = minf;
                     });
                 });
@@ -2258,13 +2103,8 @@ void IMDP::transitionMatrixImpl(mat& output, bool is_min){
                         } else {
                             opt.set_max_objective(costFunctionNormal, &data);
                         }
-                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                         double minf;
-                        try {
-                            nlopt::result result = opt.optimize(initial_guess, minf);
-                        } catch (exception& e) {
-                            cout << "nlopt failed: " << e.what() << endl;
-                        }
+                        executeOptimization(opt, state_start, minf);
                         cdfAccessor[index] = minf;
                     });
                 });
@@ -2313,13 +2153,8 @@ void IMDP::transitionMatrixImpl(mat& output, bool is_min){
                         } else {
                             opt.set_max_objective(custom2, &data);
                         }
-                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                         double minf;
-                        try {
-                            nlopt::result result = opt.optimize(initial_guess, minf);
-                        } catch (exception& e) {
-                            cout << "nlopt failed: " << e.what() << endl;
-                        }
+                        executeOptimization(opt, state_start, minf);
                         cdfAccessor[index] = minf;
                     });
                 });
@@ -2376,13 +2211,8 @@ void IMDP::transitionMatrixImpl(mat& output, bool is_min){
                         } else {
                             opt.set_max_objective(costFunctionNormal, &data);
                         }
-                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                         double minf;
-                        try {
-                            nlopt::result result = opt.optimize(initial_guess, minf);
-                        } catch (exception& e) {
-                            cout << "nlopt failed: " << e.what() << endl;
-                        }
+                        executeOptimization(opt, state_start, minf);
                         cdfAccessor[index] = minf;
                     });
                 });
@@ -2434,13 +2264,8 @@ void IMDP::transitionMatrixImpl(mat& output, bool is_min){
                         } else {
                             opt.set_max_objective(costFunctionNormal, &data);
                         }
-                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                         double minf;
-                        try {
-                            nlopt::result result = opt.optimize(initial_guess, minf);
-                        } catch (exception& e) {
-                            cout << "nlopt failed: " << e.what() << endl;
-                        }
+                        executeOptimization(opt, state_start, minf);
                         cdfAccessor[index] = minf;
                     });
                 });
@@ -2491,13 +2316,8 @@ void IMDP::transitionMatrixImpl(mat& output, bool is_min){
                         } else {
                             opt.set_max_objective(custom3, &data);
                         }
-                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                         double minf;
-                        try {
-                            nlopt::result result = opt.optimize(initial_guess, minf);
-                        } catch (exception& e) {
-                            cout << "nlopt failed: " << e.what() << endl;
-                        }
+                        executeOptimization(opt, state_start, minf);
                         cdfAccessor[index] = minf;
                     });
                 });
@@ -2569,13 +2389,8 @@ void IMDP::targetTransitionVectorImpl(vec& output, bool is_min){
                         } else {
                             opt.set_max_objective(costFunctionNormal, &data);
                         }
-                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                         double minf;
-                        try {
-                            nlopt::result result = opt.optimize(initial_guess, minf);
-                        } catch (exception& e) {
-                            cout << "nlopt failed: " << e.what() << endl;
-                        }
+                        executeOptimization(opt, state_start, minf);
                         cdfAccessor[index] = minf;
                     });
                 });
@@ -2618,13 +2433,8 @@ void IMDP::targetTransitionVectorImpl(vec& output, bool is_min){
                         } else {
                             opt.set_max_objective(costFunctionNormal, &data);
                         }
-                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                         double minf;
-                        try {
-                            nlopt::result result = opt.optimize(initial_guess, minf);
-                        } catch (exception& e) {
-                            cout << "nlopt failed: " << e.what() << endl;
-                        }
+                        executeOptimization(opt, state_start, minf);
                         cdfAccessor[index] = minf;
                     });
                 });
@@ -2666,13 +2476,8 @@ void IMDP::targetTransitionVectorImpl(vec& output, bool is_min){
                         } else {
                             opt.set_max_objective(custom1, &data);
                         }
-                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                         double minf;
-                        try {
-                            nlopt::result result = opt.optimize(initial_guess, minf);
-                        } catch (exception& e) {
-                            cout << "nlopt failed: " << e.what() << endl;
-                        }
+                        executeOptimization(opt, state_start, minf);
                         cdfAccessor[index] = minf;
                     });
                 });
@@ -2727,13 +2532,8 @@ void IMDP::targetTransitionVectorImpl(vec& output, bool is_min){
                         } else {
                             opt.set_max_objective(costFunctionNormal, &data);
                         }
-                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                         double minf;
-                        try {
-                            nlopt::result result = opt.optimize(initial_guess, minf);
-                        } catch (exception& e) {
-                            cout << "nlopt failed: " << e.what() << endl;
-                        }
+                        executeOptimization(opt, state_start, minf);
                         cdfAccessor[index] = minf;
                     });
                 });
@@ -2779,13 +2579,8 @@ void IMDP::targetTransitionVectorImpl(vec& output, bool is_min){
                         } else {
                             opt.set_max_objective(costFunctionNormal, &data);
                         }
-                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                         double minf;
-                        try {
-                            nlopt::result result = opt.optimize(initial_guess, minf);
-                        } catch (exception& e) {
-                            cout << "nlopt failed: " << e.what() << endl;
-                        }
+                        executeOptimization(opt, state_start, minf);
                         cdfAccessor[index] = minf;
                     });
                 });
@@ -2831,13 +2626,8 @@ void IMDP::targetTransitionVectorImpl(vec& output, bool is_min){
                         } else {
                             opt.set_max_objective(custom2, &data);
                         }
-                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                         double minf;
-                        try {
-                            nlopt::result result = opt.optimize(initial_guess, minf);
-                        } catch (exception& e) {
-                            cout << "nlopt failed: " << e.what() << endl;
-                        }
+                        executeOptimization(opt, state_start, minf);
                         cdfAccessor[index] = minf;
                     });
                 });
@@ -2891,13 +2681,8 @@ void IMDP::targetTransitionVectorImpl(vec& output, bool is_min){
                         } else {
                             opt.set_max_objective(costFunctionNormal, &data);
                         }
-                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                         double minf;
-                        try {
-                            nlopt::result result = opt.optimize(initial_guess, minf);
-                        } catch (exception& e) {
-                            cout << "nlopt failed: " << e.what() << endl;
-                        }
+                        executeOptimization(opt, state_start, minf);
                         cdfAccessor[index] = minf;
                     });
                 });
@@ -2943,13 +2728,8 @@ void IMDP::targetTransitionVectorImpl(vec& output, bool is_min){
                         } else {
                             opt.set_max_objective(costFunctionNormal, &data);
                         }
-                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                         double minf;
-                        try {
-                            nlopt::result result = opt.optimize(initial_guess, minf);
-                        } catch (exception& e) {
-                            cout << "nlopt failed: " << e.what() << endl;
-                        }
+                        executeOptimization(opt, state_start, minf);
                         cdfAccessor[index] = minf;
                     });
                 });
@@ -2995,13 +2775,8 @@ void IMDP::targetTransitionVectorImpl(vec& output, bool is_min){
                         } else {
                             opt.set_max_objective(custom2, &data);
                         }
-                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                         double minf;
-                        try {
-                            nlopt::result result = opt.optimize(initial_guess, minf);
-                        } catch (exception& e) {
-                            cout << "nlopt failed: " << e.what() << endl;
-                        }
+                        executeOptimization(opt, state_start, minf);
                         cdfAccessor[index] = minf;
                     });
                 });
@@ -3058,13 +2833,8 @@ void IMDP::targetTransitionVectorImpl(vec& output, bool is_min){
                         } else {
                             opt.set_max_objective(costFunctionNormal, &data);
                         }
-                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                         double minf;
-                        try {
-                            nlopt::result result = opt.optimize(initial_guess, minf);
-                        } catch (exception& e) {
-                            cout << "nlopt failed: " << e.what() << endl;
-                        }
+                        executeOptimization(opt, state_start, minf);
                         cdfAccessor[index] = minf;
                     });
                 });
@@ -3113,13 +2883,8 @@ void IMDP::targetTransitionVectorImpl(vec& output, bool is_min){
                         } else {
                             opt.set_max_objective(costFunctionNormal, &data);
                         }
-                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                         double minf;
-                        try {
-                            nlopt::result result = opt.optimize(initial_guess, minf);
-                        } catch (exception& e) {
-                            cout << "nlopt failed: " << e.what() << endl;
-                        }
+                        executeOptimization(opt, state_start, minf);
                         cdfAccessor[index] = minf;
                     });
                 });
@@ -3167,13 +2932,8 @@ void IMDP::targetTransitionVectorImpl(vec& output, bool is_min){
                         } else {
                             opt.set_max_objective(custom3, &data);
                         }
-                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                         double minf;
-                        try {
-                            nlopt::result result = opt.optimize(initial_guess, minf);
-                        } catch (exception& e) {
-                            cout << "nlopt failed: " << e.what() << endl;
-                        }
+                        executeOptimization(opt, state_start, minf);
                         cdfAccessor[index] = minf;
                     });
                 });
@@ -3252,13 +3012,8 @@ void IMDP::transitionMatrixBounds(){
                             data.dynamics1 = dynamics1;
                             data.is_diagonal = diagonal;
                             opt.set_min_objective(costFunctionNormal, &data);
-                            vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                             double minf;
-                            try {
-                                nlopt::result result = opt.optimize(initial_guess, minf);
-                            } catch (exception& e) {
-                                cout << "nlopt failed: " << e.what() << endl;
-                            }
+                            executeOptimization(opt, state_start, minf);
                             cdfAccessor[index] = minf;
                         }
                     });
@@ -3308,13 +3063,8 @@ void IMDP::transitionMatrixBounds(){
                             data.is_diagonal = diagonal;
                             data.samples = calls;
                             opt.set_min_objective(costFunctionNormal, &data);
-                            vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                             double minf;
-                            try {
-                                nlopt::result result = opt.optimize(initial_guess, minf);
-                            } catch (exception& e) {
-                                cout << "nlopt failed: " << e.what() << endl;
-                            }
+                            executeOptimization(opt, state_start, minf);
                             cdfAccessor[index] = minf;
                         }
                     });
@@ -3363,13 +3113,8 @@ void IMDP::transitionMatrixBounds(){
                             data.customPDF = customPDF;
                             data.samples = calls;
                             opt.set_min_objective(custom1, &data);
-                            vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                             double minf;
-                            try {
-                                nlopt::result result = opt.optimize(initial_guess, minf);
-                            } catch (exception& e) {
-                                cout << "nlopt failed: " << e.what() << endl;
-                            }
+                            executeOptimization(opt, state_start, minf);
                             cdfAccessor[index] = minf;
                         }
                     });
@@ -3426,13 +3171,8 @@ void IMDP::transitionMatrixBounds(){
                             data.dynamics2 = dynamics2;
                             data.is_diagonal = diagonal;
                             opt.set_min_objective(costFunctionNormal, &data);
-                            vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                             double minf;
-                            try {
-                                nlopt::result result = opt.optimize(initial_guess, minf);
-                            } catch (exception& e) {
-                                cout << "nlopt failed: " << e.what() << endl;
-                            }
+                            executeOptimization(opt, state_start, minf);
                             cdfAccessor[index] = minf;
                         }
                     });
@@ -3481,13 +3221,8 @@ void IMDP::transitionMatrixBounds(){
                             data.is_diagonal = diagonal;
                             data.samples = calls;
                             opt.set_min_objective(costFunctionNormal, &data);
-                            vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                             double minf;
-                            try {
-                                nlopt::result result = opt.optimize(initial_guess, minf);
-                            } catch (exception& e) {
-                                cout << "nlopt failed: " << e.what() << endl;
-                            }
+                            executeOptimization(opt, state_start, minf);
                             cdfAccessor[index] = minf;
                         }
                     });
@@ -3536,13 +3271,8 @@ void IMDP::transitionMatrixBounds(){
                             data.samples = calls;
                             data.input_space_size = input_space_size;
                             opt.set_min_objective(custom2, &data);
-                            vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                             double minf;
-                            try {
-                                nlopt::result result = opt.optimize(initial_guess, minf);
-                            } catch (exception& e) {
-                                cout << "nlopt failed: " << e.what() << endl;
-                            }
+                            executeOptimization(opt, state_start, minf);
                             cdfAccessor[index] = minf;
                         }
                     });
@@ -3598,13 +3328,8 @@ void IMDP::transitionMatrixBounds(){
                             data.dynamics2 = dynamics2;
                             data.is_diagonal = diagonal;
                             opt.set_min_objective(costFunctionNormal, &data);
-                            vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                             double minf;
-                            try {
-                                nlopt::result result = opt.optimize(initial_guess, minf);
-                            } catch (exception& e) {
-                                cout << "nlopt failed: " << e.what() << endl;
-                            }
+                            executeOptimization(opt, state_start, minf);
                             cdfAccessor[index] = minf;
                         }
                     });
@@ -3653,13 +3378,8 @@ void IMDP::transitionMatrixBounds(){
                             data.is_diagonal = diagonal;
                             data.samples = calls;
                             opt.set_min_objective(costFunctionNormal, &data);
-                            vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                             double minf;
-                            try {
-                                nlopt::result result = opt.optimize(initial_guess, minf);
-                            } catch (exception& e) {
-                                cout << "nlopt failed: " << e.what() << endl;
-                            }
+                            executeOptimization(opt, state_start, minf);
                             cdfAccessor[index] = minf;
                         }
                     });
@@ -3708,13 +3428,8 @@ void IMDP::transitionMatrixBounds(){
                             data.samples = calls;
                             data.input_space_size = input_space_size;
                             opt.set_min_objective(custom2, &data);
-                            vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                             double minf;
-                            try {
-                                nlopt::result result = opt.optimize(initial_guess, minf);
-                            } catch (exception& e) {
-                                cout << "nlopt failed: " << e.what() << endl;
-                            }
+                            executeOptimization(opt, state_start, minf);
                             cdfAccessor[index] = minf;
                         }
                     });
@@ -3772,13 +3487,8 @@ void IMDP::transitionMatrixBounds(){
                             data.dynamics3 = dynamics3;
                             data.is_diagonal = diagonal;
                             opt.set_min_objective(costFunctionNormal, &data);
-                            vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                             double minf;
-                            try {
-                                nlopt::result result = opt.optimize(initial_guess, minf);
-                            } catch (exception& e) {
-                                cout << "nlopt failed: " << e.what() << endl;
-                            }
+                            executeOptimization(opt, state_start, minf);
                             cdfAccessor[index] = minf;
                         }
                     });
@@ -3830,13 +3540,8 @@ void IMDP::transitionMatrixBounds(){
                             data.is_diagonal = diagonal;
                             data.samples = calls;
                             opt.set_min_objective(costFunctionNormal, &data);
-                            vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                             double minf;
-                            try {
-                                nlopt::result result = opt.optimize(initial_guess, minf);
-                            } catch (exception& e) {
-                                cout << "nlopt failed: " << e.what() << endl;
-                            }
+                            executeOptimization(opt, state_start, minf);
                             cdfAccessor[index] = minf;
                         }
                     });
@@ -3888,13 +3593,8 @@ void IMDP::transitionMatrixBounds(){
                             data.customPDF = customPDF;
                             data.samples = calls;
                             opt.set_min_objective(custom3, &data);
-                            vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                             double minf;
-                            try {
-                                nlopt::result result = opt.optimize(initial_guess, minf);
-                            } catch (exception& e) {
-                                cout << "nlopt failed: " << e.what() << endl;
-                            }
+                            executeOptimization(opt, state_start, minf);
                             cdfAccessor[index] = minf;
                         }
                     });
