@@ -29,6 +29,31 @@ void IMDP::setAlgorithm(nlopt::algorithm alg){
     algo = alg;
 }
 
+/// Initialize NLopt optimizer with state space bounds (free function for SYCL kernel use)
+inline void initializeOptimizer(nlopt::opt& opt, const vec& state_start, const vec& eta) {
+    vector<double> lb(state_start.size());
+    vector<double> ub(state_start.size());
+    for (size_t m = 0; m < state_start.size(); ++m) {
+        lb[m] = state_start[m] - eta[m] / 2.0;
+        ub[m] = state_start[m] + eta[m] / 2.0;
+    }
+    opt.set_lower_bounds(lb);
+    opt.set_upper_bounds(ub);
+    opt.set_xtol_rel(1e-3);
+}
+
+/// Execute NLopt optimization with exception handling (free function for SYCL kernel use)
+inline bool executeOptimization(nlopt::opt& opt, const vec& state_start, double& result) {
+    vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
+    try {
+        nlopt::result res = opt.optimize(initial_guess, result);
+        return true;
+    } catch (exception& e) {
+        cout << "nlopt failed: " << e.what() << endl;
+        return false;
+    }
+}
+
 /* Supporter Functions for the Abstractions for Different Distributions */
 
 /// Closed form integral for 1d normal distribution CDF
@@ -593,15 +618,7 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
                         size_t i = index % state_space_size;
                         const vec state_start = state_space.row(i).t();
                         nlopt::opt opt(algo, state_start.size());
-                        vector<double> lb(state_start.size());
-                        vector<double> ub(state_start.size());
-                        for (size_t m = 0; m < state_start.size(); ++m) {
-                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                        }
-                        opt.set_lower_bounds(lb);
-                        opt.set_upper_bounds(ub);
-                        opt.set_xtol_rel(1e-3);
+                        initializeOptimizer(opt, state_start, ss_eta);
 
                         costFunctionDataNormalFull data;
                         data.state_start = state_start;
@@ -646,15 +663,7 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
                             size_t i = row % state_space_size;
                             const vec state_start = state_space.row(i).t();
                             nlopt::opt opt(algo, state_start.size());
-                            vector<double> lb(state_start.size());
-                            vector<double> ub(state_start.size());
-                            for (size_t m = 0; m < state_start.size(); ++m) {
-                                lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                                ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                            }
-                            opt.set_lower_bounds(lb);
-                            opt.set_upper_bounds(ub);
-                            opt.set_xtol_rel(1e-3);
+                            initializeOptimizer(opt, state_start, ss_eta);
 
                             const vec state_end = avoid_space.row(col).t();
                             costFunctionDataNormal data;
@@ -697,15 +706,7 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
                         size_t i = idx[0];
                         const vec state_start = state_space.row(i).t();
                         nlopt::opt opt(algo, state_start.size());
-                        vector<double> lb(state_start.size());
-                        vector<double> ub(state_start.size());
-                        for (size_t m = 0; m < state_start.size(); ++m) {
-                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                        }
-                        opt.set_lower_bounds(lb);
-                        opt.set_upper_bounds(ub);
-                        opt.set_xtol_rel(1e-3);
+                        initializeOptimizer(opt, state_start, ss_eta);
 
                         costFunctionDataNormalFull data;
                         data.dim = dim_x;
@@ -752,15 +753,7 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
                             size_t i = row % state_space_size;
                             const vec state_start = state_space.row(i).t();
                             nlopt::opt opt(algo, state_start.size());
-                            vector<double> lb(state_start.size());
-                            vector<double> ub(state_start.size());
-                            for (size_t m = 0; m < state_start.size(); ++m) {
-                                lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                                ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                            }
-                            opt.set_lower_bounds(lb);
-                            opt.set_upper_bounds(ub);
-                            opt.set_xtol_rel(1e-3);
+                            initializeOptimizer(opt, state_start, ss_eta);
 
                             const vec state_end = avoid_space.row(col).t();
                             costFunctionDataNormal data;
@@ -805,15 +798,7 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
                         size_t i = idx[0];
                         const vec state_start = state_space.row(i).t();
                         nlopt::opt opt(algo, state_start.size());
-                        vector<double> lb(state_start.size());
-                        vector<double> ub(state_start.size());
-                        for (size_t m = 0; m < state_start.size(); ++m) {
-                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                        }
-                        opt.set_lower_bounds(lb);
-                        opt.set_upper_bounds(ub);
-                        opt.set_xtol_rel(1e-3);
+                        initializeOptimizer(opt, state_start, ss_eta);
 
                         costcustom1Full data;
                         data.dim = dim_x;
@@ -858,15 +843,7 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
                             size_t i = row % state_space_size;
                             const vec state_start = state_space.row(i).t();
                             nlopt::opt opt(algo, state_start.size());
-                            vector<double> lb(state_start.size());
-                            vector<double> ub(state_start.size());
-                            for (size_t m = 0; m < state_start.size(); ++m) {
-                                lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                                ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                            }
-                            opt.set_lower_bounds(lb);
-                            opt.set_upper_bounds(ub);
-                            opt.set_xtol_rel(1e-3);
+                            initializeOptimizer(opt, state_start, ss_eta);
 
                             const vec state_end = avoid_space.row(col).t();
                             costcustom1 data;
@@ -925,15 +902,7 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
                         const vec input = input_space.row(k).t();
                         const vec state_start = state_space.row(i).t();
                         nlopt::opt opt(algo, state_start.size());
-                        vector<double> lb(state_start.size());
-                        vector<double> ub(state_start.size());
-                        for (size_t m = 0; m < state_start.size(); ++m) {
-                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                        }
-                        opt.set_lower_bounds(lb);
-                        opt.set_upper_bounds(ub);
-                        opt.set_xtol_rel(1e-3);
+                        initializeOptimizer(opt, state_start, ss_eta);
 
                         costFunctionDataNormalFull data;
                         data.state_start = state_start;
@@ -980,15 +949,7 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
                             const vec input = input_space.row(k).t();
                             const vec state_start = state_space.row(i).t();
                             nlopt::opt opt(algo, state_start.size());
-                            vector<double> lb(state_start.size());
-                            vector<double> ub(state_start.size());
-                            for (size_t m = 0; m < state_start.size(); ++m) {
-                                lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                                ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                            }
-                            opt.set_lower_bounds(lb);
-                            opt.set_upper_bounds(ub);
-                            opt.set_xtol_rel(1e-3);
+                            initializeOptimizer(opt, state_start, ss_eta);
 
                             const vec state_end = avoid_space.row(col).t();
                             costFunctionDataNormal data;
@@ -1033,15 +994,7 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
                         const vec input = input_space.row(k).t();
                         const vec state_start = state_space.row(i).t();
                         nlopt::opt opt(algo, state_start.size());
-                        vector<double> lb(state_start.size());
-                        vector<double> ub(state_start.size());
-                        for (size_t m = 0; m < state_start.size(); ++m) {
-                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                        }
-                        opt.set_lower_bounds(lb);
-                        opt.set_upper_bounds(ub);
-                        opt.set_xtol_rel(1e-3);
+                        initializeOptimizer(opt, state_start, ss_eta);
 
                         costFunctionDataNormalFull data;
                         data.dim = dim_x;
@@ -1091,15 +1044,7 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
                             const vec input = input_space.row(k).t();
                             const vec state_start = state_space.row(i).t();
                             nlopt::opt opt(algo, state_start.size());
-                            vector<double> lb(state_start.size());
-                            vector<double> ub(state_start.size());
-                            for (size_t m = 0; m < state_start.size(); ++m) {
-                                lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                                ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                            }
-                            opt.set_lower_bounds(lb);
-                            opt.set_upper_bounds(ub);
-                            opt.set_xtol_rel(1e-3);
+                            initializeOptimizer(opt, state_start, ss_eta);
 
                             const vec state_end = avoid_space.row(col).t();
                             costFunctionDataNormal data;
@@ -1147,15 +1092,7 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
                         const vec input = input_space.row(k).t();
                         const vec state_start = state_space.row(i).t();
                         nlopt::opt opt(algo, state_start.size());
-                        vector<double> lb(state_start.size());
-                        vector<double> ub(state_start.size());
-                        for (size_t m = 0; m < state_start.size(); ++m) {
-                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                        }
-                        opt.set_lower_bounds(lb);
-                        opt.set_upper_bounds(ub);
-                        opt.set_xtol_rel(1e-3);
+                        initializeOptimizer(opt, state_start, ss_eta);
 
                         costcustom2Full data;
                         data.dim = dim_x;
@@ -1203,15 +1140,7 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
                             const vec input = input_space.row(k).t();
                             const vec state_start = state_space.row(i).t();
                             nlopt::opt opt(algo, state_start.size());
-                            vector<double> lb(state_start.size());
-                            vector<double> ub(state_start.size());
-                            for (size_t m = 0; m < state_start.size(); ++m) {
-                                lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                                ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                            }
-                            opt.set_lower_bounds(lb);
-                            opt.set_upper_bounds(ub);
-                            opt.set_xtol_rel(1e-3);
+                            initializeOptimizer(opt, state_start, ss_eta);
 
                             const vec state_end = avoid_space.row(col).t();
                             costcustom2 data;
@@ -1272,15 +1201,7 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
                         const vec disturb = disturb_space.row(k).t();
                         const vec state_start = state_space.row(i).t();
                         nlopt::opt opt(algo, state_start.size());
-                        vector<double> lb(state_start.size());
-                        vector<double> ub(state_start.size());
-                        for (size_t m = 0; m < state_start.size(); ++m) {
-                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                        }
-                        opt.set_lower_bounds(lb);
-                        opt.set_upper_bounds(ub);
-                        opt.set_xtol_rel(1e-3);
+                        initializeOptimizer(opt, state_start, ss_eta);
 
                         costFunctionDataNormalFull data;
                         data.state_start = state_start;
@@ -1327,15 +1248,7 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
                             const vec disturb = disturb_space.row(k).t();
                             const vec state_start = state_space.row(i).t();
                             nlopt::opt opt(algo, state_start.size());
-                            vector<double> lb(state_start.size());
-                            vector<double> ub(state_start.size());
-                            for (size_t m = 0; m < state_start.size(); ++m) {
-                                lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                                ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                            }
-                            opt.set_lower_bounds(lb);
-                            opt.set_upper_bounds(ub);
-                            opt.set_xtol_rel(1e-3);
+                            initializeOptimizer(opt, state_start, ss_eta);
 
                             const vec state_end = avoid_space.row(col).t();
                             costFunctionDataNormal data;
@@ -1380,15 +1293,7 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
                         const vec disturb = disturb_space.row(k).t();
                         const vec state_start = state_space.row(i).t();
                         nlopt::opt opt(algo, state_start.size());
-                        vector<double> lb(state_start.size());
-                        vector<double> ub(state_start.size());
-                        for (size_t m = 0; m < state_start.size(); ++m) {
-                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                        }
-                        opt.set_lower_bounds(lb);
-                        opt.set_upper_bounds(ub);
-                        opt.set_xtol_rel(1e-3);
+                        initializeOptimizer(opt, state_start, ss_eta);
 
                         costFunctionDataNormalFull data;
                         data.dim = dim_x;
@@ -1438,15 +1343,7 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
                             const vec disturb = disturb_space.row(k).t();
                             const vec state_start = state_space.row(i).t();
                             nlopt::opt opt(algo, state_start.size());
-                            vector<double> lb(state_start.size());
-                            vector<double> ub(state_start.size());
-                            for (size_t m = 0; m < state_start.size(); ++m) {
-                                lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                                ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                            }
-                            opt.set_lower_bounds(lb);
-                            opt.set_upper_bounds(ub);
-                            opt.set_xtol_rel(1e-3);
+                            initializeOptimizer(opt, state_start, ss_eta);
 
                             const vec state_end = avoid_space.row(col).t();
                             costFunctionDataNormal data;
@@ -1494,15 +1391,7 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
                         const vec disturb = disturb_space.row(k).t();
                         const vec state_start = state_space.row(i).t();
                         nlopt::opt opt(algo, state_start.size());
-                        vector<double> lb(state_start.size());
-                        vector<double> ub(state_start.size());
-                        for (size_t m = 0; m < state_start.size(); ++m) {
-                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                        }
-                        opt.set_lower_bounds(lb);
-                        opt.set_upper_bounds(ub);
-                        opt.set_xtol_rel(1e-3);
+                        initializeOptimizer(opt, state_start, ss_eta);
 
                         costcustom2Full data;
                         data.dim = dim_x;
@@ -1550,15 +1439,7 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
                             const vec disturb = disturb_space.row(k).t();
                             const vec state_start = state_space.row(i).t();
                             nlopt::opt opt(algo, state_start.size());
-                            vector<double> lb(state_start.size());
-                            vector<double> ub(state_start.size());
-                            for (size_t m = 0; m < state_start.size(); ++m) {
-                                lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                                ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                            }
-                            opt.set_lower_bounds(lb);
-                            opt.set_upper_bounds(ub);
-                            opt.set_xtol_rel(1e-3);
+                            initializeOptimizer(opt, state_start, ss_eta);
 
                             const vec state_end = avoid_space.row(col).t();
                             costcustom2 data;
@@ -1621,15 +1502,7 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
                         const vec input = input_space.row(k).t();
                         const vec state_start = state_space.row(i).t();
                         nlopt::opt opt(algo, state_start.size());
-                        vector<double> lb(state_start.size());
-                        vector<double> ub(state_start.size());
-                        for (size_t m = 0; m < state_start.size(); ++m) {
-                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                        }
-                        opt.set_lower_bounds(lb);
-                        opt.set_upper_bounds(ub);
-                        opt.set_xtol_rel(1e-3);
+                        initializeOptimizer(opt, state_start, ss_eta);
 
                         costFunctionDataNormalFull data;
                         data.state_start = state_start;
@@ -1679,15 +1552,7 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
                             const vec input = input_space.row(k).t();
                             const vec state_start = state_space.row(i).t();
                             nlopt::opt opt(algo, state_start.size());
-                            vector<double> lb(state_start.size());
-                            vector<double> ub(state_start.size());
-                            for (size_t m = 0; m < state_start.size(); ++m) {
-                                lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                                ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                            }
-                            opt.set_lower_bounds(lb);
-                            opt.set_upper_bounds(ub);
-                            opt.set_xtol_rel(1e-3);
+                            initializeOptimizer(opt, state_start, ss_eta);
 
                             const vec state_end = avoid_space.row(col).t();
                             costFunctionDataNormal data;
@@ -1735,15 +1600,7 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
                         const vec input = input_space.row(k).t();
                         const vec state_start = state_space.row(i).t();
                         nlopt::opt opt(algo, state_start.size());
-                        vector<double> lb(state_start.size());
-                        vector<double> ub(state_start.size());
-                        for (size_t m = 0; m < state_start.size(); ++m) {
-                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                        }
-                        opt.set_lower_bounds(lb);
-                        opt.set_upper_bounds(ub);
-                        opt.set_xtol_rel(1e-3);
+                        initializeOptimizer(opt, state_start, ss_eta);
 
                         costFunctionDataNormalFull data;
                         data.dim = dim_x;
@@ -1796,15 +1653,7 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
                             const vec input = input_space.row(k).t();
                             const vec state_start = state_space.row(i).t();
                             nlopt::opt opt(algo, state_start.size());
-                            vector<double> lb(state_start.size());
-                            vector<double> ub(state_start.size());
-                            for (size_t m = 0; m < state_start.size(); ++m) {
-                                lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                                ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                            }
-                            opt.set_lower_bounds(lb);
-                            opt.set_upper_bounds(ub);
-                            opt.set_xtol_rel(1e-3);
+                            initializeOptimizer(opt, state_start, ss_eta);
 
                             const vec state_end = avoid_space.row(col).t();
                             costFunctionDataNormal data;
@@ -1855,15 +1704,7 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
                         const vec input = input_space.row(k).t();
                         const vec state_start = state_space.row(i).t();
                         nlopt::opt opt(algo, state_start.size());
-                        vector<double> lb(state_start.size());
-                        vector<double> ub(state_start.size());
-                        for (size_t m = 0; m < state_start.size(); ++m) {
-                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                        }
-                        opt.set_lower_bounds(lb);
-                        opt.set_upper_bounds(ub);
-                        opt.set_xtol_rel(1e-3);
+                        initializeOptimizer(opt, state_start, ss_eta);
 
                         costcustom3Full data;
                         data.dim = dim_x;
@@ -1914,15 +1755,7 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
                             const vec input = input_space.row(k).t();
                             const vec state_start = state_space.row(i).t();
                             nlopt::opt opt(algo, state_start.size());
-                            vector<double> lb(state_start.size());
-                            vector<double> ub(state_start.size());
-                            for (size_t m = 0; m < state_start.size(); ++m) {
-                                lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                                ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                            }
-                            opt.set_lower_bounds(lb);
-                            opt.set_upper_bounds(ub);
-                            opt.set_xtol_rel(1e-3);
+                            initializeOptimizer(opt, state_start, ss_eta);
 
                             const vec state_end = avoid_space.row(col).t();
                             costcustom3 data;
@@ -2010,15 +1843,7 @@ void IMDP::transitionMatrixImpl(mat& output, bool is_min){
                         size_t i = row % state_space_size;
                         const vec state_start = state_space.row(i).t();
                         nlopt::opt opt(algo, state_start.size());
-                        vector<double> lb(state_start.size());
-                        vector<double> ub(state_start.size());
-                        for (size_t m = 0; m < state_start.size(); ++m) {
-                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                        }
-                        opt.set_lower_bounds(lb);
-                        opt.set_upper_bounds(ub);
-                        opt.set_xtol_rel(1e-3);
+                        initializeOptimizer(opt, state_start, ss_eta);
 
                         // Prepare data for costfunction
                         const vec state_end = state_space.row(col).t();
@@ -2071,15 +1896,7 @@ void IMDP::transitionMatrixImpl(mat& output, bool is_min){
                         const vec input = input_space.row(k).t();
                         const vec state_start = state_space.row(i).t();
                         nlopt::opt opt(algo, state_start.size());
-                        vector<double> lb(state_start.size());
-                        vector<double> ub(state_start.size());
-                        for (size_t m = 0; m < state_start.size(); ++m) {
-                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                        }
-                        opt.set_lower_bounds(lb);
-                        opt.set_upper_bounds(ub);
-                        opt.set_xtol_rel(1e-3);
+                        initializeOptimizer(opt, state_start, ss_eta);
 
                         // Prepare data for costfunction
                         const vec state_end = state_space.row(col).t();
@@ -2135,15 +1952,7 @@ void IMDP::transitionMatrixImpl(mat& output, bool is_min){
                         const vec input = input_space.row(k).t();
                         const vec state_start = state_space.row(i).t();
                         nlopt::opt opt(algo, state_start.size());
-                        vector<double> lb(state_start.size());
-                        vector<double> ub(state_start.size());
-                        for (size_t m = 0; m < state_start.size(); ++m) {
-                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                        }
-                        opt.set_lower_bounds(lb);
-                        opt.set_upper_bounds(ub);
-                        opt.set_xtol_rel(1e-3);
+                        initializeOptimizer(opt, state_start, ss_eta);
 
                         // Prepare data for costfunction
                         const vec state_end = state_space.row(col).t();
@@ -2206,15 +2015,7 @@ void IMDP::transitionMatrixImpl(mat& output, bool is_min){
                         const vec input = input_space.row(k).t();
                         const vec state_start = state_space.row(i).t();
                         nlopt::opt opt(algo, state_start.size());
-                        vector<double> lb(state_start.size());
-                        vector<double> ub(state_start.size());
-                        for (size_t m = 0; m < state_start.size(); ++m) {
-                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                        }
-                        opt.set_lower_bounds(lb);
-                        opt.set_upper_bounds(ub);
-                        opt.set_xtol_rel(1e-3);
+                        initializeOptimizer(opt, state_start, ss_eta);
 
                         // Prepare data for costfunction
                         const vec state_end = state_space.row(col).t();
@@ -2266,15 +2067,7 @@ void IMDP::transitionMatrixImpl(mat& output, bool is_min){
                         const vec input = input_space.row(k).t();
                         const vec state_start = state_space.row(i).t();
                         nlopt::opt opt(algo, state_start.size());
-                        vector<double> lb(state_start.size());
-                        vector<double> ub(state_start.size());
-                        for (size_t m = 0; m < state_start.size(); ++m) {
-                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                        }
-                        opt.set_lower_bounds(lb);
-                        opt.set_upper_bounds(ub);
-                        opt.set_xtol_rel(1e-3);
+                        initializeOptimizer(opt, state_start, ss_eta);
 
                         // Prepare data for costfunction
                         const vec state_end = state_space.row(col).t();
@@ -2329,15 +2122,7 @@ void IMDP::transitionMatrixImpl(mat& output, bool is_min){
                         const vec input = input_space.row(k).t();
                         const vec state_start = state_space.row(i).t();
                         nlopt::opt opt(algo, state_start.size());
-                        vector<double> lb(state_start.size());
-                        vector<double> ub(state_start.size());
-                        for (size_t m = 0; m < state_start.size(); ++m) {
-                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                        }
-                        opt.set_lower_bounds(lb);
-                        opt.set_upper_bounds(ub);
-                        opt.set_xtol_rel(1e-3);
+                        initializeOptimizer(opt, state_start, ss_eta);
 
                         // Prepare data for costfunction
                         const vec state_end = state_space.row(col).t();
@@ -2402,15 +2187,7 @@ void IMDP::transitionMatrixImpl(mat& output, bool is_min){
                         const vec disturb = disturb_space.row(k).t();
                         const vec state_start = state_space.row(i).t();
                         nlopt::opt opt(algo, state_start.size());
-                        vector<double> lb(state_start.size());
-                        vector<double> ub(state_start.size());
-                        for (size_t m = 0; m < state_start.size(); ++m) {
-                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                        }
-                        opt.set_lower_bounds(lb);
-                        opt.set_upper_bounds(ub);
-                        opt.set_xtol_rel(1e-3);
+                        initializeOptimizer(opt, state_start, ss_eta);
 
                         // Prepare data for costfunction
                         const vec state_end = state_space.row(col).t();
@@ -2462,15 +2239,7 @@ void IMDP::transitionMatrixImpl(mat& output, bool is_min){
                         const vec disturb = disturb_space.row(k).t();
                         const vec state_start = state_space.row(i).t();
                         nlopt::opt opt(algo, state_start.size());
-                        vector<double> lb(state_start.size());
-                        vector<double> ub(state_start.size());
-                        for (size_t m = 0; m < state_start.size(); ++m) {
-                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                        }
-                        opt.set_lower_bounds(lb);
-                        opt.set_upper_bounds(ub);
-                        opt.set_xtol_rel(1e-3);
+                        initializeOptimizer(opt, state_start, ss_eta);
 
                         // Prepare data for costfunction
                         const vec state_end = state_space.row(col).t();
@@ -2525,15 +2294,7 @@ void IMDP::transitionMatrixImpl(mat& output, bool is_min){
                         const vec disturb = disturb_space.row(k).t();
                         const vec state_start = state_space.row(i).t();
                         nlopt::opt opt(algo, state_start.size());
-                        vector<double> lb(state_start.size());
-                        vector<double> ub(state_start.size());
-                        for (size_t m = 0; m < state_start.size(); ++m) {
-                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                        }
-                        opt.set_lower_bounds(lb);
-                        opt.set_upper_bounds(ub);
-                        opt.set_xtol_rel(1e-3);
+                        initializeOptimizer(opt, state_start, ss_eta);
 
                         // Prepare data for costfunction
                         const vec state_end = state_space.row(col).t();
@@ -2598,15 +2359,7 @@ void IMDP::transitionMatrixImpl(mat& output, bool is_min){
                         const vec input = input_space.row(k).t();
                         const vec state_start = state_space.row(i).t();
                         nlopt::opt opt(algo, state_start.size());
-                        vector<double> lb(state_start.size());
-                        vector<double> ub(state_start.size());
-                        for (size_t m = 0; m < state_start.size(); ++m) {
-                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                        }
-                        opt.set_lower_bounds(lb);
-                        opt.set_upper_bounds(ub);
-                        opt.set_xtol_rel(1e-3);
+                        initializeOptimizer(opt, state_start, ss_eta);
 
                         // Prepare data for costfunction
                         const vec state_end = state_space.row(col).t();
@@ -2661,15 +2414,7 @@ void IMDP::transitionMatrixImpl(mat& output, bool is_min){
                         const vec input = input_space.row(k).t();
                         const vec state_start = state_space.row(i).t();
                         nlopt::opt opt(algo, state_start.size());
-                        vector<double> lb(state_start.size());
-                        vector<double> ub(state_start.size());
-                        for (size_t m = 0; m < state_start.size(); ++m) {
-                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                        }
-                        opt.set_lower_bounds(lb);
-                        opt.set_upper_bounds(ub);
-                        opt.set_xtol_rel(1e-3);
+                        initializeOptimizer(opt, state_start, ss_eta);
 
                         // Prepare data for costfunction
                         const vec state_end = state_space.row(col).t();
@@ -2727,15 +2472,7 @@ void IMDP::transitionMatrixImpl(mat& output, bool is_min){
                         const vec input = input_space.row(k).t();
                         const vec state_start = state_space.row(i).t();
                         nlopt::opt opt(algo, state_start.size());
-                        vector<double> lb(state_start.size());
-                        vector<double> ub(state_start.size());
-                        for (size_t m = 0; m < state_start.size(); ++m) {
-                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                        }
-                        opt.set_lower_bounds(lb);
-                        opt.set_upper_bounds(ub);
-                        opt.set_xtol_rel(1e-3);
+                        initializeOptimizer(opt, state_start, ss_eta);
 
                         // Prepare data for costfunction
                         const vec state_end = state_space.row(col).t();
@@ -2818,15 +2555,7 @@ void IMDP::targetTransitionVectorImpl(vec& output, bool is_min){
                         size_t i = row % state_space_size;
                         const vec state_start = state_space.row(i).t();
                         nlopt::opt opt(algo, state_start.size());
-                        vector<double> lb(state_start.size());
-                        vector<double> ub(state_start.size());
-                        for (size_t m = 0; m < state_start.size(); ++m) {
-                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                        }
-                        opt.set_lower_bounds(lb);
-                        opt.set_upper_bounds(ub);
-                        opt.set_xtol_rel(1e-3);
+                        initializeOptimizer(opt, state_start, ss_eta);
 
                         const vec state_end = target_space.row(col).t();
                         costFunctionDataNormal data;
@@ -2872,15 +2601,7 @@ void IMDP::targetTransitionVectorImpl(vec& output, bool is_min){
                         size_t i = row % state_space_size;
                         const vec state_start = state_space.row(i).t();
                         nlopt::opt opt(algo, state_start.size());
-                        vector<double> lb(state_start.size());
-                        vector<double> ub(state_start.size());
-                        for (size_t m = 0; m < state_start.size(); ++m) {
-                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                        }
-                        opt.set_lower_bounds(lb);
-                        opt.set_upper_bounds(ub);
-                        opt.set_xtol_rel(1e-3);
+                        initializeOptimizer(opt, state_start, ss_eta);
 
                         const vec state_end = target_space.row(col).t();
                         costFunctionDataNormal data;
@@ -2929,15 +2650,7 @@ void IMDP::targetTransitionVectorImpl(vec& output, bool is_min){
                         size_t i = row % state_space_size;
                         const vec state_start = state_space.row(i).t();
                         nlopt::opt opt(algo, state_start.size());
-                        vector<double> lb(state_start.size());
-                        vector<double> ub(state_start.size());
-                        for (size_t m = 0; m < state_start.size(); ++m) {
-                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                        }
-                        opt.set_lower_bounds(lb);
-                        opt.set_upper_bounds(ub);
-                        opt.set_xtol_rel(1e-3);
+                        initializeOptimizer(opt, state_start, ss_eta);
 
                         const vec state_end = target_space.row(col).t();
                         costcustom1 data;
@@ -2999,15 +2712,7 @@ void IMDP::targetTransitionVectorImpl(vec& output, bool is_min){
                         const vec input = input_space.row(k).t();
                         const vec state_start = state_space.row(i).t();
                         nlopt::opt opt(algo, state_start.size());
-                        vector<double> lb(state_start.size());
-                        vector<double> ub(state_start.size());
-                        for (size_t m = 0; m < state_start.size(); ++m) {
-                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                        }
-                        opt.set_lower_bounds(lb);
-                        opt.set_upper_bounds(ub);
-                        opt.set_xtol_rel(1e-3);
+                        initializeOptimizer(opt, state_start, ss_eta);
 
                         const vec state_end = target_space.row(col).t();
                         costFunctionDataNormal data;
@@ -3056,15 +2761,7 @@ void IMDP::targetTransitionVectorImpl(vec& output, bool is_min){
                         const vec input = input_space.row(k).t();
                         const vec state_start = state_space.row(i).t();
                         nlopt::opt opt(algo, state_start.size());
-                        vector<double> lb(state_start.size());
-                        vector<double> ub(state_start.size());
-                        for (size_t m = 0; m < state_start.size(); ++m) {
-                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                        }
-                        opt.set_lower_bounds(lb);
-                        opt.set_upper_bounds(ub);
-                        opt.set_xtol_rel(1e-3);
+                        initializeOptimizer(opt, state_start, ss_eta);
 
                         const vec state_end = target_space.row(col).t();
                         costFunctionDataNormal data;
@@ -3116,15 +2813,7 @@ void IMDP::targetTransitionVectorImpl(vec& output, bool is_min){
                         const vec input = input_space.row(k).t();
                         const vec state_start = state_space.row(i).t();
                         nlopt::opt opt(algo, state_start.size());
-                        vector<double> lb(state_start.size());
-                        vector<double> ub(state_start.size());
-                        for (size_t m = 0; m < state_start.size(); ++m) {
-                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                        }
-                        opt.set_lower_bounds(lb);
-                        opt.set_upper_bounds(ub);
-                        opt.set_xtol_rel(1e-3);
+                        initializeOptimizer(opt, state_start, ss_eta);
 
                         const vec state_end = target_space.row(col).t();
                         costcustom2 data;
@@ -3187,15 +2876,7 @@ void IMDP::targetTransitionVectorImpl(vec& output, bool is_min){
                         const vec disturb = disturb_space.row(k).t();
                         const vec state_start = state_space.row(i).t();
                         nlopt::opt opt(algo, state_start.size());
-                        vector<double> lb(state_start.size());
-                        vector<double> ub(state_start.size());
-                        for (size_t m = 0; m < state_start.size(); ++m) {
-                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                        }
-                        opt.set_lower_bounds(lb);
-                        opt.set_upper_bounds(ub);
-                        opt.set_xtol_rel(1e-3);
+                        initializeOptimizer(opt, state_start, ss_eta);
 
                         const vec state_end = target_space.row(col).t();
                         costFunctionDataNormal data;
@@ -3244,15 +2925,7 @@ void IMDP::targetTransitionVectorImpl(vec& output, bool is_min){
                         const vec disturb = disturb_space.row(k).t();
                         const vec state_start = state_space.row(i).t();
                         nlopt::opt opt(algo, state_start.size());
-                        vector<double> lb(state_start.size());
-                        vector<double> ub(state_start.size());
-                        for (size_t m = 0; m < state_start.size(); ++m) {
-                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                        }
-                        opt.set_lower_bounds(lb);
-                        opt.set_upper_bounds(ub);
-                        opt.set_xtol_rel(1e-3);
+                        initializeOptimizer(opt, state_start, ss_eta);
 
                         const vec state_end = target_space.row(col).t();
                         costFunctionDataNormal data;
@@ -3304,15 +2977,7 @@ void IMDP::targetTransitionVectorImpl(vec& output, bool is_min){
                         const vec disturb = disturb_space.row(k).t();
                         const vec state_start = state_space.row(i).t();
                         nlopt::opt opt(algo, state_start.size());
-                        vector<double> lb(state_start.size());
-                        vector<double> ub(state_start.size());
-                        for (size_t m = 0; m < state_start.size(); ++m) {
-                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                        }
-                        opt.set_lower_bounds(lb);
-                        opt.set_upper_bounds(ub);
-                        opt.set_xtol_rel(1e-3);
+                        initializeOptimizer(opt, state_start, ss_eta);
 
                         const vec state_end = target_space.row(col).t();
                         costcustom2 data;
@@ -3377,15 +3042,7 @@ void IMDP::targetTransitionVectorImpl(vec& output, bool is_min){
                         const vec input = input_space.row(k).t();
                         const vec state_start = state_space.row(i).t();
                         nlopt::opt opt(algo, state_start.size());
-                        vector<double> lb(state_start.size());
-                        vector<double> ub(state_start.size());
-                        for (size_t m = 0; m < state_start.size(); ++m) {
-                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                        }
-                        opt.set_lower_bounds(lb);
-                        opt.set_upper_bounds(ub);
-                        opt.set_xtol_rel(1e-3);
+                        initializeOptimizer(opt, state_start, ss_eta);
 
                         const vec state_end = target_space.row(col).t();
                         costFunctionDataNormal data;
@@ -3437,15 +3094,7 @@ void IMDP::targetTransitionVectorImpl(vec& output, bool is_min){
                         const vec input = input_space.row(k).t();
                         const vec state_start = state_space.row(i).t();
                         nlopt::opt opt(algo, state_start.size());
-                        vector<double> lb(state_start.size());
-                        vector<double> ub(state_start.size());
-                        for (size_t m = 0; m < state_start.size(); ++m) {
-                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                        }
-                        opt.set_lower_bounds(lb);
-                        opt.set_upper_bounds(ub);
-                        opt.set_xtol_rel(1e-3);
+                        initializeOptimizer(opt, state_start, ss_eta);
 
                         const vec state_end = target_space.row(col).t();
                         costFunctionDataNormal data;
@@ -3500,15 +3149,7 @@ void IMDP::targetTransitionVectorImpl(vec& output, bool is_min){
                         const vec input = input_space.row(k).t();
                         const vec state_start = state_space.row(i).t();
                         nlopt::opt opt(algo, state_start.size());
-                        vector<double> lb(state_start.size());
-                        vector<double> ub(state_start.size());
-                        for (size_t m = 0; m < state_start.size(); ++m) {
-                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                        }
-                        opt.set_lower_bounds(lb);
-                        opt.set_upper_bounds(ub);
-                        opt.set_xtol_rel(1e-3);
+                        initializeOptimizer(opt, state_start, ss_eta);
 
                         const vec state_end = target_space.row(col).t();
                         costcustom3 data;
@@ -3600,15 +3241,7 @@ void IMDP::transitionMatrixBounds(){
                             size_t i = row % state_space_size;
                             const vec state_start = state_space.row(i).t();
                             nlopt::opt opt(algo, state_start.size());
-                            vector<double> lb(state_start.size());
-                            vector<double> ub(state_start.size());
-                            for (size_t m = 0; m < state_start.size(); ++m) {
-                                lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                                ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                            }
-                            opt.set_lower_bounds(lb);
-                            opt.set_upper_bounds(ub);
-                            opt.set_xtol_rel(1e-3);
+                            initializeOptimizer(opt, state_start, ss_eta);
                             
                             // Prepare data for costfunction
                             const vec state_end = state_space.row(col).t();
@@ -3661,15 +3294,7 @@ void IMDP::transitionMatrixBounds(){
                             const vec input = input_space.row(k).t();
                             const vec state_start = state_space.row(i).t();
                             nlopt::opt opt(algo, state_start.size());
-                            vector<double> lb(state_start.size());
-                            vector<double> ub(state_start.size());
-                            for (size_t m = 0; m < state_start.size(); ++m) {
-                                lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                                ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                            }
-                            opt.set_lower_bounds(lb);
-                            opt.set_upper_bounds(ub);
-                            opt.set_xtol_rel(1e-3);
+                            initializeOptimizer(opt, state_start, ss_eta);
                             
                             // Prepare data for costfunction
                             const vec state_end = state_space.row(col).t();
@@ -3725,15 +3350,7 @@ void IMDP::transitionMatrixBounds(){
                             const vec input = input_space.row(k).t();
                             const vec state_start = state_space.row(i).t();
                             nlopt::opt opt(algo, state_start.size());
-                            vector<double> lb(state_start.size());
-                            vector<double> ub(state_start.size());
-                            for (size_t m = 0; m < state_start.size(); ++m) {
-                                lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                                ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                            }
-                            opt.set_lower_bounds(lb);
-                            opt.set_upper_bounds(ub);
-                            opt.set_xtol_rel(1e-3);
+                            initializeOptimizer(opt, state_start, ss_eta);
                             
                             // Prepare data for costfunction
                             const vec state_end = state_space.row(col).t();
@@ -3797,15 +3414,7 @@ void IMDP::transitionMatrixBounds(){
                             const vec input = input_space.row(k).t();
                             const vec state_start = state_space.row(i).t();
                             nlopt::opt opt(algo, state_start.size());
-                            vector<double> lb(state_start.size());
-                            vector<double> ub(state_start.size());
-                            for (size_t m = 0; m < state_start.size(); ++m) {
-                                lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                                ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                            }
-                            opt.set_lower_bounds(lb);
-                            opt.set_upper_bounds(ub);
-                            opt.set_xtol_rel(1e-3);
+                            initializeOptimizer(opt, state_start, ss_eta);
                             
                             // Prepare data for costfunction
                             const vec state_end = state_space.row(col).t();
@@ -3857,15 +3466,7 @@ void IMDP::transitionMatrixBounds(){
                             const vec input = input_space.row(k).t();
                             const vec state_start = state_space.row(i).t();
                             nlopt::opt opt(algo, state_start.size());
-                            vector<double> lb(state_start.size());
-                            vector<double> ub(state_start.size());
-                            for (size_t m = 0; m < state_start.size(); ++m) {
-                                lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                                ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                            }
-                            opt.set_lower_bounds(lb);
-                            opt.set_upper_bounds(ub);
-                            opt.set_xtol_rel(1e-3);
+                            initializeOptimizer(opt, state_start, ss_eta);
                             
                             // Prepare data for costfunction
                             const vec state_end = state_space.row(col).t();
@@ -3920,15 +3521,7 @@ void IMDP::transitionMatrixBounds(){
                             const vec input = input_space.row(k).t();
                             const vec state_start = state_space.row(i).t();
                             nlopt::opt opt(algo, state_start.size());
-                            vector<double> lb(state_start.size());
-                            vector<double> ub(state_start.size());
-                            for (size_t m = 0; m < state_start.size(); ++m) {
-                                lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                                ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                            }
-                            opt.set_lower_bounds(lb);
-                            opt.set_upper_bounds(ub);
-                            opt.set_xtol_rel(1e-3);
+                            initializeOptimizer(opt, state_start, ss_eta);
                             
                             // Prepare data for costfunction
                             const vec state_end = state_space.row(col).t();
@@ -3993,15 +3586,7 @@ void IMDP::transitionMatrixBounds(){
                             const vec disturb = disturb_space.row(k).t();
                             const vec state_start = state_space.row(i).t();
                             nlopt::opt opt(algo, state_start.size());
-                            vector<double> lb(state_start.size());
-                            vector<double> ub(state_start.size());
-                            for (size_t m = 0; m < state_start.size(); ++m) {
-                                lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                                ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                            }
-                            opt.set_lower_bounds(lb);
-                            opt.set_upper_bounds(ub);
-                            opt.set_xtol_rel(1e-3);
+                            initializeOptimizer(opt, state_start, ss_eta);
                             
                             // Prepare data for costfunction
                             const vec state_end = state_space.row(col).t();
@@ -4053,15 +3638,7 @@ void IMDP::transitionMatrixBounds(){
                             const vec disturb = disturb_space.row(k).t();
                             const vec state_start = state_space.row(i).t();
                             nlopt::opt opt(algo, state_start.size());
-                            vector<double> lb(state_start.size());
-                            vector<double> ub(state_start.size());
-                            for (size_t m = 0; m < state_start.size(); ++m) {
-                                lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                                ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                            }
-                            opt.set_lower_bounds(lb);
-                            opt.set_upper_bounds(ub);
-                            opt.set_xtol_rel(1e-3);
+                            initializeOptimizer(opt, state_start, ss_eta);
                             
                             // Prepare data for costfunction
                             const vec state_end = state_space.row(col).t();
@@ -4116,15 +3693,7 @@ void IMDP::transitionMatrixBounds(){
                             const vec disturb = disturb_space.row(k).t();
                             const vec state_start = state_space.row(i).t();
                             nlopt::opt opt(algo, state_start.size());
-                            vector<double> lb(state_start.size());
-                            vector<double> ub(state_start.size());
-                            for (size_t m = 0; m < state_start.size(); ++m) {
-                                lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                                ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                            }
-                            opt.set_lower_bounds(lb);
-                            opt.set_upper_bounds(ub);
-                            opt.set_xtol_rel(1e-3);
+                            initializeOptimizer(opt, state_start, ss_eta);
                             
                             // Prepare data for costfunction
                             const vec state_end = state_space.row(col).t();
@@ -4190,15 +3759,7 @@ void IMDP::transitionMatrixBounds(){
                             const vec input = input_space.row(k).t();
                             const vec state_start = state_space.row(i).t();
                             nlopt::opt opt(algo, state_start.size());
-                            vector<double> lb(state_start.size());
-                            vector<double> ub(state_start.size());
-                            for (size_t m = 0; m < state_start.size(); ++m) {
-                                lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                                ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                            }
-                            opt.set_lower_bounds(lb);
-                            opt.set_upper_bounds(ub);
-                            opt.set_xtol_rel(1e-3);
+                            initializeOptimizer(opt, state_start, ss_eta);
                             
                             // Prepare data for costfunction
                             const vec state_end = state_space.row(col).t();
@@ -4253,15 +3814,7 @@ void IMDP::transitionMatrixBounds(){
                             const vec input = input_space.row(k).t();
                             const vec state_start = state_space.row(i).t();
                             nlopt::opt opt(algo, state_start.size());
-                            vector<double> lb(state_start.size());
-                            vector<double> ub(state_start.size());
-                            for (size_t m = 0; m < state_start.size(); ++m) {
-                                lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                                ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                            }
-                            opt.set_lower_bounds(lb);
-                            opt.set_upper_bounds(ub);
-                            opt.set_xtol_rel(1e-3);
+                            initializeOptimizer(opt, state_start, ss_eta);
                             
                             // Prepare data for costfunction
                             const vec state_end = state_space.row(col).t();
@@ -4320,15 +3873,7 @@ void IMDP::transitionMatrixBounds(){
                             const vec input = input_space.row(k).t();
                             const vec state_start = state_space.row(i).t();
                             nlopt::opt opt(algo, state_start.size());
-                            vector<double> lb(state_start.size());
-                            vector<double> ub(state_start.size());
-                            for (size_t m = 0; m < state_start.size(); ++m) {
-                                lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                                ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                            }
-                            opt.set_lower_bounds(lb);
-                            opt.set_upper_bounds(ub);
-                            opt.set_xtol_rel(1e-3);
+                            initializeOptimizer(opt, state_start, ss_eta);
                             
                             // Prepare data for costfunction
                             const vec state_end = state_space.row(col).t();
@@ -4395,15 +3940,7 @@ void IMDP::targetTransitionVectorBounds(){
                             size_t i = index % state_space_size;
                             const vec state_start = state_space.row(i).t();
                             nlopt::opt opt(algo, state_start.n_rows);
-                            vector<double> lb(dim_x);
-                            vector<double> ub(dim_x);
-                            for (size_t m = 0; m < dim_x; ++m) {
-                                lb[m] = state_start(m) - ss_eta(m) / 2.0;
-                                ub[m] = state_start(m) + ss_eta(m) / 2.0;
-                            }
-                            opt.set_lower_bounds(lb);
-                            opt.set_upper_bounds(ub);
-                            opt.set_xtol_rel(1e-3);
+                            initializeOptimizer(opt, state_start, ss_eta);
                             
                             double cdf_sum = 0.0;
                             for (size_t j = 0; j < target_space.n_rows; ++j) {
@@ -4451,15 +3988,7 @@ void IMDP::targetTransitionVectorBounds(){
                             size_t i = index % state_space_size;
                             const vec state_start = state_space.row(i).t();
                             nlopt::opt opt(algo, state_start.n_rows);
-                            vector<double> lb(dim_x);
-                            vector<double> ub(dim_x);
-                            for (size_t m = 0; m < dim_x; ++m) {
-                                lb[m] = state_start(m) - ss_eta(m) / 2.0;
-                                ub[m] = state_start(m) + ss_eta(m) / 2.0;
-                            }
-                            opt.set_lower_bounds(lb);
-                            opt.set_upper_bounds(ub);
-                            opt.set_xtol_rel(1e-3);
+                            initializeOptimizer(opt, state_start, ss_eta);
                             double cdf_sum = 0.0;
                             for (size_t j = 0; j < target_space.n_rows; ++j) {
                                 // Prepare data for costfunction
@@ -4510,15 +4039,7 @@ void IMDP::targetTransitionVectorBounds(){
                             size_t i = index % state_space_size;
                             const vec state_start = state_space.row(i).t();
                             nlopt::opt opt(algo, state_start.n_rows);
-                            vector<double> lb(dim_x);
-                            vector<double> ub(dim_x);
-                            for (size_t m = 0; m < dim_x; ++m) {
-                                lb[m] = state_start(m) - ss_eta(m) / 2.0;
-                                ub[m] = state_start(m) + ss_eta(m) / 2.0;
-                            }
-                            opt.set_lower_bounds(lb);
-                            opt.set_upper_bounds(ub);
-                            opt.set_xtol_rel(1e-3);
+                            initializeOptimizer(opt, state_start, ss_eta);
                             double cdf_sum = 0.0;
                             for (size_t j = 0; j < target_space.n_rows; ++j) {
                                 // Prepare data for costfunction
@@ -4580,15 +4101,7 @@ void IMDP::targetTransitionVectorBounds(){
                             const vec input = input_space.row(k).t();
                             const vec state_start = state_space.row(i).t();
                             nlopt::opt opt(algo, state_start.n_rows);
-                            vector<double> lb(dim_x);
-                            vector<double> ub(dim_x);
-                            for (size_t m = 0; m < dim_x; ++m) {
-                                lb[m] = state_start(m) - ss_eta(m) / 2.0;
-                                ub[m] = state_start(m) + ss_eta(m) / 2.0;
-                            }
-                            opt.set_lower_bounds(lb);
-                            opt.set_upper_bounds(ub);
-                            opt.set_xtol_rel(1e-3);
+                            initializeOptimizer(opt, state_start, ss_eta);
                             double cdf_sum = 0.0;
                             for (size_t j = 0; j < target_space.n_rows; ++j) {
                                 // Prepare data for costfunction
@@ -4638,15 +4151,7 @@ void IMDP::targetTransitionVectorBounds(){
                             const vec input = input_space.row(k).t();
                             const vec state_start = state_space.row(i).t();
                             nlopt::opt opt(algo, state_start.n_rows);
-                            vector<double> lb(dim_x);
-                            vector<double> ub(dim_x);
-                            for (size_t m = 0; m < dim_x; ++m) {
-                                lb[m] = state_start(m) - ss_eta(m) / 2.0;
-                                ub[m] = state_start(m) + ss_eta(m) / 2.0;
-                            }
-                            opt.set_lower_bounds(lb);
-                            opt.set_upper_bounds(ub);
-                            opt.set_xtol_rel(1e-3);
+                            initializeOptimizer(opt, state_start, ss_eta);
                             double cdf_sum = 0.0;
                             for (size_t j = 0; j < target_space.n_rows; ++j) {
                                 // Prepare data for costfunction
@@ -4699,15 +4204,7 @@ void IMDP::targetTransitionVectorBounds(){
                             const vec input = input_space.row(k).t();
                             const vec state_start = state_space.row(i).t();
                             nlopt::opt opt(algo, state_start.n_rows);
-                            vector<double> lb(dim_x);
-                            vector<double> ub(dim_x);
-                            for (size_t m = 0; m < dim_x; ++m) {
-                                lb[m] = state_start(m) - ss_eta(m) / 2.0;
-                                ub[m] = state_start(m) + ss_eta(m) / 2.0;
-                            }
-                            opt.set_lower_bounds(lb);
-                            opt.set_upper_bounds(ub);
-                            opt.set_xtol_rel(1e-3);
+                            initializeOptimizer(opt, state_start, ss_eta);
                             double cdf_sum = 0.0;
                             for (size_t j = 0; j < target_space.n_rows; ++j) {
                                 // Prepare data for costfunction
@@ -4772,15 +4269,7 @@ void IMDP::targetTransitionVectorBounds(){
                             const vec disturb = disturb_space.row(k).t();
                             const vec state_start = state_space.row(i).t();
                             nlopt::opt opt(algo, state_start.n_rows);
-                            vector<double> lb(dim_x);
-                            vector<double> ub(dim_x);
-                            for (size_t m = 0; m < dim_x; ++m) {
-                                lb[m] = state_start(m) - ss_eta(m) / 2.0;
-                                ub[m] = state_start(m) + ss_eta(m) / 2.0;
-                            }
-                            opt.set_lower_bounds(lb);
-                            opt.set_upper_bounds(ub);
-                            opt.set_xtol_rel(1e-3);
+                            initializeOptimizer(opt, state_start, ss_eta);
                             double cdf_sum = 0.0;
                             for (size_t j = 0; j < target_space.n_rows; ++j) {
                                 // Prepare data for costfunction
@@ -4830,15 +4319,7 @@ void IMDP::targetTransitionVectorBounds(){
                             const vec disturb = disturb_space.row(k).t();
                             const vec state_start = state_space.row(i).t();
                             nlopt::opt opt(algo, state_start.n_rows);
-                            vector<double> lb(dim_x);
-                            vector<double> ub(dim_x);
-                            for (size_t m = 0; m < dim_x; ++m) {
-                                lb[m] = state_start(m) - ss_eta(m) / 2.0;
-                                ub[m] = state_start(m) + ss_eta(m) / 2.0;
-                            }
-                            opt.set_lower_bounds(lb);
-                            opt.set_upper_bounds(ub);
-                            opt.set_xtol_rel(1e-3);
+                            initializeOptimizer(opt, state_start, ss_eta);
                             
                             double cdf_sum = 0.0;
                             for (size_t j = 0; j < target_space.n_rows; ++j) {
@@ -4893,15 +4374,7 @@ void IMDP::targetTransitionVectorBounds(){
                             const vec disturb = disturb_space.row(k).t();
                             const vec state_start = state_space.row(i).t();
                             nlopt::opt opt(algo, state_start.n_rows);
-                            vector<double> lb(dim_x);
-                            vector<double> ub(dim_x);
-                            for (size_t m = 0; m < dim_x; ++m) {
-                                lb[m] = state_start(m) - ss_eta(m) / 2.0;
-                                ub[m] = state_start(m) + ss_eta(m) / 2.0;
-                            }
-                            opt.set_lower_bounds(lb);
-                            opt.set_upper_bounds(ub);
-                            opt.set_xtol_rel(1e-3);
+                            initializeOptimizer(opt, state_start, ss_eta);
                             
                             double cdf_sum = 0.0;
                             for (size_t j = 0; j < target_space.n_rows; ++j) {
@@ -4967,15 +4440,7 @@ void IMDP::targetTransitionVectorBounds(){
                             const vec input = input_space.row(k).t();
                             const vec state_start = state_space.row(i).t();
                             nlopt::opt opt(algo, state_start.n_rows);
-                            vector<double> lb(dim_x);
-                            vector<double> ub(dim_x);
-                            for (size_t m = 0; m < dim_x; ++m) {
-                                lb[m] = state_start(m) - ss_eta(m) / 2.0;
-                                ub[m] = state_start(m) + ss_eta(m) / 2.0;
-                            }
-                            opt.set_lower_bounds(lb);
-                            opt.set_upper_bounds(ub);
-                            opt.set_xtol_rel(1e-3);
+                            initializeOptimizer(opt, state_start, ss_eta);
                             double cdf_sum = 0.0;
                             for (size_t j = 0; j < target_space.n_rows; ++j) {
                                 // Prepare data for costfunction
@@ -5028,15 +4493,7 @@ void IMDP::targetTransitionVectorBounds(){
                             const vec input = input_space.row(k).t();
                             const vec state_start = state_space.row(i).t();
                             nlopt::opt opt(algo, state_start.n_rows);
-                            vector<double> lb(dim_x);
-                            vector<double> ub(dim_x);
-                            for (size_t m = 0; m < dim_x; ++m) {
-                                lb[m] = state_start(m) - ss_eta(m) / 2.0;
-                                ub[m] = state_start(m) + ss_eta(m) / 2.0;
-                            }
-                            opt.set_lower_bounds(lb);
-                            opt.set_upper_bounds(ub);
-                            opt.set_xtol_rel(1e-3);
+                            initializeOptimizer(opt, state_start, ss_eta);
                             double cdf_sum = 0.0;
                             for (size_t j = 0; j < target_space.n_rows; ++j) {
                                 // Prepare data for costfunction
@@ -5094,15 +4551,7 @@ void IMDP::targetTransitionVectorBounds(){
                             const vec input = input_space.row(k).t();
                             const vec state_start = state_space.row(i).t();
                             nlopt::opt opt(algo, state_start.n_rows);
-                            vector<double> lb(dim_x);
-                            vector<double> ub(dim_x);
-                            for (size_t m = 0; m < dim_x; ++m) {
-                                lb[m] = state_start(m) - ss_eta(m) / 2.0;
-                                ub[m] = state_start(m) + ss_eta(m) / 2.0;
-                            }
-                            opt.set_lower_bounds(lb);
-                            opt.set_upper_bounds(ub);
-                            opt.set_xtol_rel(1e-3);
+                            initializeOptimizer(opt, state_start, ss_eta);
                             double cdf_sum = 0.0;
                             for (size_t j = 0; j < target_space.n_rows; ++j) {
                                 // Prepare data for costfunction
