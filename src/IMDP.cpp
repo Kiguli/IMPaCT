@@ -1249,10 +1249,717 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
             cout << "Unsupported noise combination." << endl;
         }
     }
-    // Note: Cases for input_space_size == 0 and full 3D (disturb + input) would go here
-    // They follow the same pattern as above but with different indexing
-    // For brevity, keeping the original minAvoidTransitionVector and maxAvoidTransitionVector
-    // for these less common cases
+    else if (input_space_size == 0){
+        // Case 3: Verification with disturbance (no inputs)
+        const size_t total_states = state_space_size * disturb_space_size;
+        cout << "Calculate transition to outside state space: " << total_states << " x " << 1 << endl;
+        output.set_size(total_states);
+        mat temp;
+        if (avoid_space.n_rows > 0){
+            temp.set_size(total_states, avoid_space.n_rows);
+        }
+        if (noise == NoiseType::NORMAL && diagonal == true){
+            cout << "Parallel run for Normal-diagonal AvoidTransitionVector... " << endl;
+            sycl::queue queue;
+            {
+                sycl::buffer<double> cdfBuffer(output.memptr(),output.n_rows);
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    cgh.parallel_for<class SetMatrix>(sycl::range<1>(total_states), [=](sycl::item<1> item) {
+                        size_t index = item.get_id(0);
+                        size_t k = (index / state_space_size) % disturb_space_size;
+                        size_t i = index % state_space_size;
+                        const vec disturb = disturb_space.row(k).t();
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+
+                        costFunctionDataNormalFull data;
+                        data.state_start = state_start;
+                        data.second = disturb;
+                        data.lb = ss_lb;
+                        data.ub = ss_ub;
+                        data.eta = ss_eta;
+                        data.sigma = sigma;
+                        data.dynamics2 = dynamics2;
+                        data.is_diagonal = diagonal;
+                        if (is_min) {
+                            opt.set_max_objective(costFunctionNormalFull, &data);
+                        } else {
+                            opt.set_min_objective(costFunctionNormalFull, &data);
+                        }
+                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        double ans = 1.0 - minf;
+                        cdfAccessor[index] = ans;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            if(avoid_space.n_rows > 0){
+                sycl::queue queue2;
+                {
+                    sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
+                    queue2.submit([&](sycl::handler& cgh) {
+                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                        sycl::range<2> global(total_states, avoid_space.n_rows);
+                        cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                            const size_t x0 = idx[0];
+                            const size_t x1 = idx[1];
+                            size_t index = x0 * avoid_space.n_rows + x1;
+                            size_t row = index%total_states;
+                            size_t col = index/total_states;
+                            size_t k = (row / state_space_size) % disturb_space_size;
+                            size_t i = row % state_space_size;
+                            const vec disturb = disturb_space.row(k).t();
+                            const vec state_start = state_space.row(i).t();
+                            nlopt::opt opt(algo, state_start.size());
+                            vector<double> lb(state_start.size());
+                            vector<double> ub(state_start.size());
+                            for (size_t m = 0; m < state_start.size(); ++m) {
+                                lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                                ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                            }
+                            opt.set_lower_bounds(lb);
+                            opt.set_upper_bounds(ub);
+                            opt.set_xtol_rel(1e-3);
+
+                            const vec state_end = avoid_space.row(col).t();
+                            costFunctionDataNormal data;
+                            data.state_end = state_end;
+                            data.second = disturb;
+                            data.eta = ss_eta;
+                            data.sigma = sigma;
+                            data.dynamics2 = dynamics2;
+                            data.is_diagonal = diagonal;
+                            if (is_min) {
+                                opt.set_min_objective(costFunctionNormal, &data);
+                            } else {
+                                opt.set_max_objective(costFunctionNormal, &data);
+                            }
+                            vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
+                            double minf;
+                            try {
+                                nlopt::result result = opt.optimize(initial_guess, minf);
+                            } catch (exception& e) {
+                                cout << "nlopt failed: " << e.what() << endl;
+                            }
+                            cdfAccessor[index] = minf;
+                        });
+                    });
+                }
+                queue2.wait_and_throw();
+                output = output + sum(temp,1);
+            }
+            cout << " Complete." << endl;
+        }
+        else if (noise == NoiseType::NORMAL && diagonal == false){
+            cout << "Parallel run for Normal-offdiagonal AvoidTransitionVector... " << endl;
+            sycl::queue queue;
+            {
+                sycl::buffer<double> cdfBuffer(output.memptr(),output.n_rows);
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    cgh.parallel_for<class SetMatrix>(sycl::range<1>(total_states), [=](sycl::item<1> item) {
+                        size_t index = item.get_id(0);
+                        size_t k = (index / state_space_size) % disturb_space_size;
+                        size_t i = index % state_space_size;
+                        const vec disturb = disturb_space.row(k).t();
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+
+                        costFunctionDataNormalFull data;
+                        data.dim = dim_x;
+                        data.state_start = state_start;
+                        data.second = disturb;
+                        data.lb = ss_lb;
+                        data.ub = ss_ub;
+                        data.eta = ss_eta;
+                        data.inv_cov = inv_covariance_matrix;
+                        data.det = covariance_matrix_determinant;
+                        data.dynamics2 = dynamics2;
+                        data.is_diagonal = diagonal;
+                        data.samples = calls;
+                        if (is_min) {
+                            opt.set_max_objective(costFunctionNormalFull, &data);
+                        } else {
+                            opt.set_min_objective(costFunctionNormalFull, &data);
+                        }
+                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        double ans = 1.0 - minf;
+                        cdfAccessor[index] = ans;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            if(avoid_space.n_rows > 0){
+                sycl::queue queue2;
+                {
+                    sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
+                    queue2.submit([&](sycl::handler& cgh) {
+                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                        sycl::range<2> global(total_states, avoid_space.n_rows);
+                        cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                            const size_t x0 = idx[0];
+                            const size_t x1 = idx[1];
+                            size_t index = x0 * avoid_space.n_rows + x1;
+                            size_t row = index%total_states;
+                            size_t col = index/total_states;
+                            size_t k = (row / state_space_size) % disturb_space_size;
+                            size_t i = row % state_space_size;
+                            const vec disturb = disturb_space.row(k).t();
+                            const vec state_start = state_space.row(i).t();
+                            nlopt::opt opt(algo, state_start.size());
+                            vector<double> lb(state_start.size());
+                            vector<double> ub(state_start.size());
+                            for (size_t m = 0; m < state_start.size(); ++m) {
+                                lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                                ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                            }
+                            opt.set_lower_bounds(lb);
+                            opt.set_upper_bounds(ub);
+                            opt.set_xtol_rel(1e-3);
+
+                            const vec state_end = avoid_space.row(col).t();
+                            costFunctionDataNormal data;
+                            data.dim = dim_x;
+                            data.state_end = state_end;
+                            data.second = disturb;
+                            data.eta = ss_eta;
+                            data.inv_cov = inv_covariance_matrix;
+                            data.det = covariance_matrix_determinant;
+                            data.dynamics2 = dynamics2;
+                            data.is_diagonal = diagonal;
+                            data.samples = calls;
+                            if (is_min) {
+                                opt.set_min_objective(costFunctionNormal, &data);
+                            } else {
+                                opt.set_max_objective(costFunctionNormal, &data);
+                            }
+                            vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
+                            double minf;
+                            try {
+                                nlopt::result result = opt.optimize(initial_guess, minf);
+                            } catch (exception& e) {
+                                cout << "nlopt failed: " << e.what() << endl;
+                            }
+                            cdfAccessor[index] = minf;
+                        });
+                    });
+                }
+                queue2.wait_and_throw();
+                output = output + sum(temp,1);
+            }
+            cout << " Complete." << endl;
+        }
+        else if (noise == NoiseType::CUSTOM){
+            cout << "Parallel run for Custom AvoidTransitionVector... " << endl;
+            sycl::queue queue;
+            {
+                sycl::buffer<double> cdfBuffer(output.memptr(),output.n_rows);
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    cgh.parallel_for<class SetMatrix>(sycl::range<1>(total_states), [=](sycl::item<1> item) {
+                        size_t index = item.get_id(0);
+                        size_t k = (index / state_space_size) % disturb_space_size;
+                        size_t i = index % state_space_size;
+                        const vec disturb = disturb_space.row(k).t();
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+
+                        costcustom2Full data;
+                        data.dim = dim_x;
+                        data.state_start = state_start;
+                        data.second = disturb;
+                        data.lb = ss_lb;
+                        data.ub = ss_ub;
+                        data.eta = ss_eta;
+                        data.dynamics = dynamics2;
+                        data.customPDF = customPDF;
+                        data.samples = calls;
+                        if (is_min) {
+                            opt.set_max_objective(custom2Full, &data);
+                        } else {
+                            opt.set_min_objective(custom2Full, &data);
+                        }
+                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        double ans = 1.0 - minf;
+                        cdfAccessor[index] = ans;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            if(avoid_space.n_rows > 0){
+                sycl::queue queue2;
+                {
+                    sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
+                    queue2.submit([&](sycl::handler& cgh) {
+                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                        sycl::range<2> global(total_states, avoid_space.n_rows);
+                        cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                            const size_t x0 = idx[0];
+                            const size_t x1 = idx[1];
+                            size_t index = x0 * avoid_space.n_rows + x1;
+                            size_t row = index%total_states;
+                            size_t col = index/total_states;
+                            size_t k = (row / state_space_size) % disturb_space_size;
+                            size_t i = row % state_space_size;
+                            const vec disturb = disturb_space.row(k).t();
+                            const vec state_start = state_space.row(i).t();
+                            nlopt::opt opt(algo, state_start.size());
+                            vector<double> lb(state_start.size());
+                            vector<double> ub(state_start.size());
+                            for (size_t m = 0; m < state_start.size(); ++m) {
+                                lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                                ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                            }
+                            opt.set_lower_bounds(lb);
+                            opt.set_upper_bounds(ub);
+                            opt.set_xtol_rel(1e-3);
+
+                            const vec state_end = avoid_space.row(col).t();
+                            costcustom2 data;
+                            data.dim = dim_x;
+                            data.state_start = state_start;
+                            data.state_end = state_end;
+                            data.second = disturb;
+                            data.eta = ss_eta;
+                            data.dynamics = dynamics2;
+                            data.customPDF = customPDF;
+                            data.samples = calls;
+                            data.input_space_size = input_space_size;
+                            if (is_min) {
+                                opt.set_min_objective(custom2, &data);
+                            } else {
+                                opt.set_max_objective(custom2, &data);
+                            }
+                            vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
+                            double minf;
+                            try {
+                                nlopt::result result = opt.optimize(initial_guess, minf);
+                            } catch (exception& e) {
+                                cout << "nlopt failed: " << e.what() << endl;
+                            }
+                            cdfAccessor[index] = minf;
+                        });
+                    });
+                }
+                queue2.wait_and_throw();
+                output = output + sum(temp,1);
+            }
+            cout << " Complete." << endl;
+        }
+        else{
+            cout << "Unsupported noise combination." << endl;
+        }
+    }
+    else{
+        // Case 4: Full IMDP with both inputs and disturbances
+        const size_t total_states = state_space_size * input_space_size * disturb_space_size;
+        cout << "Calculate transition to outside state space: " << total_states << " x " << 1 << endl;
+        output.set_size(total_states);
+        mat temp;
+        if (avoid_space.n_rows > 0){
+            temp.set_size(total_states, avoid_space.n_rows);
+        }
+        if (noise == NoiseType::NORMAL && diagonal == true){
+            cout << "Parallel run for Normal-diagonal AvoidTransitionVector... " << endl;
+            sycl::queue queue;
+            {
+                sycl::buffer<double> cdfBuffer(output.memptr(),output.n_rows);
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    cgh.parallel_for<class SetMatrix>(sycl::range<1>(total_states), [=](sycl::item<1> item) {
+                        size_t index = item.get_id(0);
+                        size_t l = index / (input_space_size * state_space_size);
+                        size_t k = (index / state_space_size) % input_space_size;
+                        size_t i = index % state_space_size;
+                        const vec disturb = disturb_space.row(l).t();
+                        const vec input = input_space.row(k).t();
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+
+                        costFunctionDataNormalFull data;
+                        data.state_start = state_start;
+                        data.input = input;
+                        data.disturb = disturb;
+                        data.lb = ss_lb;
+                        data.ub = ss_ub;
+                        data.eta = ss_eta;
+                        data.sigma = sigma;
+                        data.dynamics3 = dynamics3;
+                        data.is_diagonal = diagonal;
+                        if (is_min) {
+                            opt.set_max_objective(costFunctionNormalFull, &data);
+                        } else {
+                            opt.set_min_objective(costFunctionNormalFull, &data);
+                        }
+                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        double ans = 1.0 - minf;
+                        cdfAccessor[index] = ans;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            if(avoid_space.n_rows > 0){
+                sycl::queue queue2;
+                {
+                    sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
+                    queue2.submit([&](sycl::handler& cgh) {
+                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                        sycl::range<2> global(total_states, avoid_space.n_rows);
+                        cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                            const size_t x0 = idx[0];
+                            const size_t x1 = idx[1];
+                            size_t index = x0 * avoid_space.n_rows + x1;
+                            size_t row = index%total_states;
+                            size_t col = index/total_states;
+                            size_t l = row / (input_space_size * state_space_size);
+                            size_t k = (row / state_space_size) % input_space_size;
+                            size_t i = row % state_space_size;
+                            const vec disturb = disturb_space.row(l).t();
+                            const vec input = input_space.row(k).t();
+                            const vec state_start = state_space.row(i).t();
+                            nlopt::opt opt(algo, state_start.size());
+                            vector<double> lb(state_start.size());
+                            vector<double> ub(state_start.size());
+                            for (size_t m = 0; m < state_start.size(); ++m) {
+                                lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                                ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                            }
+                            opt.set_lower_bounds(lb);
+                            opt.set_upper_bounds(ub);
+                            opt.set_xtol_rel(1e-3);
+
+                            const vec state_end = avoid_space.row(col).t();
+                            costFunctionDataNormal data;
+                            data.state_end = state_end;
+                            data.input = input;
+                            data.disturb = disturb;
+                            data.eta = ss_eta;
+                            data.sigma = sigma;
+                            data.dynamics3 = dynamics3;
+                            data.is_diagonal = diagonal;
+                            if (is_min) {
+                                opt.set_min_objective(costFunctionNormal, &data);
+                            } else {
+                                opt.set_max_objective(costFunctionNormal, &data);
+                            }
+                            vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
+                            double minf;
+                            try {
+                                nlopt::result result = opt.optimize(initial_guess, minf);
+                            } catch (exception& e) {
+                                cout << "nlopt failed: " << e.what() << endl;
+                            }
+                            cdfAccessor[index] = minf;
+                        });
+                    });
+                }
+                queue2.wait_and_throw();
+                output = output + sum(temp,1);
+            }
+            cout << " Complete." << endl;
+        }
+        else if (noise == NoiseType::NORMAL && diagonal == false){
+            cout << "Parallel run for Normal-offdiagonal AvoidTransitionVector... " << endl;
+            sycl::queue queue;
+            {
+                sycl::buffer<double> cdfBuffer(output.memptr(),output.n_rows);
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    cgh.parallel_for<class SetMatrix>(sycl::range<1>(total_states), [=](sycl::item<1> item) {
+                        size_t index = item.get_id(0);
+                        size_t l = index / (input_space_size * state_space_size);
+                        size_t k = (index / state_space_size) % input_space_size;
+                        size_t i = index % state_space_size;
+                        const vec disturb = disturb_space.row(l).t();
+                        const vec input = input_space.row(k).t();
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+
+                        costFunctionDataNormalFull data;
+                        data.dim = dim_x;
+                        data.state_start = state_start;
+                        data.input = input;
+                        data.disturb = disturb;
+                        data.lb = ss_lb;
+                        data.ub = ss_ub;
+                        data.eta = ss_eta;
+                        data.inv_cov = inv_covariance_matrix;
+                        data.det = covariance_matrix_determinant;
+                        data.dynamics3 = dynamics3;
+                        data.is_diagonal = diagonal;
+                        data.samples = calls;
+                        if (is_min) {
+                            opt.set_max_objective(costFunctionNormalFull, &data);
+                        } else {
+                            opt.set_min_objective(costFunctionNormalFull, &data);
+                        }
+                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        double ans = 1.0 - minf;
+                        cdfAccessor[index] = ans;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            if(avoid_space.n_rows > 0){
+                sycl::queue queue2;
+                {
+                    sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
+                    queue2.submit([&](sycl::handler& cgh) {
+                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                        sycl::range<2> global(total_states, avoid_space.n_rows);
+                        cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                            const size_t x0 = idx[0];
+                            const size_t x1 = idx[1];
+                            size_t index = x0 * avoid_space.n_rows + x1;
+                            size_t row = index%total_states;
+                            size_t col = index/total_states;
+                            size_t l = row / (input_space_size * state_space_size);
+                            size_t k = (row / state_space_size) % input_space_size;
+                            size_t i = row % state_space_size;
+                            const vec disturb = disturb_space.row(l).t();
+                            const vec input = input_space.row(k).t();
+                            const vec state_start = state_space.row(i).t();
+                            nlopt::opt opt(algo, state_start.size());
+                            vector<double> lb(state_start.size());
+                            vector<double> ub(state_start.size());
+                            for (size_t m = 0; m < state_start.size(); ++m) {
+                                lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                                ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                            }
+                            opt.set_lower_bounds(lb);
+                            opt.set_upper_bounds(ub);
+                            opt.set_xtol_rel(1e-3);
+
+                            const vec state_end = avoid_space.row(col).t();
+                            costFunctionDataNormal data;
+                            data.dim = dim_x;
+                            data.state_end = state_end;
+                            data.input = input;
+                            data.disturb = disturb;
+                            data.eta = ss_eta;
+                            data.inv_cov = inv_covariance_matrix;
+                            data.det = covariance_matrix_determinant;
+                            data.dynamics3 = dynamics3;
+                            data.is_diagonal = diagonal;
+                            data.samples = calls;
+                            if (is_min) {
+                                opt.set_min_objective(costFunctionNormal, &data);
+                            } else {
+                                opt.set_max_objective(costFunctionNormal, &data);
+                            }
+                            vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
+                            double minf;
+                            try {
+                                nlopt::result result = opt.optimize(initial_guess, minf);
+                            } catch (exception& e) {
+                                cout << "nlopt failed: " << e.what() << endl;
+                            }
+                            cdfAccessor[index] = minf;
+                        });
+                    });
+                }
+                queue2.wait_and_throw();
+                output = output + sum(temp,1);
+            }
+            cout << " Complete." << endl;
+        }
+        else if (noise == NoiseType::CUSTOM){
+            cout << "Parallel run for Custom AvoidTransitionVector... " << endl;
+            sycl::queue queue;
+            {
+                sycl::buffer<double> cdfBuffer(output.memptr(),output.n_rows);
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    cgh.parallel_for<class SetMatrix>(sycl::range<1>(total_states), [=](sycl::item<1> item) {
+                        size_t index = item.get_id(0);
+                        size_t l = index / (input_space_size * state_space_size);
+                        size_t k = (index / state_space_size) % input_space_size;
+                        size_t i = index % state_space_size;
+                        const vec disturb = disturb_space.row(l).t();
+                        const vec input = input_space.row(k).t();
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+
+                        costcustom3Full data;
+                        data.dim = dim_x;
+                        data.state_start = state_start;
+                        data.input = input;
+                        data.disturb = disturb;
+                        data.lb = ss_lb;
+                        data.ub = ss_ub;
+                        data.eta = ss_eta;
+                        data.dynamics = dynamics3;
+                        data.customPDF = customPDF;
+                        data.samples = calls;
+                        if (is_min) {
+                            opt.set_max_objective(custom3Full, &data);
+                        } else {
+                            opt.set_min_objective(custom3Full, &data);
+                        }
+                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        double ans = 1.0 - minf;
+                        cdfAccessor[index] = ans;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            if(avoid_space.n_rows > 0){
+                sycl::queue queue2;
+                {
+                    sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
+                    queue2.submit([&](sycl::handler& cgh) {
+                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                        sycl::range<2> global(total_states, avoid_space.n_rows);
+                        cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                            const size_t x0 = idx[0];
+                            const size_t x1 = idx[1];
+                            size_t index = x0 * avoid_space.n_rows + x1;
+                            size_t row = index%total_states;
+                            size_t col = index/total_states;
+                            size_t l = row / (input_space_size * state_space_size);
+                            size_t k = (row / state_space_size) % input_space_size;
+                            size_t i = row % state_space_size;
+                            const vec disturb = disturb_space.row(l).t();
+                            const vec input = input_space.row(k).t();
+                            const vec state_start = state_space.row(i).t();
+                            nlopt::opt opt(algo, state_start.size());
+                            vector<double> lb(state_start.size());
+                            vector<double> ub(state_start.size());
+                            for (size_t m = 0; m < state_start.size(); ++m) {
+                                lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                                ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                            }
+                            opt.set_lower_bounds(lb);
+                            opt.set_upper_bounds(ub);
+                            opt.set_xtol_rel(1e-3);
+
+                            const vec state_end = avoid_space.row(col).t();
+                            costcustom3 data;
+                            data.dim = dim_x;
+                            data.state_start = state_start;
+                            data.state_end = state_end;
+                            data.input = input;
+                            data.disturb = disturb;
+                            data.eta = ss_eta;
+                            data.dynamics = dynamics3;
+                            data.customPDF = customPDF;
+                            data.samples = calls;
+                            if (is_min) {
+                                opt.set_min_objective(custom3, &data);
+                            } else {
+                                opt.set_max_objective(custom3, &data);
+                            }
+                            vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
+                            double minf;
+                            try {
+                                nlopt::result result = opt.optimize(initial_guess, minf);
+                            } catch (exception& e) {
+                                cout << "nlopt failed: " << e.what() << endl;
+                            }
+                            cdfAccessor[index] = minf;
+                        });
+                    });
+                }
+                queue2.wait_and_throw();
+                output = output + sum(temp,1);
+            }
+            cout << " Complete." << endl;
+        }
+        else{
+            cout << "Unsupported noise combination." << endl;
+        }
+    }
     auto end = chrono::steady_clock::now();
     auto duration = chrono::duration_cast<chrono::milliseconds>(end - start);
     cout << "Execution time: " << duration.count()/1000.0 << " seconds" << endl;
