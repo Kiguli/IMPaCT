@@ -4,6 +4,9 @@
 #include <armadillo>
 #include <string>
 #include <iostream>
+#include <vector>
+#include <algorithm>
+#include <utility>
 
 using namespace arma;
 using namespace std;
@@ -49,6 +52,42 @@ namespace IMPaCT_IO {
         if (!ok) {
             cout << "Issue loading " << data_name << "!" << endl;
         }
+    }
+
+    /**
+     * Sort values and return sorted indices
+     *
+     * Creates a vector of indices that would sort the input values.
+     * Used by GPU_synthesis.cpp sorted synthesis functions.
+     *
+     * @param values The Armadillo vector of values to sort
+     * @param ascending True for ascending order, false for descending
+     * @return Vector of indices in sorted order
+     */
+    inline std::vector<int> getSortedIndices(const vec& values, bool ascending = true) {
+        std::vector<double> vals = conv_to<std::vector<double>>::from(values);
+        std::vector<std::pair<int, double>> indexed;
+        indexed.reserve(vals.size());
+        for (size_t i = 0; i < vals.size(); ++i) {
+            indexed.emplace_back(static_cast<int>(i), vals[i]);
+        }
+        if (ascending) {
+            std::sort(indexed.begin(), indexed.end(),
+                [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
+                    return a.second < b.second;
+                });
+        } else {
+            std::sort(indexed.begin(), indexed.end(),
+                [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
+                    return a.second > b.second;
+                });
+        }
+        std::vector<int> indices;
+        indices.reserve(indexed.size());
+        for (const auto& p : indexed) {
+            indices.push_back(p.first);
+        }
+        return indices;
     }
 
 } // namespace IMPaCT_IO

@@ -38,11 +38,11 @@ int main() {
     mdp.loadMinTransitionMatrix("mintm.h5");
     mdp.loadMaxTransitionMatrix("maxtm.h5");
     
-    /*###### Run over infinite horizon, absorbing state so the two bounds will not converge ######*/
-    mdp.infiniteHorizonSafeController(true);
-    
-    /*###### Take steps given from previous function to get convergent solution ######*/
-    mdp.finiteHorizonSafeController(true,67);
+    /*###### Run over infinite horizon, absorbing state so the two bounds will not converge (Sorted version for GPU) ######*/
+    mdp.infiniteHorizonSafeControllerSorted(true);
+
+    /*###### Take steps given from previous function to get convergent solution (Sorted version for GPU) ######*/
+    mdp.finiteHorizonSafeControllerSorted(true,67);
     
     /*###### Save the controller ######*/
     mdp.saveController();

@@ -48,8 +48,8 @@ int main() {
     mdp.loadMinTransitionMatrix("mintm.h5");
     mdp.loadMaxTransitionMatrix("maxtm.h5");
 
-    /* ###### synthesize infinite horizon controller ######*/
-    mdp.infiniteHorizonReachController(true);
+    /* ###### synthesize infinite horizon controller (Sorted version for GPU) ######*/
+    mdp.infiniteHorizonReachControllerSorted(true);
     
     /* ###### save controller ######*/
     mdp.saveController();
