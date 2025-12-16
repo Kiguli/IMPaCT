@@ -41,22 +41,19 @@ protected:
     vec ss_lb;
     vec ss_ub;
     vec ss_eta;
-    ivec ss_idx;
     vec filter;
-    
+
     /// Inputs
     mat input_space;
     vec is_lb;
     vec is_ub;
     vec is_eta;
-    ivec is_idx;
-    
+
     /// Disturbances
     mat disturb_space;
     vec ws_lb;
     vec ws_ub;
     vec ws_eta;
-    ivec ws_idx;
 
     /// MDPs for Transitions
     vec TargetM;
@@ -94,18 +91,22 @@ protected:
     /* Private Functions */
     
 private:
-    ///Function to turn {lb, ub, eta} into a discretized space
-    void get_spaceC(mat& space, ivec& state_idx, const int& dim, const vec& lb, const vec& ub, const vec& eta);
-    void get_spaceU(mat& space, ivec& state_idx, const int& dim, const vec& lb, const vec& ub, const vec& eta);
-    
+    ///Function to turn {lb, ub, eta} into a discretized space (uncentered)
+    void get_spaceU(mat& space, const int& dim, const vec& lb, const vec& ub, const vec& eta);
+
     ///Functions to seperate state_space, target_space and avoid_space
     void separate(mat& base_space, const function<bool(const vec&)>& target_condition, mat& target_set, const function<bool(const vec&)>& avoid_condition, mat& avoid_set);
     void separate(mat& base_space, const function<bool(const vec&)>& separate_condition, mat& separate_set);
-    
+
     ///Functions to filter if not removing states (unlikely to be used).
     void filterTargetAvoid(mat& base_space, const function<bool(const vec&)>& target_condition, const function<bool(const vec&)>& avoid_condition);
     void filterTarget(mat& base_space, const function<bool(const vec&)>& separate_condition);
     void filterAvoid(mat& base_space, const function<bool(const vec&)>& separate_condition);
+
+    ///Helper function for space setters
+    void setSpaceHelper(mat& space, int dim, vec& lb_store, vec& ub_store,
+                        vec& eta_store, size_t& size, const vec& lb, const vec& ub,
+                        const vec& eta, const string& name);
     
     /* Public Functions */
     
