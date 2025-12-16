@@ -29,7 +29,12 @@ protected:
     
     ///Algorithm used for nonlinear optimization
     nlopt::algorithm algo = nlopt::LN_SBPLX;
-    
+
+    // Internal implementation helpers for min/max abstraction
+    void avoidTransitionVectorImpl(vec& output, bool is_min);
+    void transitionMatrixImpl(mat& output, bool is_min);
+    void targetTransitionVectorImpl(vec& output, bool is_min);
+
     /* IMDP Public Functions*/
 public:
     /// Inherit functions from parent
