@@ -15,11 +15,52 @@
 using namespace std;
 using namespace arma;
 
-// NOTE: Save/Load functions have been moved to IO_utils.h
-// See IMDP.cpp for the wrapper implementations using IMPaCT_IO namespace
-
 /// Destructor
 IMDP::~IMDP(){
+}
+
+/// Save/Load functions using IO_utils.h
+void IMDP::saveMinTargetTransitionVector(){
+    IMPaCT_IO::saveData(minTargetM, "minttm.h5", "Min Target Transition Vector");
+}
+void IMDP::loadMinTargetTransitionVector(string filename){
+    IMPaCT_IO::loadData(minTargetM, filename, "minimum target transition Vector");
+}
+void IMDP::saveMinAvoidTransitionVector(){
+    IMPaCT_IO::saveData(minAvoidM, "minatm.h5", "Min Avoid Transition Vector");
+}
+void IMDP::loadMinAvoidTransitionVector(string filename){
+    IMPaCT_IO::loadData(minAvoidM, filename, "minimum avoid transition Vector");
+}
+void IMDP::saveMinTransitionMatrix(){
+    IMPaCT_IO::saveData(minTransitionM, "mintm.h5", "Min Transition Matrix");
+}
+void IMDP::loadMinTransitionMatrix(string filename){
+    IMPaCT_IO::loadData(minTransitionM, filename, "minimum transition matrix");
+}
+void IMDP::saveMaxTargetTransitionVector(){
+    IMPaCT_IO::saveData(maxTargetM, "maxttm.h5", "Max Target Transition Vector");
+}
+void IMDP::loadMaxTargetTransitionVector(string filename){
+    IMPaCT_IO::loadData(maxTargetM, filename, "maximum target transition Vector");
+}
+void IMDP::saveMaxAvoidTransitionVector(){
+    IMPaCT_IO::saveData(maxAvoidM, "maxatm.h5", "Max Avoid Transition Vector");
+}
+void IMDP::loadMaxAvoidTransitionVector(string filename){
+    IMPaCT_IO::loadData(maxAvoidM, filename, "maximum avoid transition Vector");
+}
+void IMDP::saveMaxTransitionMatrix(){
+    IMPaCT_IO::saveData(maxTransitionM, "maxtm.h5", "Max Transition Matrix");
+}
+void IMDP::loadMaxTransitionMatrix(string filename){
+    IMPaCT_IO::loadData(maxTransitionM, filename, "maximum transition matrix");
+}
+void IMDP::saveController(){
+    IMPaCT_IO::saveData(controller, "controller.h5", "Controller");
+}
+void IMDP::loadController(string filename){
+    IMPaCT_IO::loadData(controller, filename, "controller");
 }
 
 /// Sorted Implementation of infinite horizon reachability

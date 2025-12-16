@@ -8,7 +8,6 @@
 #include <AdaptiveCpp/sycl/sycl.hpp>
 #include <chrono>
 #include "IMDP.h"
-#include "IO_utils.h"
 #include <glpk.h>
 #include <gsl/gsl_rng.h>
 #include <gsl/gsl_monte.h>
@@ -28,80 +27,6 @@ using namespace arma;
 /// Set Nonlinear Optimization Algorithm
 void IMDP::setAlgorithm(nlopt::algorithm alg){
     algo = alg;
-}
-
-/*****************************************************************************
- * Save/Load Functions - Refactored to use IO_utils (Phase 1 Refactoring)
- *****************************************************************************/
-
-/// Save minimal target transition vector
-void IMDP::saveMinTargetTransitionVector() {
-    IMPaCT_IO::saveData(minTargetM, "minttm.h5", "Min Target Transition Vector");
-}
-
-/// Load minimal target transition vector
-void IMDP::loadMinTargetTransitionVector(string filename) {
-    IMPaCT_IO::loadData(minTargetM, filename, "minimum target transition Vector");
-}
-
-/// Save minimal avoid transition vector
-void IMDP::saveMinAvoidTransitionVector() {
-    IMPaCT_IO::saveData(minAvoidM, "minatm.h5", "Min Avoid Transition Vector");
-}
-
-/// Load minimal avoid transition vector
-void IMDP::loadMinAvoidTransitionVector(string filename) {
-    IMPaCT_IO::loadData(minAvoidM, filename, "minimum avoid transition Vector");
-}
-
-/// Save minimal transition matrix
-void IMDP::saveMinTransitionMatrix() {
-    IMPaCT_IO::saveData(minTransitionM, "mintm.h5", "Min Transition Matrix");
-}
-
-/// Load minimal transition matrix
-void IMDP::loadMinTransitionMatrix(string filename) {
-    IMPaCT_IO::loadData(minTransitionM, filename, "minimum transition matrix");
-}
-
-/// Save maximal target transition vector
-void IMDP::saveMaxTargetTransitionVector() {
-    IMPaCT_IO::saveData(maxTargetM, "maxttm.h5", "Max Target Transition Vector");
-}
-
-/// Load maximal target transition vector
-void IMDP::loadMaxTargetTransitionVector(string filename) {
-    IMPaCT_IO::loadData(maxTargetM, filename, "maximum target transition Vector");
-}
-
-/// Save maximal avoid transition vector
-void IMDP::saveMaxAvoidTransitionVector() {
-    IMPaCT_IO::saveData(maxAvoidM, "maxatm.h5", "Max Avoid Transition Vector");
-}
-
-/// Load maximal avoid transition vector
-void IMDP::loadMaxAvoidTransitionVector(string filename) {
-    IMPaCT_IO::loadData(maxAvoidM, filename, "maximum avoid transition Vector");
-}
-
-/// Save maximal transition matrix
-void IMDP::saveMaxTransitionMatrix() {
-    IMPaCT_IO::saveData(maxTransitionM, "maxtm.h5", "Max Transition Matrix");
-}
-
-/// Load maximal transition matrix
-void IMDP::loadMaxTransitionMatrix(string filename) {
-    IMPaCT_IO::loadData(maxTransitionM, filename, "maximum transition matrix");
-}
-
-/// Save Controller
-void IMDP::saveController() {
-    IMPaCT_IO::saveData(controller, "controller.h5", "Controller");
-}
-
-/// Load Controller
-void IMDP::loadController(string filename) {
-    IMPaCT_IO::loadData(controller, filename, "controller");
 }
 
 /* Supporter Functions for the Abstractions for Different Distributions */
@@ -633,16 +558,15 @@ double custom3(unsigned n, const double* x, double* grad, void* my_func_data) {
 
 /* Avoid Vector Abstractions */
 
-/// Internal implementation for avoid transition vector computation
-/// @param output The output vector (minAvoidM or maxAvoidM)
-/// @param is_min If true, computes minimum bound; if false, computes maximum bound
-void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
+/// Calculate Abstraction for Minimum Avoid Transition Vector (part 1 - transitions outside state space, part 2 - sum transitions to labelled avoid states)
+void IMDP::minAvoidTransitionVector(){
     auto start = chrono::steady_clock::now();
-    cout << "Calculating " << (is_min ? "minimal" : "maximal") << " avoid transition probability Vector." << endl;
+    cout << "Calculating minimal avoid transition probability Vector." << endl;
     if (disturb_space_size == 0 && input_space_size == 0){
         const size_t total_states = state_space.n_rows;
+        // transitions outside the state space
         cout << "Calculate transition to outside state space: " << total_states << " x " << 1 << endl;
-        output.set_size(total_states);
+        minAvoidM.set_size(total_states);
         mat temp;
         if (avoid_space.n_rows > 0){
             temp.set_size(total_states, avoid_space.n_rows);
@@ -651,10 +575,13 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
             cout << "Parallel run for Normal-diagonal AvoidTransitionVector... " << endl;
             sycl::queue queue;
             {
-                sycl::buffer<double> cdfBuffer(output.memptr(),output.n_rows);
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(minAvoidM.memptr(),minAvoidM.n_rows);
+                
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                 queue.submit([&](sycl::handler& cgh) {
                     auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                    cgh.parallel_for<class AvoidOuterNormalDiag0>(sycl::range<1>(total_states), [=, is_min_local=is_min](sycl::item<1> item) {
+                    cgh.parallel_for<class SetMatrix>(sycl::range<1>(total_states), [=](sycl::item<1> item) {
                         size_t index = item.get_id(0);
                         double cdf_product = 1.0;
                         size_t i = index % state_space_size;
@@ -669,6 +596,8 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
                         opt.set_lower_bounds(lb);
                         opt.set_upper_bounds(ub);
                         opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
                         costFunctionDataNormalFull data;
                         data.state_start = state_start;
                         data.lb = ss_lb;
@@ -677,11 +606,7 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
                         data.sigma = sigma;
                         data.dynamics1 = dynamics1;
                         data.is_diagonal = diagonal;
-                        if (is_min_local) {
-                            opt.set_max_objective(costFunctionNormalFull, &data);
-                        } else {
-                            opt.set_min_objective(costFunctionNormalFull, &data);
-                        }
+                        opt.set_max_objective(costFunctionNormalFull, &data);
                         vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                         double minf;
                         try {
@@ -695,14 +620,17 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
                 });
             }
             queue.wait_and_throw();
+            // add any states labelled avoid states
             if(avoid_space.n_rows > 0){
-                sycl::queue queue2;
+                sycl::queue queue;
                 {
+                    // Create a SYCL buffer to store the space
                     sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
-                    queue2.submit([&](sycl::handler& cgh) {
+                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                    queue.submit([&](sycl::handler& cgh) {
                         auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
                         sycl::range<2> global(total_states, avoid_space.n_rows);
-                        cgh.parallel_for<class AvoidInnerNormalDiag0>(global, [=, is_min_local=is_min](sycl::id<2> idx) {
+                        cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
                             const size_t x0 = idx[0];
                             const size_t x1 = idx[1];
                             size_t index = x0 * avoid_space.n_rows + x1;
@@ -721,6 +649,8 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
                             opt.set_lower_bounds(lb);
                             opt.set_upper_bounds(ub);
                             opt.set_xtol_rel(1e-3);
+                            
+                            // Prepare data for costfunction
                             const vec state_end = avoid_space.row(col).t();
                             costFunctionDataNormal data;
                             data.state_end = state_end;
@@ -728,11 +658,7 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
                             data.sigma = sigma;
                             data.dynamics1 = dynamics1;
                             data.is_diagonal = diagonal;
-                            if (is_min_local) {
-                                opt.set_min_objective(costFunctionNormal, &data);
-                            } else {
-                                opt.set_max_objective(costFunctionNormal, &data);
-                            }
+                            opt.set_min_objective(costFunctionNormal, &data);
                             vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                             double minf;
                             try {
@@ -744,20 +670,236 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
                         });
                     });
                 }
-                queue2.wait_and_throw();
-                output = output + sum(temp,1);
+                queue.wait_and_throw();
+                minAvoidM = minAvoidM + sum(temp,1);
+            }
+            cout << " Complete." << endl;
+        }
+        else if (noise == NoiseType::NORMAL && diagonal == false){
+            cout << "Parallel run for Normal-offdiagonal AvoidTransitionVector... " << endl;
+            sycl::queue queue;
+            {
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(minAvoidM.memptr(),minAvoidM.n_rows);
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<1> global(total_states);
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<1> idx) {
+                        size_t index = idx[0];
+                        double cdf_product = 1.0;
+                        size_t i = index % state_space_size;
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
+                        costFunctionDataNormalFull data;
+                        data.dim = dim_x;
+                        data.state_start = state_start;
+                        data.lb = ss_lb;
+                        data.ub = ss_ub;
+                        data.eta = ss_eta;
+                        data.inv_cov = inv_covariance_matrix;
+                        data.det = covariance_matrix_determinant;
+                        data.dynamics1 = dynamics1;
+                        data.samples = calls;
+                        data.is_diagonal = diagonal;
+                        opt.set_max_objective(costFunctionNormalFull, &data);
+                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        double ans = 1.0 - minf;
+                        cdfAccessor[index] = ans;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            //sum any states labelled avoid states
+            if (avoid_space.n_rows > 0){
+                sycl::queue queue;
+                {
+                    // Create a SYCL buffer to store the space
+                    sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
+                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                    queue.submit([&](sycl::handler& cgh) {
+                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                        sycl::range<2> global(total_states, avoid_space.n_rows);
+                        cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                            const size_t x0 = idx[0];
+                            const size_t x1 = idx[1];
+                            size_t index = x0 * avoid_space.n_rows + x1;
+                            size_t row = index%total_states;
+                            size_t col = index/total_states;
+                            double cdf_product = 1.0;
+                            size_t i = row % state_space_size;
+                            const vec state_start = avoid_space.row(i).t();
+                            nlopt::opt opt(algo, state_start.size());
+                            vector<double> lb(state_start.size());
+                            vector<double> ub(state_start.size());
+                            for (size_t m = 0; m < state_start.size(); ++m) {
+                                lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                                ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                            }
+                            opt.set_lower_bounds(lb);
+                            opt.set_upper_bounds(ub);
+                            opt.set_xtol_rel(1e-3);
+                            
+                            // Prepare data for costfunction
+                            const vec state_end = target_space.row(col).t();
+                            costFunctionDataNormal data;
+                            data.dim = dim_x;
+                            data.state_end = state_end;
+                            data.eta = ss_eta;
+                            data.inv_cov = inv_covariance_matrix;
+                            data.det = covariance_matrix_determinant;
+                            data.dynamics1 = dynamics1;
+                            data.is_diagonal = diagonal;
+                            data.samples = calls;
+                            opt.set_min_objective(costFunctionNormal, &data);
+                            vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
+                            double minf;
+                            try {
+                                nlopt::result result = opt.optimize(initial_guess, minf);
+                            } catch (exception& e) {
+                                cout << "nlopt failed: " << e.what() << endl;
+                            }
+                            cdfAccessor[index] = minf;
+                        });
+                    });
+                }
+                queue.wait_and_throw();
+                minAvoidM = minAvoidM + sum(temp,1);
+            }
+            cout << " Complete." << endl;
+        }
+        else if (noise == NoiseType::CUSTOM){
+            cout << "Parallel run for Custom AvoidTransitionVector... " << endl;
+            sycl::queue queue;
+            {
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(minAvoidM.memptr(),minAvoidM.n_rows);
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<1> global(total_states);
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<1> idx) {
+                        size_t index = idx[0];
+                        double cdf_product = 1.0;
+                        size_t i = index % state_space_size;
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
+                        costcustom1Full data;
+                        data.dim = dim_x;
+                        data.state_start = state_start;
+                        data.lb = ss_lb;
+                        data.ub = ss_ub;
+                        data.eta = ss_eta;
+                        data.dynamics = dynamics1;
+                        data.customPDF = customPDF;
+                        data.samples = calls;
+                        opt.set_max_objective(custom1Full, &data);
+                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        double ans = 1.0 - minf;
+                        cdfAccessor[index] = ans;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            //sum any states labelled avoid states
+            if (avoid_space.n_rows > 0){
+                sycl::queue queue;
+                {
+                    // Create a SYCL buffer to store the space
+                    sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
+                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                    queue.submit([&](sycl::handler& cgh) {
+                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                        sycl::range<2> global(total_states, avoid_space.n_rows);
+                        cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                            const size_t x0 = idx[0];
+                            const size_t x1 = idx[1];
+                            size_t index = x0 * avoid_space.n_rows + x1;
+                            size_t row = index%total_states;
+                            size_t col = index/total_states;
+                            double cdf_product = 1.0;
+                            size_t i = row % state_space_size;
+                            const vec state_start = avoid_space.row(i).t();
+                            nlopt::opt opt(algo, state_start.size());
+                            vector<double> lb(state_start.size());
+                            vector<double> ub(state_start.size());
+                            for (size_t m = 0; m < state_start.size(); ++m) {
+                                lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                                ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                            }
+                            opt.set_lower_bounds(lb);
+                            opt.set_upper_bounds(ub);
+                            opt.set_xtol_rel(1e-3);
+                            
+                            // Prepare data for costfunction
+                            const vec state_end = target_space.row(col).t();
+                            costcustom1 data;
+                            data.dim = dim_x;
+                            data.state_start = state_start;
+                            data.state_end = state_end;
+                            data.eta = ss_eta;
+                            data.dynamics = dynamics1;
+                            data.customPDF = customPDF;
+                            data.samples = calls;
+                            opt.set_min_objective(custom1, &data);
+                            vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
+                            double minf;
+                            try {
+                                nlopt::result result = opt.optimize(initial_guess, minf);
+                            } catch (exception& e) {
+                                cout << "nlopt failed: " << e.what() << endl;
+                            }
+                            cdfAccessor[index] = minf;
+                        });
+                    });
+                }
+                queue.wait_and_throw();
+                minAvoidM = minAvoidM + sum(temp,1);
             }
             cout << " Complete." << endl;
         }
         else{
-            // Fallback for other noise types - not yet unified
-            cout << "Noise type not yet unified in avoidTransitionVectorImpl." << endl;
+            cout << "Unsupported noise combination, either swap offdiagonal/diagonal or change type of noise." << endl;
         }
     }
     else if (disturb_space_size == 0){
         const size_t total_states = state_space_size * input_space_size;
         cout << "Avoid Vector dimensions before summation: " << total_states << " x " << 1 << endl;
-        output.set_size(total_states);
+        minAvoidM.set_size(total_states);
         mat temp;
         if (avoid_space.n_rows > 0){
             temp.set_size(total_states, avoid_space.n_rows);
@@ -766,11 +908,13 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
             cout << "Parallel run for Normal-diagonal AvoidTransitionVector... " << endl;
             sycl::queue queue;
             {
-                sycl::buffer<double> cdfBuffer(output.memptr(), output.n_rows);
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(minAvoidM.memptr(), minAvoidM.n_rows);
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                 queue.submit([&](sycl::handler& cgh) {
                     auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
                     sycl::range<1> global(total_states);
-                    cgh.parallel_for<class AvoidOuterNormalDiag1>(global, [=, is_min_local=is_min](sycl::item<1> item) {
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::item<1> item) {
                         size_t index = item.get_id(0);
                         double cdf_product = 1.0;
                         size_t k = (index / state_space_size) % input_space_size;
@@ -787,6 +931,8 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
                         opt.set_lower_bounds(lb);
                         opt.set_upper_bounds(ub);
                         opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
                         costFunctionDataNormalFull data;
                         data.state_start = state_start;
                         data.lb = ss_lb;
@@ -796,11 +942,7 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
                         data.sigma = sigma;
                         data.dynamics2 = dynamics2;
                         data.is_diagonal = diagonal;
-                        if (is_min_local) {
-                            opt.set_max_objective(costFunctionNormalFull, &data);
-                        } else {
-                            opt.set_min_objective(costFunctionNormalFull, &data);
-                        }
+                        opt.set_max_objective(costFunctionNormalFull, &data);
                         vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                         double minf;
                         try {
@@ -813,14 +955,17 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
                 });
             }
             queue.wait_and_throw();
+            //sum any states labelled avoid states
             if (avoid_space.n_rows > 0){
-                sycl::queue queue2;
+                sycl::queue queue;
                 {
+                    // Create a SYCL buffer to store the space
                     sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
-                    queue2.submit([&](sycl::handler& cgh) {
+                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                    queue.submit([&](sycl::handler& cgh) {
                         auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
                         sycl::range<2> global(total_states, avoid_space.n_rows);
-                        cgh.parallel_for<class AvoidInnerNormalDiag1>(global, [=, is_min_local=is_min](sycl::id<2> idx) {
+                        cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
                             const size_t x0 = idx[0];
                             const size_t x1 = idx[1];
                             size_t index = x0 * avoid_space.n_rows + x1;
@@ -841,6 +986,8 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
                             opt.set_lower_bounds(lb);
                             opt.set_upper_bounds(ub);
                             opt.set_xtol_rel(1e-3);
+                            
+                            // Prepare data for costfunction
                             const vec state_end = avoid_space.row(col).t();
                             costFunctionDataNormal data;
                             data.state_end = state_end;
@@ -849,11 +996,7 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
                             data.sigma = sigma;
                             data.dynamics2 = dynamics2;
                             data.is_diagonal = diagonal;
-                            if (is_min_local) {
-                                opt.set_min_objective(costFunctionNormal, &data);
-                            } else {
-                                opt.set_max_objective(costFunctionNormal, &data);
-                            }
+                            opt.set_min_objective(costFunctionNormal, &data);
                             vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                             double minf;
                             try {
@@ -865,52 +1008,5395 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
                         });
                     });
                 }
-                queue2.wait_and_throw();
-                output = output+sum(temp,1);
+                queue.wait_and_throw();
+                minAvoidM = minAvoidM+sum(temp,1);
+            }
+            cout << " Complete." << endl;
+        }
+        else if (noise == NoiseType::NORMAL && diagonal == false){
+            cout << "Parallel run for Normal-offdiagonal AvoidTransitionVector... " << endl;
+            sycl::queue queue;
+            {
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(minAvoidM.memptr(),minAvoidM.n_rows);
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<1> global(total_states);
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::item<1> item) {
+                        size_t index = item.get_id(0);
+                        double cdf_product = 1.0;
+                        size_t k = (index / state_space_size) % input_space_size;
+                        size_t i = index % state_space_size;
+                        const vec input = input_space.row(k).t();
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
+                        costFunctionDataNormalFull data;
+                        data.dim = dim_x;
+                        data.state_start = state_start;
+                        data.lb = ss_lb;
+                        data.ub = ss_ub;
+                        data.second = input;
+                        data.eta = ss_eta;
+                        data.inv_cov = inv_covariance_matrix;
+                        data.det = covariance_matrix_determinant;
+                        data.dynamics2 = dynamics2;
+                        data.is_diagonal = diagonal;
+                        data.samples = calls;
+                        opt.set_max_objective(costFunctionNormalFull, &data);
+                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        cdfAccessor[index] = 1.0-minf;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            //sum any states labelled avoid states
+            if (avoid_space.n_rows > 0){
+                sycl::queue queue;
+                {
+                    // Create a SYCL buffer to store the space
+                    sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
+                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                    queue.submit([&](sycl::handler& cgh) {
+                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                        sycl::range<2> global(total_states, avoid_space.n_rows);
+                        cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                            const size_t x0 = idx[0];
+                            const size_t x1 = idx[1];
+                            size_t index = x0 * avoid_space.n_rows + x1;
+                            size_t row = index%total_states;
+                            size_t col = index/total_states;
+                            double cdf_product = 1.0;
+                            size_t k = (row / state_space_size) % input_space_size;
+                            size_t i = row % state_space_size;
+                            const vec input = input_space.row(k).t();
+                            const vec state_start = state_space.row(i).t();
+                            nlopt::opt opt(algo, state_start.size());
+                            vector<double> lb(state_start.size());
+                            vector<double> ub(state_start.size());
+                            for (size_t m = 0; m < state_start.size(); ++m) {
+                                lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                                ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                            }
+                            opt.set_lower_bounds(lb);
+                            opt.set_upper_bounds(ub);
+                            opt.set_xtol_rel(1e-3);
+                            
+                            // Prepare data for costfunction
+                            const vec state_end = avoid_space.row(col).t();
+                            costFunctionDataNormal data;
+                            data.dim = dim_x;
+                            data.state_end = state_end;
+                            data.second = input;
+                            data.eta = ss_eta;
+                            data.inv_cov = inv_covariance_matrix;
+                            data.det = covariance_matrix_determinant;
+                            data.dynamics2 = dynamics2;
+                            data.is_diagonal = diagonal;
+                            data.samples = calls;
+                            opt.set_min_objective(costFunctionNormal, &data);
+                            vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
+                            double minf;
+                            try {
+                                nlopt::result result = opt.optimize(initial_guess, minf);
+                            } catch (exception& e) {
+                                cout << "nlopt failed: " << e.what() << endl;
+                            }
+                            cdfAccessor[index] = minf;
+                        });
+                    });
+                }
+                queue.wait_and_throw();
+                minAvoidM = minAvoidM + sum(temp,1);
+            }
+            cout << " Complete." << endl;
+        }
+        else if(noise == NoiseType::CUSTOM) {
+            cout << "Parallel run for Custom AvoidTransitionVector... " << endl;
+            sycl::queue queue;
+            {
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(minAvoidM.memptr(),minAvoidM.n_rows);
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<1> global(total_states);
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::item<1> item) {
+                        size_t index = item.get_id(0);
+                        double cdf_product = 1.0;
+                        size_t k = (index / state_space_size) % input_space_size;
+                        size_t i = index % state_space_size;
+                        const vec input = input_space.row(k).t();
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
+                        costcustom2Full data;
+                        data.dim = dim_x;
+                        data.state_start = state_start;
+                        data.lb = ss_lb;
+                        data.ub = ss_ub;
+                        data.second = input;
+                        data.eta = ss_eta;
+                        data.customPDF = customPDF;
+                        data.dynamics = dynamics2;
+                        data.samples = calls;
+                        data.input_space_size = input_space_size;
+                        opt.set_max_objective(custom2Full, &data);
+                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        cdfAccessor[index] = 1.0-minf;
+                        
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            //sum any states labelled avoid states
+            if (avoid_space.n_rows > 0){
+                sycl::queue queue;
+                {
+                    // Create a SYCL buffer to store the space
+                    sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
+                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                    queue.submit([&](sycl::handler& cgh) {
+                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                        sycl::range<2> global(total_states, avoid_space.n_rows);
+                        //sycl::range<2> local{1, state_space_size};
+                        cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                            const size_t x0 = idx[0];
+                            const size_t x1 = idx[1];
+                            size_t index = x0 * avoid_space.n_rows + x1;
+                            size_t row = index%total_states;
+                            size_t col = index/total_states;
+                            double cdf_product = 1.0;
+                            size_t k = (row / state_space_size) % input_space_size;
+                            size_t i = row % state_space_size;
+                            const vec input = input_space.row(k).t();
+                            const vec state_start = state_space.row(i).t();
+                            nlopt::opt opt(algo, state_start.size());
+                            vector<double> lb(state_start.size());
+                            vector<double> ub(state_start.size());
+                            for (size_t m = 0; m < state_start.size(); ++m) {
+                                lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                                ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                            }
+                            opt.set_lower_bounds(lb);
+                            opt.set_upper_bounds(ub);
+                            opt.set_xtol_rel(1e-3);
+                            
+                            // Prepare data for costfunction
+                            const vec state_end = avoid_space.row(col).t();
+                            costcustom2 data;
+                            data.state_start = state_start;
+                            data.dim = dim_x;
+                            data.state_end = state_end;
+                            data.second = input;
+                            data.eta = ss_eta;
+                            data.dynamics = dynamics2;
+                            data.customPDF = customPDF;
+                            data.samples = calls;
+                            data.input_space_size = input_space_size;
+                            opt.set_min_objective(custom2, &data);
+                            vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
+                            double minf;
+                            try {
+                                nlopt::result result = opt.optimize(initial_guess, minf);
+                            } catch (exception& e) {
+                                cout << "nlopt failed: " << e.what() << endl;
+                            }
+                            cdfAccessor[index] = minf;
+                        });
+                    });
+                }
+                queue.wait_and_throw();
+                minAvoidM = minAvoidM + sum(temp,1);
             }
             cout << " Complete." << endl;
         }
         else{
-            cout << "Noise type not yet unified in avoidTransitionVectorImpl." << endl;
+            cout << "Unsupported noise combination, either swap offdiagonal/diagonal or change type of noise." << endl;
+        }
+    }
+    else if (input_space_size == 0){
+        const size_t total_states = state_space_size * disturb_space_size;
+        cout << "Avoid Vector dimensions before summation: " << total_states << " x " << 1 << endl;
+        minAvoidM.set_size(total_states);
+        mat temp;
+        if (avoid_space.n_rows > 0){
+            temp.set_size(total_states, avoid_space.n_rows);
+        }
+        if (noise == NoiseType::NORMAL && diagonal == true){
+            cout << "Parallel run for Normal-diagonal AvoidTransitionVector... " << endl;
+            sycl::queue queue;
+            {
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(minAvoidM.memptr(), minAvoidM.n_rows);
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<1> global(total_states);
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::item<1> item) {
+                        size_t index = item.get_id(0);
+                        double cdf_product = 1.0;
+                        size_t k = (index / state_space_size) % disturb_space_size;
+                        size_t i = index % state_space_size;
+                        const vec disturb = disturb_space.row(k).t();
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
+                        costFunctionDataNormalFull data;
+                        data.state_start = state_start;
+                        data.lb = ss_lb;
+                        data.ub = ss_ub;
+                        data.second = disturb;
+                        data.eta = ss_eta;
+                        data.sigma = sigma;
+                        data.dynamics2 = dynamics2;
+                        data.is_diagonal = diagonal;
+                        opt.set_max_objective(costFunctionNormalFull, &data);
+                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        cdfAccessor[index] = 1.0-minf;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            //sum any states labelled avoid states
+            if (avoid_space.n_rows > 0){
+                sycl::queue queue;
+                {
+                    // Create a SYCL buffer to store the space
+                    sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
+                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                    queue.submit([&](sycl::handler& cgh) {
+                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                        sycl::range<2> global(total_states, avoid_space.n_rows);
+                        cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                            const size_t x0 = idx[0];
+                            const size_t x1 = idx[1];
+                            size_t index = x0 * avoid_space.n_rows + x1;
+                            size_t row = index%total_states;
+                            size_t col = index/total_states;
+                            double cdf_product = 1.0;
+                            size_t k = (row / state_space_size) % disturb_space_size;
+                            size_t i = row % state_space_size;
+                            const vec disturb = disturb_space.row(k).t();
+                            const vec state_start = state_space.row(i).t();
+                            nlopt::opt opt(algo, state_start.size());
+                            vector<double> lb(state_start.size());
+                            vector<double> ub(state_start.size());
+                            for (size_t m = 0; m < state_start.size(); ++m) {
+                                lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                                ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                            }
+                            opt.set_lower_bounds(lb);
+                            opt.set_upper_bounds(ub);
+                            opt.set_xtol_rel(1e-3);
+                            
+                            // Prepare data for costfunction
+                            const vec state_end = avoid_space.row(col).t();
+                            costFunctionDataNormal data;
+                            data.state_end = state_end;
+                            data.second = disturb;
+                            data.eta = ss_eta;
+                            data.sigma = sigma;
+                            data.dynamics2 = dynamics2;
+                            data.is_diagonal = diagonal;
+                            opt.set_min_objective(costFunctionNormal, &data);
+                            vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
+                            double minf;
+                            try {
+                                nlopt::result result = opt.optimize(initial_guess, minf);
+                            } catch (exception& e) {
+                                cout << "nlopt failed: " << e.what() << endl;
+                            }
+                            cdfAccessor[index] = minf;
+                        });
+                    });
+                }
+                queue.wait_and_throw();
+                minAvoidM = minAvoidM+sum(temp,1);
+            }
+            cout << " Complete." << endl;
+        }
+        else if (noise == NoiseType::NORMAL && diagonal == false){
+            cout << "Parallel run for Normal-offdiagonal AvoidTransitionVector... " << endl;
+            sycl::queue queue;
+            {
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(minAvoidM.memptr(),minAvoidM.n_rows);
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<1> global(total_states);
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::item<1> item) {
+                        size_t index = item.get_id(0);
+                        double cdf_product = 1.0;
+                        size_t k = (index / state_space_size) % disturb_space_size;
+                        size_t i = index % state_space_size;
+                        const vec disturb = disturb_space.row(k).t();
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
+                        costFunctionDataNormalFull data;
+                        data.dim = dim_x;
+                        data.state_start = state_start;
+                        data.lb = ss_lb;
+                        data.ub = ss_ub;
+                        data.second = disturb;
+                        data.eta = ss_eta;
+                        data.inv_cov = inv_covariance_matrix;
+                        data.det = covariance_matrix_determinant;
+                        data.dynamics2 = dynamics2;
+                        data.is_diagonal = diagonal;
+                        data.samples = calls;
+                        opt.set_max_objective(costFunctionNormalFull, &data);
+                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        cdfAccessor[index] = 1.0-minf;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            //sum any states labelled avoid states
+            if (avoid_space.n_rows > 0){
+                sycl::queue queue;
+                {
+                    // Create a SYCL buffer to store the space
+                    sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
+                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                    queue.submit([&](sycl::handler& cgh) {
+                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                        sycl::range<2> global(total_states, avoid_space.n_rows);
+                        cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                            const size_t x0 = idx[0];
+                            const size_t x1 = idx[1];
+                            size_t index = x0 * avoid_space.n_rows + x1;
+                            size_t row = index%total_states;
+                            size_t col = index/total_states;
+                            double cdf_product = 1.0;
+                            size_t k = (row / state_space_size) % input_space_size;
+                            size_t i = row % state_space_size;
+                            const vec disturb = disturb_space.row(k).t();
+                            const vec state_start = state_space.row(i).t();
+                            nlopt::opt opt(algo, state_start.size());
+                            vector<double> lb(state_start.size());
+                            vector<double> ub(state_start.size());
+                            for (size_t m = 0; m < state_start.size(); ++m) {
+                                lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                                ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                            }
+                            opt.set_lower_bounds(lb);
+                            opt.set_upper_bounds(ub);
+                            opt.set_xtol_rel(1e-3);
+                            
+                            // Prepare data for costfunction
+                            const vec state_end = avoid_space.row(col).t();
+                            costFunctionDataNormal data;
+                            data.dim = dim_x;
+                            data.state_end = state_end;
+                            data.second = disturb;
+                            data.eta = ss_eta;
+                            data.inv_cov = inv_covariance_matrix;
+                            data.det = covariance_matrix_determinant;
+                            data.dynamics2 = dynamics2;
+                            data.samples = calls;
+                            data.is_diagonal = diagonal;
+                            opt.set_min_objective(costFunctionNormal, &data);
+                            vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
+                            double minf;
+                            try {
+                                nlopt::result result = opt.optimize(initial_guess, minf);
+                            } catch (exception& e) {
+                                cout << "nlopt failed: " << e.what() << endl;
+                            }
+                            cdfAccessor[index] = minf;
+                        });
+                    });
+                }
+                queue.wait_and_throw();
+                minAvoidM = minAvoidM+sum(temp,1);
+            }
+            cout << " Complete." << endl;
+        }
+        else if (noise == NoiseType::CUSTOM){
+            cout << "Parallel run for Custom AvoidTransitionVector... " << endl;
+            sycl::queue queue;
+            {
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(minAvoidM.memptr(),minAvoidM.n_rows);
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<1> global(total_states);
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::item<1> item) {
+                        size_t index = item.get_id(0);
+                        double cdf_product = 1.0;
+                        size_t k = (index / state_space_size) % disturb_space_size;
+                        size_t i = index % state_space_size;
+                        const vec disturb = disturb_space.row(k).t();
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
+                        costcustom2Full data;
+                        data.dim = dim_x;
+                        data.state_start = state_start;
+                        data.lb = ss_lb;
+                        data.ub = ss_ub;
+                        data.second = disturb;
+                        data.eta = ss_eta;
+                        data.dynamics = dynamics2;
+                        data.customPDF = customPDF;
+                        data.samples = calls;
+                        data.input_space_size = input_space_size;
+                        opt.set_max_objective(custom2Full, &data);
+                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        cdfAccessor[index] = 1.0-minf;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            // sum any states labelled avoid states
+            if (avoid_space.n_rows > 0){
+                sycl::queue queue;
+                {
+                    // Create a SYCL buffer to store the space
+                    sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
+                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                    queue.submit([&](sycl::handler& cgh) {
+                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                        sycl::range<2> global(total_states, avoid_space.n_rows);
+                        cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                            const size_t x0 = idx[0];
+                            const size_t x1 = idx[1];
+                            size_t index = x0 * avoid_space.n_rows + x1;
+                            size_t row = index%total_states;
+                            size_t col = index/total_states;
+                            double cdf_product = 1.0;
+                            size_t k = (row / state_space_size) % input_space_size;
+                            size_t i = row % state_space_size;
+                            const vec disturb = disturb_space.row(k).t();
+                            const vec state_start = state_space.row(i).t();
+                            nlopt::opt opt(algo, state_start.size());
+                            vector<double> lb(state_start.size());
+                            vector<double> ub(state_start.size());
+                            for (size_t m = 0; m < state_start.size(); ++m) {
+                                lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                                ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                            }
+                            opt.set_lower_bounds(lb);
+                            opt.set_upper_bounds(ub);
+                            opt.set_xtol_rel(1e-3);
+                            
+                            // Prepare data for costfunction
+                            const vec state_end = avoid_space.row(col).t();
+                            costcustom2 data;
+                            data.dim = dim_x;
+                            data.state_start = state_start;
+                            data.state_end = state_end;
+                            data.second = disturb;
+                            data.customPDF = customPDF;
+                            data.eta = ss_eta;
+                            data.dynamics = dynamics2;
+                            data.samples = calls;
+                            data.input_space_size = input_space_size;
+                            opt.set_min_objective(custom2, &data);
+                            vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
+                            double minf;
+                            try {
+                                nlopt::result result = opt.optimize(initial_guess, minf);
+                            } catch (exception& e) {
+                                cout << "nlopt failed: " << e.what() << endl;
+                            }
+                            cdfAccessor[index] = minf;
+                        });
+                    });
+                }
+                queue.wait_and_throw();
+                minAvoidM = minAvoidM+sum(temp,1);
+            }
+            cout << " Complete." << endl;
+        }
+        else{
+            cout << "Unsupported noise combination, either swap offdiagonal/diagonal or change type of noise." << endl;
         }
     }
     else{
-        cout << "Configuration not yet unified in avoidTransitionVectorImpl." << endl;
+        const size_t total_states = state_space_size * disturb_space_size*input_space_size;
+        cout << "Avoid Vector dimensions before summation: " << total_states << " x " << 1 << endl;
+        minAvoidM.set_size(total_states);
+        mat temp;
+        if (avoid_space.n_rows > 0){
+            temp.set_size(total_states, avoid_space.n_rows);
+        }
+        if (noise == NoiseType::NORMAL && diagonal == true){
+            cout << "Parallel run for Normal-diagonal AvoidTransitionVector... " << endl;
+            sycl::queue queue;
+            {
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(minAvoidM.memptr(), minAvoidM.n_rows);
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<1> global(total_states);
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::item<1> item) {
+                        size_t index = item.get_id(0);
+                        double cdf_product = 1.0;
+                        size_t l = index /(input_space_size*state_space_size);
+                        size_t k = (index / state_space_size) % input_space_size;
+                        size_t i = index % state_space_size;
+                        const vec disturb = disturb_space.row(l).t();
+                        const vec input = input_space.row(k).t();
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
+                        costFunctionDataNormalFull data;
+                        data.state_start = state_start;
+                        data.lb = ss_lb;
+                        data.ub = ss_ub;
+                        data.disturb = disturb;
+                        data.input = input;
+                        data.eta = ss_eta;
+                        data.sigma = sigma;
+                        data.dynamics3 = dynamics3;
+                        data.is_diagonal = diagonal;
+                        opt.set_max_objective(costFunctionNormalFull, &data);
+                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        cdfAccessor[index] = 1.0-minf;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            //sum any avoid states
+            if (avoid_space.n_rows > 0){
+                sycl::queue queue;
+                {
+                    // Create a SYCL buffer to store the space
+                    sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
+                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                    queue.submit([&](sycl::handler& cgh) {
+                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                        sycl::range<2> global(total_states, avoid_space.n_rows);
+                        cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                            const size_t x0 = idx[0];
+                            const size_t x1 = idx[1];
+                            size_t index = x0 * avoid_space.n_rows + x1;
+                            size_t row = index%total_states;
+                            size_t col = index/total_states;
+                            double cdf_product = 1.0;
+                            size_t l = row / (input_space_size * state_space_size);
+                            size_t k = (row / state_space_size) % input_space_size;
+                            size_t i = row % state_space_size;
+                            const vec disturb = disturb_space.row(l).t();
+                            const vec input = input_space.row(k).t();
+                            const vec state_start = state_space.row(i).t();
+                            nlopt::opt opt(algo, state_start.size());
+                            vector<double> lb(state_start.size());
+                            vector<double> ub(state_start.size());
+                            for (size_t m = 0; m < state_start.size(); ++m) {
+                                lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                                ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                            }
+                            opt.set_lower_bounds(lb);
+                            opt.set_upper_bounds(ub);
+                            opt.set_xtol_rel(1e-3);
+                            
+                            // Prepare data for costfunction
+                            const vec state_end = avoid_space.row(col).t();
+                            costFunctionDataNormal data;
+                            data.state_end = state_end;
+                            data.input = input;
+                            data.disturb = disturb;
+                            data.eta = ss_eta;
+                            data.sigma = sigma;
+                            data.dynamics3 = dynamics3;
+                            data.is_diagonal = diagonal;
+                            opt.set_min_objective(costFunctionNormal, &data);
+                            vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
+                            double minf;
+                            try {
+                                nlopt::result result = opt.optimize(initial_guess, minf);
+                            } catch (exception& e) {
+                                cout << "nlopt failed: " << e.what() << endl;
+                            }
+                            cdfAccessor[index] = minf;
+                        });
+                    });
+                }
+                queue.wait_and_throw();
+                minAvoidM = minAvoidM+sum(temp,1);
+            }
+            cout << " Complete." << endl;
+        }
+        else if (noise == NoiseType::NORMAL && diagonal == false){
+            cout << "Parallel run for Normal-offdiagonal AvoidTransitionVector... " << endl;
+            sycl::queue queue;
+            {
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(minAvoidM.memptr(),minAvoidM.n_rows);
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<1> global(total_states);
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::item<1> item) {
+                        size_t index = item.get_id(0);
+                        double cdf_product = 1.0;
+                        size_t l = index / (input_space_size * state_space_size);
+                        size_t k = (index / state_space_size) % input_space_size;
+                        size_t i = index % state_space_size;
+                        const vec disturb = disturb_space.row(l).t();
+                        const vec input = input_space.row(k).t();
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
+                        costFunctionDataNormalFull data;
+                        data.dim = dim_x;
+                        data.state_start = state_start;
+                        data.lb = ss_lb;
+                        data.ub = ss_ub;
+                        data.disturb = disturb;
+                        data.input = input;
+                        data.eta = ss_eta;
+                        data.inv_cov = inv_covariance_matrix;
+                        data.det = covariance_matrix_determinant;
+                        data.dynamics3 = dynamics3;
+                        data.is_diagonal = diagonal;
+                        data.samples = calls;
+                        opt.set_max_objective(costFunctionNormalFull, &data);
+                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        cdfAccessor[index] = 1.0-minf;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            //sum any avoid states
+            if (avoid_space.n_rows > 0){
+                sycl::queue queue;
+                {
+                    // Create a SYCL buffer to store the space
+                    sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
+                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                    queue.submit([&](sycl::handler& cgh) {
+                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                        sycl::range<2> global(total_states, avoid_space.n_rows);
+                        cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                            const size_t x0 = idx[0];
+                            const size_t x1 = idx[1];
+                            size_t index = x0 * avoid_space.n_rows + x1;
+                            size_t row = index%total_states;
+                            size_t col = index/total_states;
+                            double cdf_product = 1.0;
+                            size_t l = row / (input_space_size * state_space_size);
+                            size_t k = (row / state_space_size) % input_space_size;
+                            size_t i = row % state_space_size;
+                            const vec disturb = disturb_space.row(l).t();
+                            const vec input = input_space.row(k).t();
+                            const vec state_start = state_space.row(i).t();
+                            nlopt::opt opt(algo, state_start.size());
+                            vector<double> lb(state_start.size());
+                            vector<double> ub(state_start.size());
+                            for (size_t m = 0; m < state_start.size(); ++m) {
+                                lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                                ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                            }
+                            opt.set_lower_bounds(lb);
+                            opt.set_upper_bounds(ub);
+                            opt.set_xtol_rel(1e-3);
+                            
+                            // Prepare data for costfunction
+                            const vec state_end = avoid_space.row(col).t();
+                            costFunctionDataNormal data;
+                            data.dim = dim_x;
+                            data.state_end = state_end;
+                            data.input = input;
+                            data.disturb = disturb;
+                            data.eta = ss_eta;
+                            data.inv_cov = inv_covariance_matrix;
+                            data.det = covariance_matrix_determinant;
+                            data.dynamics3 = dynamics3;
+                            data.is_diagonal = diagonal;
+                            data.samples = calls;
+                            opt.set_min_objective(costFunctionNormal, &data);
+                            vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
+                            double minf;
+                            try {
+                                nlopt::result result = opt.optimize(initial_guess, minf);
+                            } catch (exception& e) {
+                                cout << "nlopt failed: " << e.what() << endl;
+                            }
+                            cdfAccessor[index] = minf;
+                        });
+                    });
+                }
+                queue.wait_and_throw();
+                minAvoidM = minAvoidM+sum(temp,1);
+            }
+            cout << " Complete." << endl;
+        }
+        else if (noise == NoiseType::CUSTOM){
+            cout << "Parallel run for Custom AvoidTransitionVector... " << endl;
+            sycl::queue queue;
+            {
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(minAvoidM.memptr(),minAvoidM.n_rows);
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<1> global(total_states);
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::item<1> item) {
+                        size_t index = item.get_id(0);
+                        double cdf_product = 1.0;
+                        size_t l = index / (input_space_size * state_space_size);
+                        size_t k = (index / state_space_size) % input_space_size;
+                        size_t i = index % state_space_size;
+                        const vec disturb = disturb_space.row(l).t();
+                        const vec input = input_space.row(k).t();
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
+                        costcustom3Full data;
+                        data.dim = dim_x;
+                        data.state_start = state_start;
+                        data.lb = ss_lb;
+                        data.ub = ss_ub;
+                        data.disturb = disturb;
+                        data.customPDF = customPDF;
+                        data.input = input;
+                        data.eta = ss_eta;
+                        data.dynamics = dynamics3;
+                        data.samples = calls;
+                        opt.set_max_objective(custom3Full, &data);
+                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        cdfAccessor[index] = 1.0-minf;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            // sum any avoid states
+            if (avoid_space.n_rows > 0){
+                sycl::queue queue;
+                {
+                    // Create a SYCL buffer to store the space
+                    sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
+                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                    queue.submit([&](sycl::handler& cgh) {
+                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                        sycl::range<2> global(total_states, avoid_space.n_rows);
+                        cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                            const size_t x0 = idx[0];
+                            const size_t x1 = idx[1];
+                            size_t index = x0 * avoid_space.n_rows + x1;
+                            size_t row = index%total_states;
+                            size_t col = index/total_states;
+                            double cdf_product = 1.0;
+                            size_t l = row / (input_space_size * state_space_size);
+                            size_t k = (row / state_space_size) % input_space_size;
+                            size_t i = row % state_space_size;
+                            const vec disturb = disturb_space.row(l).t();
+                            const vec input = input_space.row(k).t();
+                            const vec state_start = state_space.row(i).t();
+                            nlopt::opt opt(algo, state_start.size());
+                            vector<double> lb(state_start.size());
+                            vector<double> ub(state_start.size());
+                            for (size_t m = 0; m < state_start.size(); ++m) {
+                                lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                                ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                            }
+                            opt.set_lower_bounds(lb);
+                            opt.set_upper_bounds(ub);
+                            opt.set_xtol_rel(1e-3);
+                            
+                            // Prepare data for costfunction
+                            const vec state_end = avoid_space.row(col).t();
+                            costcustom3 data;
+                            data.dim = dim_x;
+                            data.state_start = state_start;
+                            data.state_end = state_end;
+                            data.input = input;
+                            data.disturb = disturb;
+                            data.customPDF = customPDF;
+                            data.eta = ss_eta;
+                            data.dynamics = dynamics3;
+                            data.samples = calls;
+                            opt.set_min_objective(custom3, &data);
+                            vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
+                            double minf;
+                            try {
+                                nlopt::result result = opt.optimize(initial_guess, minf);
+                            } catch (exception& e) {
+                                cout << "nlopt failed: " << e.what() << endl;
+                            }
+                            cdfAccessor[index] = minf;
+                        });
+                    });
+                }
+                queue.wait_and_throw();
+                minAvoidM = minAvoidM+sum(temp,1);
+            }
+            cout << " Complete." << endl;
+        }
+        else{
+            cout << "Unsupported noise combination, either swap offdiagonal/diagonal or change type of noise." << endl;
+        }
     }
+    // Stop the timer
     auto end = chrono::steady_clock::now();
     auto duration = chrono::duration_cast<chrono::milliseconds>(end - start);
     cout << "Execution time: " << duration.count()/1000.0 << " seconds" << endl;
 }
 
-/// Calculate Abstraction for Minimum Avoid Transition Vector (part 1 - transitions outside state space, part 2 - sum transitions to labelled avoid states)
-void IMDP::minAvoidTransitionVector(){
-    avoidTransitionVectorImpl(minAvoidM, true);
-}
-
 /// Calculate Abstraction for Maximum Avoid Transition Vector (part 1 - transitions outside state space, part 2 - sum transitions to labelled avoid states)
 void IMDP::maxAvoidTransitionVector(){
-    avoidTransitionVectorImpl(maxAvoidM, false);
+    // Start timer
+    auto start = chrono::steady_clock::now();
+    cout << "Calculating maximal avoid transition probability Vector." << endl;
+    
+    if (disturb_space_size == 0 && input_space_size == 0){
+        const size_t total_states = state_space.n_rows;
+        // transitions outside the state space
+        cout << "Calculate transition to outside state space: " << total_states << " x " << 1 << endl;
+        maxAvoidM.set_size(total_states);
+        mat temp;
+        if (avoid_space.n_rows > 0){
+            temp.set_size(total_states, avoid_space.n_rows);
+        }
+        if (noise == NoiseType::NORMAL && diagonal == true){
+            cout << "Parallel run for Normal-diagonal AvoidTransitionVector... " << endl;
+            sycl::queue queue;
+            {
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(maxAvoidM.memptr(),maxAvoidM.n_rows);
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    cgh.parallel_for<class SetMatrix>(sycl::range<1>(total_states), [=](sycl::item<1> item) {
+                        size_t i = item.get_id(0);
+                        double cdf_product = 1.0;
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
+                        costFunctionDataNormalFull data;
+                        data.state_start = state_start;
+                        data.lb = ss_lb;
+                        data.ub = ss_ub;
+                        data.eta = ss_eta;
+                        data.sigma = sigma;
+                        data.dynamics1 = dynamics1;
+                        data.is_diagonal = diagonal;
+                        opt.set_min_objective(costFunctionNormalFull, &data);
+                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        double ans = 1.0 - minf;
+                        cdfAccessor[i] = ans;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            // sum other avoid states
+            if(avoid_space.n_rows > 0 ){
+                sycl::queue queue;
+                {
+                    // Create a SYCL buffer to store the space
+                    sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
+                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                    queue.submit([&](sycl::handler& cgh) {
+                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                        sycl::range<2> global(total_states, avoid_space.n_rows);
+                        cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                            const size_t x0 = idx[0];
+                            const size_t x1 = idx[1];
+                            size_t index = x0 * avoid_space.n_rows + x1;
+                            size_t row = index%total_states;
+                            size_t col = index/total_states;
+                            double cdf_product = 1.0;
+                            size_t i = row % state_space_size;
+                            const vec state_start = state_space.row(i).t();
+                            nlopt::opt opt(algo, state_start.size());
+                            vector<double> lb(state_start.size());
+                            vector<double> ub(state_start.size());
+                            for (size_t m = 0; m < state_start.size(); ++m) {
+                                lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                                ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                            }
+                            opt.set_lower_bounds(lb);
+                            opt.set_upper_bounds(ub);
+                            opt.set_xtol_rel(1e-3);
+                            
+                            // Prepare data for costfunction
+                            const vec state_end = avoid_space.row(col).t();
+                            costFunctionDataNormal data;
+                            data.state_end = state_end;
+                            data.eta = ss_eta;
+                            data.sigma = sigma;
+                            data.dynamics1 = dynamics1;
+                            data.is_diagonal = diagonal;
+                            opt.set_max_objective(costFunctionNormal, &data);
+                            vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
+                            double minf;
+                            try {
+                                nlopt::result result = opt.optimize(initial_guess, minf);
+                            } catch (exception& e) {
+                                cout << "nlopt failed: " << e.what() << endl;
+                            }
+                            cdfAccessor[index] = minf;
+                        });
+                    });
+                }
+                queue.wait_and_throw();
+                maxAvoidM = maxAvoidM+sum(temp,1);
+            }
+            cout << " Complete." << endl;
+        }
+        else if (noise == NoiseType::NORMAL && diagonal == false){
+            cout << "Parallel run for Normal-offdiagonal AvoidTransitionVector... " << endl;
+            sycl::queue queue;
+            {
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(maxAvoidM.memptr(),maxAvoidM.n_rows);
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<1> global(total_states);
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<1> idx) {
+                        size_t i = idx[0];
+                        double cdf_product = 1.0;
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
+                        costFunctionDataNormalFull data;
+                        data.dim = dim_x;
+                        data.state_start = state_start;
+                        data.lb = ss_lb;
+                        data.ub = ss_ub;
+                        data.eta = ss_eta;
+                        data.inv_cov = inv_covariance_matrix;
+                        data.det = covariance_matrix_determinant;
+                        data.dynamics1 = dynamics1;
+                        data.is_diagonal = diagonal;
+                        data.samples = calls;
+                        opt.set_min_objective(costFunctionNormalFull, &data);
+                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        double ans = 1.0 - minf;
+                        cdfAccessor[i] = ans;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            // sum other avoid states
+            if(avoid_space.n_rows > 0){
+                sycl::queue queue;
+                {
+                    // Create a SYCL buffer to store the space
+                    sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
+                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                    queue.submit([&](sycl::handler& cgh) {
+                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                        sycl::range<2> global(total_states, avoid_space.n_rows);
+                        cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                            const size_t x0 = idx[0];
+                            const size_t x1 = idx[1];
+                            size_t index = x0 * avoid_space.n_rows + x1;
+                            size_t row = index%total_states;
+                            size_t col = index/total_states;
+                            double cdf_product = 1.0;
+                            size_t i = row % state_space_size;
+                            const vec state_start = avoid_space.row(i).t();
+                            nlopt::opt opt(algo, state_start.size());
+                            vector<double> lb(state_start.size());
+                            vector<double> ub(state_start.size());
+                            for (size_t m = 0; m < state_start.size(); ++m) {
+                                lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                                ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                            }
+                            opt.set_lower_bounds(lb);
+                            opt.set_upper_bounds(ub);
+                            opt.set_xtol_rel(1e-3);
+                            
+                            // Prepare data for costfunction
+                            const vec state_end = avoid_space.row(col).t();
+                            costFunctionDataNormal data;
+                            data.dim = dim_x;
+                            data.state_end = state_end;
+                            data.eta = ss_eta;
+                            data.inv_cov = inv_covariance_matrix;
+                            data.det = covariance_matrix_determinant;
+                            data.dynamics1 = dynamics1;
+                            data.is_diagonal = diagonal;
+                            data.samples = calls;
+                            opt.set_max_objective(costFunctionNormal, &data);
+                            vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
+                            double minf;
+                            try {
+                                nlopt::result result = opt.optimize(initial_guess, minf);
+                            } catch (exception& e) {
+                                cout << "nlopt failed: " << e.what() << endl;
+                            }
+                            cdfAccessor[index] = minf;
+                        });
+                    });
+                }
+                queue.wait_and_throw();
+                maxAvoidM = maxAvoidM+sum(temp,1);
+            }
+            cout << " Complete." << endl;
+        }
+        else if (noise == NoiseType::CUSTOM){
+            cout << "Parallel run for Custom AvoidTransitionVector... " << endl;
+            sycl::queue queue;
+            {
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(maxAvoidM.memptr(),maxAvoidM.n_rows);
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<1> global(total_states);
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<1> idx) {
+                        size_t i = idx[0];
+                        double cdf_product = 1.0;
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
+                        costcustom1Full data;
+                        data.dim = dim_x;
+                        data.state_start = state_start;
+                        data.lb = ss_lb;
+                        data.ub = ss_ub;
+                        data.eta = ss_eta;
+                        data.dynamics = dynamics1;
+                        data.customPDF = customPDF;
+                        data.samples = calls;
+                        opt.set_min_objective(custom1Full, &data);
+                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        double ans = 1.0 - minf;
+                        cdfAccessor[i] = ans;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            // sum other avoid states
+            if(avoid_space.n_rows > 0){
+                sycl::queue queue;
+                {
+                    // Create a SYCL buffer to store the space
+                    sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
+                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                    queue.submit([&](sycl::handler& cgh) {
+                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                        sycl::range<2> global(total_states, avoid_space.n_rows);
+                        cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                            const size_t x0 = idx[0];
+                            const size_t x1 = idx[1];
+                            size_t index = x0 * avoid_space.n_rows + x1;
+                            size_t row = index%total_states;
+                            size_t col = index/total_states;
+                            double cdf_product = 1.0;
+                            size_t i = row % state_space_size;
+                            const vec state_start = avoid_space.row(i).t();
+                            nlopt::opt opt(algo, state_start.size());
+                            vector<double> lb(state_start.size());
+                            vector<double> ub(state_start.size());
+                            for (size_t m = 0; m < state_start.size(); ++m) {
+                                lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                                ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                            }
+                            opt.set_lower_bounds(lb);
+                            opt.set_upper_bounds(ub);
+                            opt.set_xtol_rel(1e-3);
+                            
+                            // Prepare data for costfunction
+                            const vec state_end = avoid_space.row(col).t();
+                            costcustom1 data;
+                            data.dim = dim_x;
+                            data.state_start = state_start;
+                            data.state_end = state_end;
+                            data.eta = ss_eta;
+                            data.dynamics = dynamics1;
+                            data.customPDF = customPDF;
+                            data.samples = calls;
+                            opt.set_max_objective(custom1, &data);
+                            vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
+                            double minf;
+                            try {
+                                nlopt::result result = opt.optimize(initial_guess, minf);
+                            } catch (exception& e) {
+                                cout << "nlopt failed: " << e.what() << endl;
+                            }
+                            cdfAccessor[index] = minf;
+                        });
+                    });
+                }
+                queue.wait_and_throw();
+                maxAvoidM = maxAvoidM+sum(temp,1);
+            }
+            cout << " Complete." << endl;
+        }
+        else{
+            cout << "Unsupported noise combination, either swap offdiagonal/diagonal or change type of noise." << endl;
+        }
+    }
+    else if (disturb_space_size == 0){
+        const size_t total_states = state_space_size * input_space_size;
+        cout << "Avoid Vector dimensions before summation: " << total_states << " x " << 1 << endl;
+        maxAvoidM.set_size(total_states);
+        mat temp;
+        if (avoid_space.n_rows > 0){
+            temp.set_size(total_states, avoid_space.n_rows);
+        }
+        if (noise == NoiseType::NORMAL && diagonal == true){
+            cout << "Parallel run for Normal-diagonal AvoidTransitionVector... " << endl;
+            sycl::queue queue;
+            {
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(maxAvoidM.memptr(), maxAvoidM.n_rows);
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<1> global(total_states);
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::item<1> item) {
+                        size_t index = item.get_id(0);
+                        double cdf_product = 1.0;
+                        size_t k = (index / state_space_size) % input_space_size;
+                        size_t i = index % state_space_size;
+                        const vec input = input_space.row(k).t();
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
+                        costFunctionDataNormalFull data;
+                        data.state_start = state_start;
+                        data.lb = ss_lb;
+                        data.ub = ss_ub;
+                        data.second = input;
+                        data.eta = ss_eta;
+                        data.sigma = sigma;
+                        data.dynamics2 = dynamics2;
+                        data.is_diagonal = diagonal;
+                        opt.set_min_objective(costFunctionNormalFull, &data);
+                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        cdfAccessor[index] = 1.0-minf;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            // sum other avoid states
+            if(avoid_space.n_rows > 0){
+                sycl::queue queue;
+                {
+                    // Create a SYCL buffer to store the space
+                    sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
+                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                    queue.submit([&](sycl::handler& cgh) {
+                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                        sycl::range<2> global(total_states, avoid_space.n_rows);
+                        cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                            const size_t x0 = idx[0];
+                            const size_t x1 = idx[1];
+                            size_t index = x0 * avoid_space.n_rows + x1;
+                            size_t row = index%total_states;
+                            size_t col = index/total_states;
+                            double cdf_product = 1.0;
+                            size_t k = (row / state_space_size) % input_space_size;
+                            size_t i = row % state_space_size;
+                            const vec input = input_space.row(k).t();
+                            const vec state_start = state_space.row(i).t();
+                            nlopt::opt opt(algo, state_start.size());
+                            vector<double> lb(state_start.size());
+                            vector<double> ub(state_start.size());
+                            for (size_t m = 0; m < state_start.size(); ++m) {
+                                lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                                ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                            }
+                            opt.set_lower_bounds(lb);
+                            opt.set_upper_bounds(ub);
+                            opt.set_xtol_rel(1e-3);
+                            
+                            // Prepare data for costfunction
+                            const vec state_end = avoid_space.row(col).t();
+                            costFunctionDataNormal data;
+                            data.state_end = state_end;
+                            data.second = input;
+                            data.eta = ss_eta;
+                            data.sigma = sigma;
+                            data.dynamics2 = dynamics2;
+                            data.is_diagonal = diagonal;
+                            opt.set_max_objective(costFunctionNormal, &data);
+                            vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
+                            double minf;
+                            try {
+                                nlopt::result result = opt.optimize(initial_guess, minf);
+                            } catch (exception& e) {
+                                cout << "nlopt failed: " << e.what() << endl;
+                            }
+                            cdfAccessor[index] = minf;
+                        });
+                    });
+                }
+                queue.wait_and_throw();
+                maxAvoidM = maxAvoidM+sum(temp,1);
+            }
+            cout << " Complete." << endl;
+        }
+        else if (noise == NoiseType::NORMAL && diagonal == false){
+            cout << "Parallel run for Normal-offdiagonal AvoidTransitionVector... " << endl;
+            sycl::queue queue;
+            {
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(maxAvoidM.memptr(),maxAvoidM.n_rows);
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<1> global(total_states);
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::item<1> item) {
+                        size_t index = item.get_id(0);
+                        double cdf_product = 1.0;
+                        size_t k = (index / state_space_size) % input_space_size;
+                        size_t i = index % state_space_size;
+                        const vec input = input_space.row(k).t();
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
+                        costFunctionDataNormalFull data;
+                        data.dim = dim_x;
+                        data.state_start = state_start;
+                        data.lb = ss_lb;
+                        data.ub = ss_ub;
+                        data.second = input;
+                        data.eta = ss_eta;
+                        data.inv_cov = inv_covariance_matrix;
+                        data.det = covariance_matrix_determinant;
+                        data.dynamics2 = dynamics2;
+                        data.is_diagonal = diagonal;
+                        data.samples = calls;
+                        opt.set_min_objective(costFunctionNormalFull, &data);
+                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        cdfAccessor[index] = 1.0-minf;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            // sum other avoid states
+            if(avoid_space.n_rows > 0){
+                sycl::queue queue;
+                {
+                    // Create a SYCL buffer to store the space
+                    sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
+                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                    queue.submit([&](sycl::handler& cgh) {
+                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                        sycl::range<2> global(total_states, avoid_space.n_rows);
+                        cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                            const size_t x0 = idx[0];
+                            const size_t x1 = idx[1];
+                            size_t index = x0 * avoid_space.n_rows + x1;
+                            size_t row = index%total_states;
+                            size_t col = index/total_states;
+                            double cdf_product = 1.0;
+                            size_t k = (row / state_space_size) % input_space_size;
+                            size_t i = row % state_space_size;
+                            const vec input = input_space.row(k).t();
+                            const vec state_start = state_space.row(i).t();
+                            nlopt::opt opt(algo, state_start.size());
+                            vector<double> lb(state_start.size());
+                            vector<double> ub(state_start.size());
+                            for (size_t m = 0; m < state_start.size(); ++m) {
+                                lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                                ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                            }
+                            opt.set_lower_bounds(lb);
+                            opt.set_upper_bounds(ub);
+                            opt.set_xtol_rel(1e-3);
+                            
+                            // Prepare data for costfunction
+                            const vec state_end = avoid_space.row(col).t();
+                            costFunctionDataNormal data;
+                            data.dim = dim_x;
+                            data.state_end = state_end;
+                            data.second = input;
+                            data.eta = ss_eta;
+                            data.inv_cov = inv_covariance_matrix;
+                            data.det = covariance_matrix_determinant;
+                            data.dynamics2 = dynamics2;
+                            data.is_diagonal = diagonal;
+                            data.samples = calls;
+                            opt.set_max_objective(costFunctionNormal, &data);
+                            vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
+                            double minf;
+                            try {
+                                nlopt::result result = opt.optimize(initial_guess, minf);
+                            } catch (exception& e) {
+                                cout << "nlopt failed: " << e.what() << endl;
+                            }
+                            cdfAccessor[index] = minf;
+                        });
+                    });
+                }
+                queue.wait_and_throw();
+                maxAvoidM = maxAvoidM+sum(temp,1);
+            }
+            cout << " Complete." << endl;
+        }
+        else if (noise == NoiseType::CUSTOM){
+            cout << "Parallel run for Custom AvoidTransitionVector... " << endl;
+            sycl::queue queue;
+            {
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(maxAvoidM.memptr(),maxAvoidM.n_rows);
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<1> global(total_states);
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::item<1> item) {
+                        size_t index = item.get_id(0);
+                        double cdf_product = 1.0;
+                        size_t k = (index / state_space_size) % input_space_size;
+                        size_t i = index % state_space_size;
+                        const vec input = input_space.row(k).t();
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
+                        costcustom2Full data;
+                        data.dim = dim_x;
+                        data.state_start = state_start;
+                        data.lb = ss_lb;
+                        data.ub = ss_ub;
+                        data.second = input;
+                        data.customPDF = customPDF;
+                        data.eta = ss_eta;
+                        data.dynamics = dynamics2;
+                        data.samples = calls;
+                        data.input_space_size = input_space_size;
+                        opt.set_min_objective(custom2Full, &data);
+                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        cdfAccessor[index] = 1.0-minf;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            // sum other avoid states
+            if(avoid_space.n_rows > 0){
+                sycl::queue queue;
+                {
+                    // Create a SYCL buffer to store the space
+                    sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
+                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                    queue.submit([&](sycl::handler& cgh) {
+                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                        sycl::range<2> global(total_states, avoid_space.n_rows);
+                        cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                            const size_t x0 = idx[0];
+                            const size_t x1 = idx[1];
+                            size_t index = x0 * avoid_space.n_rows + x1;
+                            size_t row = index%total_states;
+                            size_t col = index/total_states;
+                            double cdf_product = 1.0;
+                            size_t k = (row / state_space_size) % input_space_size;
+                            size_t i = row % state_space_size;
+                            const vec input = input_space.row(k).t();
+                            const vec state_start = state_space.row(i).t();
+                            nlopt::opt opt(algo, state_start.size());
+                            vector<double> lb(state_start.size());
+                            vector<double> ub(state_start.size());
+                            for (size_t m = 0; m < state_start.size(); ++m) {
+                                lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                                ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                            }
+                            opt.set_lower_bounds(lb);
+                            opt.set_upper_bounds(ub);
+                            opt.set_xtol_rel(1e-3);
+                            
+                            // Prepare data for costfunction
+                            const vec state_end = avoid_space.row(col).t();
+                            costcustom2 data;
+                            data.dim = dim_x;
+                            data.state_start = state_start;
+                            data.state_end = state_end;
+                            data.customPDF = customPDF;
+                            data.second = input;
+                            data.eta = ss_eta;
+                            data.dynamics = dynamics2;
+                            data.samples = calls;
+                            data.input_space_size = input_space_size;
+                            opt.set_max_objective(custom2, &data);
+                            vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
+                            double minf;
+                            try {
+                                nlopt::result result = opt.optimize(initial_guess, minf);
+                            } catch (exception& e) {
+                                cout << "nlopt failed: " << e.what() << endl;
+                            }
+                            cdfAccessor[index] = minf;
+                        });
+                    });
+                }
+                queue.wait_and_throw();
+                maxAvoidM = maxAvoidM+sum(temp,1);
+            }
+            cout << " Complete." << endl;
+        }
+        else{
+            cout << "Unsupported noise combination, either swap offdiagonal/diagonal or change type of noise." << endl;
+        }
+    }
+    else if (input_space_size == 0){
+        const size_t total_states = state_space_size * disturb_space_size;
+        cout << "Avoid Vector dimensions before summation: " << total_states << " x " << 1 << endl;
+        maxAvoidM.set_size(total_states);
+        mat temp;
+        if (avoid_space.n_rows > 0){
+            temp.set_size(total_states, avoid_space.n_rows);
+        }
+        if (noise == NoiseType::NORMAL && diagonal == true){
+            cout << "Parallel run for Normal-diagonal AvoidTransitionVector... " << endl;
+            sycl::queue queue;
+            {
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(maxAvoidM.memptr(), maxAvoidM.n_rows);
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<1> global(total_states);
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::item<1> item) {
+                        size_t index = item.get_id(0);
+                        double cdf_product = 1.0;
+                        size_t k = (index / state_space_size) % disturb_space_size;
+                        size_t i = index % state_space_size;
+                        const vec disturb = disturb_space.row(k).t();
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
+                        costFunctionDataNormalFull data;
+                        data.state_start = state_start;
+                        data.lb = ss_lb;
+                        data.ub = ss_ub;
+                        data.second = disturb;
+                        data.eta = ss_eta;
+                        data.sigma = sigma;
+                        data.dynamics2 = dynamics2;
+                        data.is_diagonal = diagonal;
+                        opt.set_min_objective(costFunctionNormalFull, &data);
+                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        cdfAccessor[index] = 1.0-minf;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            // sum other avoid states
+            if(avoid_space.n_rows > 0){
+                sycl::queue queue;
+                {
+                    // Create a SYCL buffer to store the space
+                    sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
+                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                    queue.submit([&](sycl::handler& cgh) {
+                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                        sycl::range<2> global(total_states, avoid_space.n_rows);
+                        cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                            const size_t x0 = idx[0];
+                            const size_t x1 = idx[1];
+                            size_t index = x0 * avoid_space.n_rows + x1;
+                            size_t row = index%total_states;
+                            size_t col = index/total_states;
+                            double cdf_product = 1.0;
+                            size_t k = (row / state_space_size) % disturb_space_size;
+                            size_t i = row % state_space_size;
+                            const vec disturb = disturb_space.row(k).t();
+                            const vec state_start = state_space.row(i).t();
+                            nlopt::opt opt(algo, state_start.size());
+                            vector<double> lb(state_start.size());
+                            vector<double> ub(state_start.size());
+                            for (size_t m = 0; m < state_start.size(); ++m) {
+                                lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                                ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                            }
+                            opt.set_lower_bounds(lb);
+                            opt.set_upper_bounds(ub);
+                            opt.set_xtol_rel(1e-3);
+                            
+                            // Prepare data for costfunction
+                            const vec state_end = avoid_space.row(col).t();
+                            costFunctionDataNormal data;
+                            data.state_end = state_end;
+                            data.second = disturb;
+                            data.eta = ss_eta;
+                            data.sigma = sigma;
+                            data.dynamics2 = dynamics2;
+                            data.is_diagonal = diagonal;
+                            opt.set_max_objective(costFunctionNormal, &data);
+                            vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
+                            double minf;
+                            try {
+                                nlopt::result result = opt.optimize(initial_guess, minf);
+                            } catch (exception& e) {
+                                cout << "nlopt failed: " << e.what() << endl;
+                            }
+                            cdfAccessor[index] = minf;
+                        });
+                    });
+                }
+                queue.wait_and_throw();
+                maxAvoidM = maxAvoidM+sum(temp,1);
+            }
+            cout << " Complete." << endl;
+        }
+        else if (noise == NoiseType::NORMAL && diagonal == false){
+            cout << "Parallel run for Normal-offdiagonal AvoidTransitionVector... " << endl;
+            sycl::queue queue;
+            {
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(maxAvoidM.memptr(),maxAvoidM.n_rows);
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<1> global(total_states);
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::item<1> item) {
+                        size_t index = item.get_id(0);
+                        double cdf_product = 1.0;
+                        size_t k = (index / state_space_size) % disturb_space_size;
+                        size_t i = index % state_space_size;
+                        const vec disturb = disturb_space.row(k).t();
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
+                        costFunctionDataNormalFull data;
+                        data.dim = dim_x;
+                        data.state_start = state_start;
+                        data.lb = ss_lb;
+                        data.ub = ss_ub;
+                        data.second = disturb;
+                        data.eta = ss_eta;
+                        data.inv_cov = inv_covariance_matrix;
+                        data.det = covariance_matrix_determinant;
+                        data.dynamics2 = dynamics2;
+                        data.is_diagonal = diagonal;
+                        data.samples = calls;
+                        opt.set_min_objective(costFunctionNormalFull, &data);
+                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        cdfAccessor[index] = 1.0-minf;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            // sum other avoid states
+            if(avoid_space.n_rows >0){
+                sycl::queue queue;
+                {
+                    // Create a SYCL buffer to store the space
+                    sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
+                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                    queue.submit([&](sycl::handler& cgh) {
+                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                        sycl::range<2> global(total_states, avoid_space.n_rows);
+                        cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                            const size_t x0 = idx[0];
+                            const size_t x1 = idx[1];
+                            size_t index = x0 * avoid_space.n_rows + x1;
+                            size_t row = index%total_states;
+                            size_t col = index/total_states;
+                            double cdf_product = 1.0;
+                            size_t k = (row / state_space_size) % input_space_size;
+                            size_t i = row % state_space_size;
+                            const vec disturb = disturb_space.row(k).t();
+                            const vec state_start = state_space.row(i).t();
+                            nlopt::opt opt(algo, state_start.size());
+                            vector<double> lb(state_start.size());
+                            vector<double> ub(state_start.size());
+                            for (size_t m = 0; m < state_start.size(); ++m) {
+                                lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                                ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                            }
+                            opt.set_lower_bounds(lb);
+                            opt.set_upper_bounds(ub);
+                            opt.set_xtol_rel(1e-3);
+                            
+                            // Prepare data for costfunction
+                            const vec state_end = avoid_space.row(col).t();
+                            costFunctionDataNormal data;
+                            data.dim = dim_x;
+                            data.state_end = state_end;
+                            data.second = disturb;
+                            data.eta = ss_eta;
+                            data.inv_cov = inv_covariance_matrix;
+                            data.det = covariance_matrix_determinant;
+                            data.dynamics2 = dynamics2;
+                            data.is_diagonal = diagonal;
+                            data.samples = calls;
+                            opt.set_max_objective(costFunctionNormal, &data);
+                            vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
+                            double minf;
+                            try {
+                                nlopt::result result = opt.optimize(initial_guess, minf);
+                            } catch (exception& e) {
+                                cout << "nlopt failed: " << e.what() << endl;
+                            }
+                            cdfAccessor[index] = minf;
+                        });
+                    });
+                }
+                queue.wait_and_throw();
+                maxAvoidM = maxAvoidM+sum(temp,1);
+            }
+            cout << " Complete." << endl;
+        }
+        else if (noise == NoiseType::CUSTOM){
+            cout << "Parallel run for Custom AvoidTransitionVector... " << endl;
+            sycl::queue queue;
+            {
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(maxAvoidM.memptr(),maxAvoidM.n_rows);
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<1> global(total_states);
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::item<1> item) {
+                        size_t index = item.get_id(0);
+                        double cdf_product = 1.0;
+                        size_t k = (index / state_space_size) % disturb_space_size;
+                        size_t i = index % state_space_size;
+                        const vec disturb = disturb_space.row(k).t();
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
+                        costcustom2Full data;
+                        data.dim = dim_x;
+                        data.state_start = state_start;
+                        data.lb = ss_lb;
+                        data.ub = ss_ub;
+                        data.customPDF = customPDF;
+                        data.second = disturb;
+                        data.eta = ss_eta;
+                        data.dynamics = dynamics2;
+                        data.samples = calls;
+                        data.input_space_size = input_space_size;
+                        opt.set_min_objective(custom2Full, &data);
+                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        cdfAccessor[index] = 1.0-minf;
+                        
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            // sum other avoid states
+            if(avoid_space.n_rows >0){
+                sycl::queue queue;
+                {
+                    // Create a SYCL buffer to store the space
+                    sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
+                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                    queue.submit([&](sycl::handler& cgh) {
+                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                        sycl::range<2> global(total_states, avoid_space.n_rows);
+                        cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                            const size_t x0 = idx[0];
+                            const size_t x1 = idx[1];
+                            size_t index = x0 * avoid_space.n_rows + x1;
+                            size_t row = index%total_states;
+                            size_t col = index/total_states;
+                            double cdf_product = 1.0;
+                            size_t k = (row / state_space_size) % input_space_size;
+                            size_t i = row % state_space_size;
+                            const vec disturb = disturb_space.row(k).t();
+                            const vec state_start = state_space.row(i).t();
+                            nlopt::opt opt(algo, state_start.size());
+                            vector<double> lb(state_start.size());
+                            vector<double> ub(state_start.size());
+                            for (size_t m = 0; m < state_start.size(); ++m) {
+                                lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                                ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                            }
+                            opt.set_lower_bounds(lb);
+                            opt.set_upper_bounds(ub);
+                            opt.set_xtol_rel(1e-3);
+                            
+                            // Prepare data for costfunction
+                            const vec state_end = avoid_space.row(col).t();
+                            costcustom2 data;
+                            data.dim = dim_x;
+                            data.state_start = state_start;
+                            data.state_end = state_end;
+                            data.second = disturb;
+                            data.customPDF = customPDF;
+                            data.eta = ss_eta;
+                            data.dynamics = dynamics2;
+                            data.samples = calls;
+                            data.input_space_size = input_space_size;
+                            opt.set_max_objective(custom2, &data);
+                            vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
+                            double minf;
+                            try {
+                                nlopt::result result = opt.optimize(initial_guess, minf);
+                            } catch (exception& e) {
+                                cout << "nlopt failed: " << e.what() << endl;
+                            }
+                            cdfAccessor[index] = minf;
+                        });
+                    });
+                }
+                queue.wait_and_throw();
+                maxAvoidM = maxAvoidM+sum(temp,1);
+            }
+            cout << " Complete." << endl;
+        }
+        else{
+            cout << "Unsupported noise combination, either swap offdiagonal/diagonal or change type of noise." << endl;
+        }
+    }
+    else{
+        const size_t total_states = state_space_size * disturb_space_size*input_space_size;
+        cout << "Avoid Vector dimensions before summation: " << total_states << " x " << 1 << endl;
+        maxAvoidM.set_size(total_states);
+        mat temp;
+        if (avoid_space.n_rows > 0){
+            temp.set_size(total_states, avoid_space.n_rows);
+        }
+        if (noise == NoiseType::NORMAL && diagonal == true){
+            cout << "Parallel run for Normal-diagonal AvoidTransitionVector... " << endl;
+            sycl::queue queue;
+            {
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(maxAvoidM.memptr(), maxAvoidM.n_rows);
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<1> global(total_states);
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::item<1> item) {
+                        size_t index = item.get_id(0);
+                        double cdf_product = 1.0;
+                        size_t l = index /(input_space_size*state_space_size);
+                        size_t k = (index / state_space_size) % input_space_size;
+                        size_t i = index % state_space_size;
+                        const vec disturb = disturb_space.row(l).t();
+                        const vec input = input_space.row(k).t();
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
+                        costFunctionDataNormalFull data;
+                        data.state_start = state_start;
+                        data.lb = ss_lb;
+                        data.ub = ss_ub;
+                        data.disturb = disturb;
+                        data.input = input;
+                        data.eta = ss_eta;
+                        data.sigma = sigma;
+                        data.dynamics3 = dynamics3;
+                        data.is_diagonal = diagonal;
+                        opt.set_min_objective(costFunctionNormalFull, &data);
+                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        cdfAccessor[index] = 1.0-minf;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            // sum other avoid states
+            if(avoid_space.n_rows > 0){
+                sycl::queue queue;
+                {
+                    // Create a SYCL buffer to store the space
+                    sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
+                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                    queue.submit([&](sycl::handler& cgh) {
+                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                        sycl::range<2> global(total_states, avoid_space.n_rows);
+                        cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                            const size_t x0 = idx[0];
+                            const size_t x1 = idx[1];
+                            size_t index = x0 * avoid_space.n_rows + x1;
+                            size_t row = index%total_states;
+                            size_t col = index/total_states;
+                            double cdf_product = 1.0;
+                            size_t l = row / (input_space_size * state_space_size);
+                            size_t k = (row / state_space_size) % input_space_size;
+                            size_t i = row % state_space_size;
+                            const vec disturb = disturb_space.row(l).t();
+                            const vec input = input_space.row(k).t();
+                            const vec state_start = state_space.row(i).t();
+                            nlopt::opt opt(algo, state_start.size());
+                            vector<double> lb(state_start.size());
+                            vector<double> ub(state_start.size());
+                            for (size_t m = 0; m < state_start.size(); ++m) {
+                                lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                                ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                            }
+                            opt.set_lower_bounds(lb);
+                            opt.set_upper_bounds(ub);
+                            opt.set_xtol_rel(1e-3);
+                            
+                            // Prepare data for costfunction
+                            const vec state_end = avoid_space.row(col).t();
+                            costFunctionDataNormal data;
+                            data.state_end = state_end;
+                            data.input = input;
+                            data.disturb = disturb;
+                            data.eta = ss_eta;
+                            data.sigma = sigma;
+                            data.dynamics3 = dynamics3;
+                            data.is_diagonal = diagonal;
+                            opt.set_max_objective(costFunctionNormal, &data);
+                            vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
+                            double minf;
+                            try {
+                                nlopt::result result = opt.optimize(initial_guess, minf);
+                            } catch (exception& e) {
+                                cout << "nlopt failed: " << e.what() << endl;
+                            }
+                            cdfAccessor[index] = minf;
+                        });
+                    });
+                }
+                queue.wait_and_throw();
+                maxAvoidM = maxAvoidM+sum(temp,1);
+            }
+            cout << " Complete." << endl;
+        }
+        else if (noise == NoiseType::NORMAL && diagonal == false){
+            cout << "Parallel run for Normal-offdiagonal AvoidTransitionVector... " << endl;
+            sycl::queue queue;
+            {
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(maxAvoidM.memptr(),maxAvoidM.n_rows);
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<1> global(total_states);
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::item<1> item) {
+                        size_t index = item.get_id(0);
+                        double cdf_product = 1.0;
+                        size_t l = index / (input_space_size * state_space_size);
+                        size_t k = (index / state_space_size) % input_space_size;
+                        size_t i = index % state_space_size;
+                        
+                        const vec disturb = disturb_space.row(l).t();
+                        const vec input = input_space.row(k).t();
+                        const vec state_start = state_space.row(i).t();
+                        
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
+                        costFunctionDataNormalFull data;
+                        data.dim = dim_x;
+                        data.state_start = state_start;
+                        data.lb = ss_lb;
+                        data.ub = ss_ub;
+                        data.disturb = disturb;
+                        data.input = input;
+                        data.eta = ss_eta;
+                        data.inv_cov = inv_covariance_matrix;
+                        data.det = covariance_matrix_determinant;
+                        data.dynamics3 = dynamics3;
+                        data.samples = calls;
+                        data.is_diagonal = diagonal;
+                        opt.set_min_objective(costFunctionNormalFull, &data);
+                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        cdfAccessor[index] = 1.0-minf;
+                        
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            // sum other avoid states
+            if(avoid_space.n_rows > 0){
+                sycl::queue queue;
+                {
+                    // Create a SYCL buffer to store the space
+                    sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
+                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                    queue.submit([&](sycl::handler& cgh) {
+                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                        sycl::range<2> global(total_states, avoid_space.n_rows);
+                        cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                            const size_t x0 = idx[0];
+                            const size_t x1 = idx[1];
+                            size_t index = x0 * avoid_space.n_rows + x1;
+                            size_t row = index%total_states;
+                            size_t col = index/total_states;
+                            double cdf_product = 1.0;
+                            size_t l = row / (input_space_size * state_space_size);
+                            size_t k = (row / state_space_size) % input_space_size;
+                            size_t i = row % state_space_size;
+                            const vec disturb = disturb_space.row(l).t();
+                            const vec input = input_space.row(k).t();
+                            const vec state_start = state_space.row(i).t();
+                            nlopt::opt opt(algo, state_start.size());
+                            vector<double> lb(state_start.size());
+                            vector<double> ub(state_start.size());
+                            for (size_t m = 0; m < state_start.size(); ++m) {
+                                lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                                ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                            }
+                            opt.set_lower_bounds(lb);
+                            opt.set_upper_bounds(ub);
+                            opt.set_xtol_rel(1e-3);
+                            
+                            // Prepare data for costfunction
+                            const vec state_end = avoid_space.row(col).t();
+                            costFunctionDataNormal data;
+                            data.dim = dim_x;
+                            data.state_end = state_end;
+                            data.input = input;
+                            data.disturb = disturb;
+                            data.eta = ss_eta;
+                            data.inv_cov = inv_covariance_matrix;
+                            data.det = covariance_matrix_determinant;
+                            data.dynamics3 = dynamics3;
+                            data.samples = calls;
+                            data.is_diagonal = diagonal;
+                            opt.set_max_objective(costFunctionNormal, &data);
+                            vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
+                            double minf;
+                            try {
+                                nlopt::result result = opt.optimize(initial_guess, minf);
+                            } catch (exception& e) {
+                                cout << "nlopt failed: " << e.what() << endl;
+                            }
+                            cdfAccessor[index] = minf;
+                        });
+                    });
+                }
+                queue.wait_and_throw();
+                maxAvoidM = sum(temp,1);
+            }
+            cout << " Complete." << endl;
+        }
+        else if(noise == NoiseType::CUSTOM){
+            cout << "Parallel run for Custom AvoidTransitionVector... " << endl;
+            sycl::queue queue;
+            {
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(maxAvoidM.memptr(),maxAvoidM.n_rows);
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<1> global(total_states);
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::item<1> item) {
+                        size_t index = item.get_id(0);
+                        double cdf_product = 1.0;
+                        size_t l = index / (input_space_size * state_space_size);
+                        size_t k = (index / state_space_size) % input_space_size;
+                        size_t i = index % state_space_size;
+                        const vec disturb = disturb_space.row(l).t();
+                        const vec input = input_space.row(k).t();
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
+                        costcustom3Full data;
+                        data.dim = dim_x;
+                        data.state_start = state_start;
+                        data.lb = ss_lb;
+                        data.ub = ss_ub;
+                        data.disturb = disturb;
+                        data.customPDF = customPDF;
+                        data.input = input;
+                        data.eta = ss_eta;
+                        data.dynamics = dynamics3;
+                        data.samples = calls;
+                        opt.set_min_objective(custom3Full, &data);
+                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        cdfAccessor[index] = 1.0-minf;
+                        
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            // sum other avoid states
+            if(avoid_space.n_rows > 0){
+                sycl::queue queue;
+                {
+                    // Create a SYCL buffer to store the space
+                    sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
+                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                    queue.submit([&](sycl::handler& cgh) {
+                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                        sycl::range<2> global(total_states, avoid_space.n_rows);
+                        cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                            const size_t x0 = idx[0];
+                            const size_t x1 = idx[1];
+                            size_t index = x0 * avoid_space.n_rows + x1;
+                            size_t row = index%total_states;
+                            size_t col = index/total_states;
+                            double cdf_product = 1.0;
+                            size_t l = row / (input_space_size * state_space_size);
+                            size_t k = (row / state_space_size) % input_space_size;
+                            size_t i = row % state_space_size;
+                            const vec disturb = disturb_space.row(l).t();
+                            const vec input = input_space.row(k).t();
+                            const vec state_start = state_space.row(i).t();
+                            nlopt::opt opt(algo, state_start.size());
+                            vector<double> lb(state_start.size());
+                            vector<double> ub(state_start.size());
+                            for (size_t m = 0; m < state_start.size(); ++m) {
+                                lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                                ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                            }
+                            opt.set_lower_bounds(lb);
+                            opt.set_upper_bounds(ub);
+                            opt.set_xtol_rel(1e-3);
+                            
+                            // Prepare data for costfunction
+                            const vec state_end = avoid_space.row(col).t();
+                            costcustom3 data;
+                            data.dim = dim_x;
+                            data.state_start = state_start;
+                            data.state_end = state_end;
+                            data.input = input;
+                            data.disturb = disturb;
+                            data.customPDF = customPDF;
+                            data.eta = ss_eta;
+                            data.dynamics = dynamics3;
+                            data.samples = calls;
+                            opt.set_max_objective(custom3, &data);
+                            vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
+                            double minf;
+                            try {
+                                nlopt::result result = opt.optimize(initial_guess, minf);
+                            } catch (exception& e) {
+                                cout << "nlopt failed: " << e.what() << endl;
+                            }
+                            cdfAccessor[index] = minf;
+                        });
+                    });
+                }
+                queue.wait_and_throw();
+                maxAvoidM = sum(temp,1);
+            }
+            cout << " Complete." << endl;
+        }
+        else{
+            cout << "Unsupported noise combination, either swap offdiagonal/diagonal or change type of noise." << endl;
+        }
+    }
+    // Stop the timer
+    auto end = chrono::steady_clock::now();
+    auto duration = chrono::duration_cast<chrono::milliseconds>(end - start);
+    cout << "Execution time: " << duration.count()/1000.0 << " seconds" << endl;
 }
 
-/// Abstraction for minimal transition matrix
 void IMDP::minTransitionMatrix(){
-    transitionMatrixImpl(minTransitionM, true);
+    //Start timer
+    auto start = chrono::steady_clock::now();
+    cout << "Calculating minimal transition probability matrix." << endl;
+    
+    if (disturb_space_size == 0 && input_space_size == 0){
+        const size_t total_states = state_space_size;
+        cout << "minimum transition matrix dimensions: " << total_states << " x " << state_space_size << endl;
+        minTransitionM.set_size(total_states, state_space_size);
+        cout << "Approximate memory required if stored: " << total_states*state_space_size*sizeof(double)/1000000.0 << "Mb, " << total_states*state_space_size*sizeof(double)/1000000000.0 << "Gb" << endl;
+        if (noise == NoiseType::NORMAL && diagonal == true){
+            cout << "Parallel run for Normal-diagonal Minimal Transition Matrix... " << endl;
+            sycl::queue queue;
+            {
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<2> global(total_states, state_space_size);
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                        const size_t x0 = idx[0];
+                        const size_t x1 = idx[1];
+                        size_t index = x0 * state_space_size + x1;
+                        size_t row = index%total_states;
+                        size_t col = index/total_states;
+                        double cdf_product = 1.0;
+                        size_t i = row % state_space_size;
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
+                        const vec state_end = state_space.row(col).t();
+                        costFunctionDataNormal data;
+                        data.state_end = state_end;
+                        data.eta = ss_eta;
+                        data.sigma = sigma;
+                        data.dynamics1 = dynamics1;
+                        data.is_diagonal = diagonal;
+                        opt.set_min_objective(costFunctionNormal, &data);
+                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        cdfAccessor[index] = minf;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            cout << " Complete." << endl;
+        }
+        else if (noise == NoiseType::NORMAL && diagonal == false){
+            cout << "Parallel run for Normal-offdiagonal TransitionMatrix... " << endl;
+            sycl::queue queue;
+            {
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<2> global(total_states, state_space_size);
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                        const size_t x0 = idx[0];
+                        const size_t x1 = idx[1];
+                        size_t index = x0 * state_space_size + x1;
+                        size_t row = index%total_states;
+                        size_t col = index/total_states;
+                        double cdf_product = 1.0;
+                        size_t l = row / (input_space_size * state_space_size);
+                        size_t k = (row / state_space_size) % input_space_size;
+                        size_t i = row % state_space_size;
+                        const vec disturb = disturb_space.row(l).t();
+                        const vec input = input_space.row(k).t();
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
+                        const vec state_end = state_space.row(col).t();
+                        costFunctionDataNormal data;
+                        data.dim = dim_x;
+                        data.state_end = state_end;
+                        data.eta = ss_eta;
+                        data.inv_cov = inv_covariance_matrix;
+                        data.det = covariance_matrix_determinant;
+                        data.dynamics1 = dynamics1;
+                        data.is_diagonal = diagonal;
+                        data.samples = calls;
+                        opt.set_min_objective(costFunctionNormal, &data);
+                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        cdfAccessor[index] = minf;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            cout << " Complete." << endl;
+        }
+        else if (noise == NoiseType::CUSTOM){
+            cout << "Parallel run for Normal-offdiagonal TransitionMatrix... " << endl;
+            sycl::queue queue;
+            {
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<2> global(total_states, state_space_size);
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                        const size_t x0 = idx[0];
+                        const size_t x1 = idx[1];
+                        size_t index = x0 * state_space_size + x1;
+                        size_t row = index%total_states;
+                        size_t col = index/total_states;
+                        double cdf_product = 1.0;
+                        size_t l = row / (input_space_size * state_space_size);
+                        size_t k = (row / state_space_size) % input_space_size;
+                        size_t i = row % state_space_size;
+                        const vec disturb = disturb_space.row(l).t();
+                        const vec input = input_space.row(k).t();
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
+                        const vec state_end = state_space.row(col).t();
+                        costcustom1 data;
+                        data.dim = dim_x;
+                        data.state_start = state_start;
+                        data.state_end = state_end;
+                        data.eta = ss_eta;
+                        data.dynamics = dynamics1;
+                        data.customPDF = customPDF;
+                        data.samples = calls;
+                        opt.set_min_objective(custom1, &data);
+                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        cdfAccessor[index] = minf;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            cout << " Complete." << endl;
+        }
+        else{
+            cout << "Unsupported noise combination, either swap offdiagonal/diagonal or change type of noise." << endl;
+        }
+    }
+    
+    else if (disturb_space_size == 0){
+        const size_t total_states = state_space_size * input_space_size;
+        cout << "minimum transition Matrix dimensions: " << total_states << " x " << state_space_size << endl;
+        minTransitionM.set_size(total_states, state_space_size);
+        cout << "Approximate memory required if stored: " << total_states*state_space_size*sizeof(double)/1000000.0 << "Mb, " << total_states*state_space_size*sizeof(double)/1000000000.0 << "Gb" << endl;
+        if (noise == NoiseType::NORMAL && diagonal == true){
+            cout << "Parallel run for Normal-diagonal Transition Matrix... " << endl;
+            sycl::queue queue;
+            {
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<2> global(total_states, state_space_size);
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                        const size_t x0 = idx[0];
+                        const size_t x1 = idx[1];
+                        size_t index = x0 * state_space_size + x1;
+                        size_t row = index%total_states;
+                        size_t col = index/total_states;
+                        double cdf_product = 1.0;
+                        size_t k = (row / state_space_size) % input_space_size;
+                        size_t i = row % state_space_size;
+                        const vec input = input_space.row(k).t();
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
+                        const vec state_end = state_space.row(col).t();
+                        costFunctionDataNormal data;
+                        data.state_end = state_end;
+                        data.second = input;
+                        data.eta = ss_eta;
+                        data.sigma = sigma;
+                        data.dynamics2 = dynamics2;
+                        data.is_diagonal = diagonal;
+                        opt.set_min_objective(costFunctionNormal, &data);
+                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        cdfAccessor[index] = minf;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            cout << " Complete." << endl;
+        }
+        else if (noise == NoiseType::NORMAL && diagonal == false){
+            cout << "Parallel run for Normal-offdiagonal Transition Matrix... " << endl;
+            sycl::queue queue;
+            {
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<2> global(total_states, state_space_size);
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                        const size_t x0 = idx[0];
+                        const size_t x1 = idx[1];
+                        size_t index = x0 * state_space_size + x1;
+                        size_t row = index%total_states;
+                        size_t col = index/total_states;
+                        double cdf_product = 1.0;
+                        size_t k = (row / state_space_size) % input_space_size;
+                        size_t i = row % state_space_size;
+                        const vec input = input_space.row(k).t();
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
+                        const vec state_end = state_space.row(col).t();
+                        costFunctionDataNormal data;
+                        data.dim = dim_x;
+                        data.state_end = state_end;
+                        data.second = input;
+                        data.eta = ss_eta;
+                        data.inv_cov = inv_covariance_matrix;
+                        data.det = covariance_matrix_determinant;
+                        data.dynamics2 = dynamics2;
+                        data.is_diagonal = diagonal;
+                        data.samples = calls;
+                        opt.set_min_objective(costFunctionNormal, &data);
+                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        cdfAccessor[index] = minf;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            cout << " Complete." << endl;
+        }
+        else if(noise == NoiseType::CUSTOM){
+            cout << "Parallel run for Custom Transition Matrix... " << endl;
+            sycl::queue queue;
+            {
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<2> global(total_states, state_space_size);
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                        const size_t x0 = idx[0];
+                        const size_t x1 = idx[1];
+                        size_t index = x0 * state_space_size + x1;
+                        size_t row = index%total_states;
+                        size_t col = index/total_states;
+                        double cdf_product = 1.0;
+                        size_t k = (row / state_space_size) % input_space_size;
+                        size_t i = row % state_space_size;
+                        const vec input = input_space.row(k).t();
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
+                        const vec state_end = state_space.row(col).t();
+                        costcustom2 data;
+                        data.dim = dim_x;
+                        data.state_start = state_start;
+                        data.state_end = state_end;
+                        data.second = input;
+                        data.eta = ss_eta;
+                        data.dynamics = dynamics2;
+                        data.customPDF = customPDF;
+                        data.samples = calls;
+                        data.input_space_size = input_space_size;
+                        opt.set_min_objective(custom2, &data);
+                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        cdfAccessor[index] = minf;
+                        
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            cout << " Complete." << endl;
+        }
+        else{
+            cout << "Unsupported noise combination, either swap offdiagonal/diagonal or change type of noise." << endl;
+        }
+    }
+    else if (input_space_size == 0){
+        const size_t total_states = state_space_size * disturb_space_size;
+        cout << "minimum transition Matrix dimensions: " << total_states << " x " << state_space_size << endl;
+        minTransitionM.set_size(total_states, state_space_size);
+        cout << "Approximate memory required if stored: " << total_states*state_space_size*sizeof(double)/1000000.0 << "Mb, " << total_states*state_space_size*sizeof(double)/1000000000.0 << "Gb" << endl;
+        if (noise == NoiseType::NORMAL && diagonal == true){
+            cout << "Parallel run for Normal-diagonal Transition Matrix... " << endl;
+            sycl::queue queue;
+            {
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<2> global(total_states, state_space_size);
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                        const size_t x0 = idx[0];
+                        const size_t x1 = idx[1];
+                        size_t index = x0 * state_space_size + x1;
+                        size_t row = index%total_states;
+                        size_t col = index/total_states;
+                        double cdf_product = 1.0;
+                        size_t k = (row / state_space_size) % disturb_space_size;
+                        size_t i = row % state_space_size;
+                        const vec disturb = disturb_space.row(k).t();
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
+                        const vec state_end = state_space.row(col).t();
+                        costFunctionDataNormal data;
+                        data.state_end = state_end;
+                        data.second = disturb;
+                        data.eta = ss_eta;
+                        data.sigma = sigma;
+                        data.dynamics2 = dynamics2;
+                        data.is_diagonal = diagonal;
+                        opt.set_min_objective(costFunctionNormal, &data);
+                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        cdfAccessor[index] = minf;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            cout << " Complete." << endl;
+        }
+        else if (noise == NoiseType::NORMAL && diagonal == false){
+            cout << "Parallel run for Normal-offdiagonal Transition Matrix... " << endl;
+            sycl::queue queue;
+            {
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<2> global(total_states, state_space_size);
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                        const size_t x0 = idx[0];
+                        const size_t x1 = idx[1];
+                        size_t index = x0 * state_space_size + x1;
+                        size_t row = index%total_states;
+                        size_t col = index/total_states;
+                        double cdf_product = 1.0;
+                        size_t k = (row / state_space_size) % input_space_size;
+                        size_t i = row % state_space_size;
+                        const vec disturb = disturb_space.row(k).t();
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
+                        const vec state_end = state_space.row(col).t();
+                        costFunctionDataNormal data;
+                        data.dim = dim_x;
+                        data.state_end = state_end;
+                        data.second = disturb;
+                        data.eta = ss_eta;
+                        data.inv_cov = inv_covariance_matrix;
+                        data.det = covariance_matrix_determinant;
+                        data.dynamics2 = dynamics2;
+                        data.is_diagonal = diagonal;
+                        data.samples = calls;
+                        opt.set_min_objective(costFunctionNormal, &data);
+                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        cdfAccessor[index] = minf;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            cout << " Complete." << endl;
+        }
+        else if (noise == NoiseType::CUSTOM){
+            cout << "Parallel run for Custom Transition Matrix... " << endl;
+            sycl::queue queue;
+            {
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<2> global(total_states, state_space_size);
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                        const size_t x0 = idx[0];
+                        const size_t x1 = idx[1];
+                        size_t index = x0 * state_space_size + x1;
+                        size_t row = index%total_states;
+                        size_t col = index/total_states;
+                        double cdf_product = 1.0;
+                        size_t k = (row / state_space_size) % input_space_size;
+                        size_t i = row % state_space_size;
+                        const vec disturb = disturb_space.row(k).t();
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
+                        const vec state_end = state_space.row(col).t();
+                        costcustom2 data;
+                        data.dim = dim_x;
+                        data.state_start = state_start;
+                        data.state_end = state_end;
+                        data.second = disturb;
+                        data.eta = ss_eta;
+                        data.dynamics = dynamics2;
+                        data.customPDF = customPDF;
+                        data.samples = calls;
+                        data.input_space_size = input_space_size;
+                        opt.set_min_objective(custom2, &data);
+                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        cdfAccessor[index] = minf;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            cout << " Complete." << endl;
+        }
+        else{
+            cout << "Unsupported noise combination, either swap offdiagonal/diagonal or change type of noise." << endl;
+        }
+    }else{
+        const size_t total_states = state_space_size * input_space_size * disturb_space_size;
+        cout << "minimum transition Matrix dimensions: " << total_states << " x " << state_space_size << endl;
+        minTransitionM.set_size(total_states, state_space_size);
+        cout << "Approximate memory required if stored: " << total_states*state_space_size*sizeof(double)/1000000.0 << "Mb, " << total_states*state_space_size*sizeof(double)/1000000000.0 << "Gb" << endl;
+        if (noise == NoiseType::NORMAL && diagonal == true){
+            cout << "Parallel run for Normal-diagonal TransitionMatrix... " << endl;
+            sycl::queue queue;
+            {
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<2> global(total_states, state_space_size);
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                        const size_t x0 = idx[0];
+                        const size_t x1 = idx[1];
+                        size_t index = x0 * state_space_size + x1;
+                        size_t row = index%total_states;
+                        size_t col = index/total_states;
+                        double cdf_product = 1.0;
+                        size_t l = row / (input_space_size * state_space_size);
+                        size_t k = (row / state_space_size) % input_space_size;
+                        size_t i = row % state_space_size;
+                        const vec disturb = disturb_space.row(l).t();
+                        const vec input = input_space.row(k).t();
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
+                        const vec state_end = state_space.row(col).t();
+                        costFunctionDataNormal data;
+                        data.state_end = state_end;
+                        data.input = input;
+                        data.disturb = disturb;
+                        data.eta = ss_eta;
+                        data.sigma = sigma;
+                        data.dynamics3 = dynamics3;
+                        data.is_diagonal = diagonal;
+                        opt.set_min_objective(costFunctionNormal, &data);
+                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        cdfAccessor[index] = minf;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            cout << " Complete." << endl;
+        }
+        else if (noise == NoiseType::NORMAL && diagonal == false){
+            cout << "Parallel run for Normal-offdiagonal TransitionMatrix... " << endl;
+            sycl::queue queue;
+            {
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<2> global(total_states, state_space_size);
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                        const size_t x0 = idx[0];
+                        const size_t x1 = idx[1];
+                        size_t index = x0 * state_space_size + x1;
+                        size_t row = index%total_states;
+                        size_t col = index/total_states;
+                        double cdf_product = 1.0;
+                        size_t l = row / (input_space_size * state_space_size);
+                        size_t k = (row / state_space_size) % input_space_size;
+                        size_t i = row % state_space_size;
+                        const vec disturb = disturb_space.row(l).t();
+                        const vec input = input_space.row(k).t();
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
+                        const vec state_end = state_space.row(col).t();
+                        costFunctionDataNormal data;
+                        data.dim = dim_x;
+                        data.state_end = state_end;
+                        data.input = input;
+                        data.disturb = disturb;
+                        data.eta = ss_eta;
+                        data.inv_cov = inv_covariance_matrix;
+                        data.det = covariance_matrix_determinant;
+                        data.dynamics3 = dynamics3;
+                        data.is_diagonal = diagonal;
+                        data.samples = calls;
+                        opt.set_min_objective(costFunctionNormal, &data);
+                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        cdfAccessor[index] = minf;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            cout << " Complete." << endl;
+        }
+        else if (noise == NoiseType::CUSTOM){
+            cout << "Parallel run for Custom TransitionMatrix... " << endl;
+            sycl::queue queue;
+            {
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<2> global(total_states, state_space_size);
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                        const size_t x0 = idx[0];
+                        const size_t x1 = idx[1];
+                        size_t index = x0 * state_space_size + x1;
+                        size_t row = index%total_states;
+                        size_t col = index/total_states;
+                        double cdf_product = 1.0;
+                        size_t l = row / (input_space_size * state_space_size);
+                        size_t k = (row / state_space_size) % input_space_size;
+                        size_t i = row % state_space_size;
+                        const vec disturb = disturb_space.row(l).t();
+                        const vec input = input_space.row(k).t();
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
+                        const vec state_end = state_space.row(col).t();
+                        costcustom3 data;
+                        data.dim = dim_x;
+                        data.state_start = state_start;
+                        data.state_end = state_end;
+                        data.input = input;
+                        data.disturb = disturb;
+                        data.eta = ss_eta;
+                        data.dynamics = dynamics3;
+                        data.customPDF = customPDF;
+                        data.samples = calls;
+                        opt.set_min_objective(custom3, &data);
+                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        cdfAccessor[index] = minf;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            cout << " Complete." << endl;
+        }
+        else{
+            cout << "Unsupported noise combination, either swap offdiagonal/diagonal or change type of noise." << endl;
+        }
+    }
+    // Stop the timer
+    auto end = chrono::steady_clock::now();
+    auto duration = chrono::duration_cast<chrono::milliseconds>(end - start);
+    cout << "Execution time: " << duration.count()/1000.0 << " seconds" << endl;
 }
 
 /// Abstraction for maximal transition matrix
 void IMDP::maxTransitionMatrix(){
-    transitionMatrixImpl(maxTransitionM, false);
+    //Start timer
+    auto start = chrono::steady_clock::now();
+    cout << "Calculating maximal transition probability matrix." << endl;
+    
+    if (disturb_space_size == 0 && input_space_size == 0){
+        const size_t total_states = state_space_size;
+        cout << "maximum transition Matrix dimensions: " << total_states << " x " << state_space_size << endl;
+        maxTransitionM.set_size(total_states, state_space_size);
+        cout << "Approximate memory required if stored: " << total_states*state_space_size*sizeof(double)/1000000.0 << "Mb, " << total_states*state_space_size*sizeof(double)/1000000000.0 << "Gb" << endl;
+        
+        if (noise == NoiseType::NORMAL && diagonal == true){
+            cout << "Parallel run for Normal-diagonal TransitionMatrix... " << endl;
+            sycl::queue queue;
+            {
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(maxTransitionM.memptr(),maxTransitionM.n_rows*maxTransitionM.n_cols);
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<2> global(total_states, state_space_size);
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                        const size_t x0 = idx[0];
+                        const size_t x1 = idx[1];
+                        size_t index = x0 * state_space_size + x1;
+                        size_t row = index%total_states;
+                        size_t col = index/total_states;
+                        double cdf_product = 1.0;
+                        size_t i = row % state_space_size;
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
+                        const vec state_end = state_space.row(col).t();
+                        costFunctionDataNormal data;
+                        data.state_end = state_end;
+                        data.eta = ss_eta;
+                        data.sigma = sigma;
+                        data.dynamics1 = dynamics1;
+                        data.is_diagonal = diagonal;
+                        opt.set_max_objective(costFunctionNormal, &data);
+                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        cdfAccessor[index] = minf;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            cout << " Complete." << endl;
+        }
+        else if (noise == NoiseType::NORMAL && diagonal == false){
+            cout << "Parallel run for Normal-offdiagonal TransitionMatrix... " << endl;
+            sycl::queue queue;
+            {
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(maxTransitionM.memptr(),maxTransitionM.n_rows*maxTransitionM.n_cols);
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<2> global(total_states, state_space_size);
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                        const size_t x0 = idx[0];
+                        const size_t x1 = idx[1];
+                        size_t index = x0 * state_space_size + x1;
+                        size_t row = index%total_states;
+                        size_t col = index/total_states;
+                        double cdf_product = 1.0;
+                        size_t i = row % state_space_size;
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
+                        const vec state_end = state_space.row(col).t();
+                        costFunctionDataNormal data;
+                        data.dim = dim_x;
+                        data.state_end = state_end;
+                        data.eta = ss_eta;
+                        data.dynamics1 = dynamics1;
+                        data.samples = calls;
+                        data.is_diagonal = diagonal;
+                        opt.set_max_objective(costFunctionNormal, &data);
+                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        cdfAccessor[index] = minf;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            cout << " Complete." << endl;
+        }
+        else if (noise == NoiseType::CUSTOM){
+            cout << "Parallel run for Custom TransitionMatrix... " << endl;
+            sycl::queue queue;
+            {
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(maxTransitionM.memptr(),maxTransitionM.n_rows*maxTransitionM.n_cols);
+                
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    
+                    sycl::range<2> global(total_states, state_space_size);
+                    
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                        const size_t x0 = idx[0];
+                        const size_t x1 = idx[1];
+                        size_t index = x0 * state_space_size + x1;
+                        size_t row = index%total_states;
+                        size_t col = index/total_states;
+                        double cdf_product = 1.0;
+                        size_t i = row % state_space_size;
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
+                        const vec state_end = state_space.row(col).t();
+                        costcustom1 data;
+                        data.dim = dim_x;
+                        data.state_start = state_start;
+                        data.state_end = state_end;
+                        data.eta = ss_eta;
+                        data.dynamics = dynamics1;
+                        data.customPDF = customPDF;
+                        data.samples = calls;
+                        opt.set_max_objective(custom1, &data);
+                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        cdfAccessor[index] = minf;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            cout << " Complete." << endl;
+        }
+        else{
+            cout << "Unsupported noise combination, either swap offdiagonal/diagonal or change type of noise." << endl;
+        }
+    }
+    
+    else if (disturb_space_size == 0){
+        const size_t total_states = state_space_size * input_space_size;
+        cout << "maximum transition Matrix dimensions: " << total_states << " x " << state_space_size << endl;
+        maxTransitionM.set_size(total_states, state_space_size);
+        cout << "Approximate memory required if stored: " << total_states*state_space_size*sizeof(double)/1000000.0 << "Mb, " << total_states*state_space_size*sizeof(double)/1000000000.0 << "Gb" << endl;
+        if (noise == NoiseType::NORMAL && diagonal == true){
+            cout << "Parallel run for Normal-diagonal TransitionMatrix... " << endl;
+            sycl::queue queue;
+            {
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(maxTransitionM.memptr(),maxTransitionM.n_rows*maxTransitionM.n_cols);
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<2> global(total_states, state_space_size);
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                        const size_t x0 = idx[0];
+                        const size_t x1 = idx[1];
+                        size_t index = x0 * state_space_size + x1;
+                        size_t row = index%total_states;
+                        size_t col = index/total_states;
+                        double cdf_product = 1.0;
+                        size_t k = (row / state_space_size) % input_space_size;
+                        size_t i = row % state_space_size;
+                        const vec input = input_space.row(k).t();
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
+                        const vec state_end = state_space.row(col).t();
+                        costFunctionDataNormal data;
+                        data.state_end = state_end;
+                        data.second = input;
+                        data.eta = ss_eta;
+                        data.sigma = sigma;
+                        data.dynamics2 = dynamics2;
+                        data.is_diagonal = diagonal;
+                        opt.set_max_objective(costFunctionNormal, &data);
+                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        cdfAccessor[index] = minf;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            cout << " Complete." << endl;
+        }
+        else if (noise == NoiseType::NORMAL && diagonal == false){
+            cout << "Parallel run for Normal-offdiagonal TransitionMatrix... " << endl;
+            sycl::queue queue;
+            {
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(maxTransitionM.memptr(),maxTransitionM.n_rows*maxTransitionM.n_cols);
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<2> global(total_states, state_space_size);
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                        const size_t x0 = idx[0];
+                        const size_t x1 = idx[1];
+                        size_t index = x0 * state_space_size + x1;
+                        size_t row = index%total_states;
+                        size_t col = index/total_states;
+                        double cdf_product = 1.0;
+                        size_t k = (row / state_space_size) % input_space_size;
+                        size_t i = row % state_space_size;
+                        const vec input = input_space.row(k).t();
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
+                        const vec state_end = state_space.row(col).t();
+                        costFunctionDataNormal data;
+                        data.dim = dim_x;
+                        data.state_end = state_end;
+                        data.second = input;
+                        data.eta = ss_eta;
+                        data.inv_cov = inv_covariance_matrix;
+                        data.det = covariance_matrix_determinant;
+                        data.dynamics2 = dynamics2;
+                        data.is_diagonal = diagonal;
+                        data.samples = calls;
+                        opt.set_max_objective(costFunctionNormal, &data);
+                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        cdfAccessor[index] = minf;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            cout << " Complete." << endl;
+        }else if (noise ==NoiseType::CUSTOM){
+            cout << "Parallel run for Custom TransitionMatrix... " << endl;
+            sycl::queue queue;
+            {
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(maxTransitionM.memptr(),maxTransitionM.n_rows*maxTransitionM.n_cols);
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<2> global(total_states, state_space_size);
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                        const size_t x0 = idx[0];
+                        const size_t x1 = idx[1];
+                        size_t index = x0 * state_space_size + x1;
+                        size_t row = index%total_states;
+                        size_t col = index/total_states;
+                        double cdf_product = 1.0;
+                        size_t k = (row / state_space_size) % input_space_size;
+                        size_t i = row % state_space_size;
+                        const vec input = input_space.row(k).t();
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
+                        const vec state_end = state_space.row(col).t();
+                        costcustom2 data;
+                        data.dim = dim_x;
+                        data.state_start = state_start;
+                        data.state_end = state_end;
+                        data.second = input;
+                        data.eta = ss_eta;
+                        data.dynamics = dynamics2;
+                        data.customPDF = customPDF;
+                        data.samples = calls;
+                        data.input_space_size = input_space_size;
+                        opt.set_max_objective(custom2, &data);
+                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        cdfAccessor[index] = minf;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            cout << " Complete." << endl;
+        }
+        else{
+            cout << "Unsupported noise combination, either swap offdiagonal/diagonal or change type of noise." << endl;
+        }
+    }
+    else if (input_space_size == 0){
+        const size_t total_states = state_space_size * disturb_space_size;
+        cout << "maximum transition Matrix dimensions: " << total_states << " x " << state_space_size << endl;
+        maxTransitionM.set_size(total_states, state_space_size);
+        cout << "Approximate memory required if stored: " << total_states*state_space_size*sizeof(double)/1000000.0 << "Mb, " << total_states*state_space_size*sizeof(double)/1000000000.0 << "Gb" << endl;
+        if (noise == NoiseType::NORMAL && diagonal == true){
+            cout << "Parallel run for Normal-diagonal TransitionMatrix... " << endl;
+            sycl::queue queue;
+            {
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(maxTransitionM.memptr(),maxTransitionM.n_rows*maxTransitionM.n_cols);
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<2> global(total_states, state_space_size);
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                        const size_t x0 = idx[0];
+                        const size_t x1 = idx[1];
+                        size_t index = x0 * state_space_size + x1;
+                        size_t row = index%total_states;
+                        size_t col = index/total_states;
+                        double cdf_product = 1.0;
+                        size_t k = (row / state_space_size) % disturb_space_size;
+                        size_t i = row % state_space_size;
+                        const vec disturb = disturb_space.row(k).t();
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
+                        const vec state_end = state_space.row(col).t();
+                        costFunctionDataNormal data;
+                        data.state_end = state_end;
+                        data.second = disturb;
+                        data.eta = ss_eta;
+                        data.sigma = sigma;
+                        data.dynamics2 = dynamics2;
+                        data.is_diagonal = diagonal;
+                        opt.set_max_objective(costFunctionNormal, &data);
+                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        cdfAccessor[index] = minf;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            cout << " Complete." << endl;
+        }
+        else if (noise == NoiseType::NORMAL && diagonal == false){
+            cout << "Parallel run for Normal-offdiagonal TransitionMatrix... " << endl;
+            sycl::queue queue;
+            {
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(maxTransitionM.memptr(),maxTransitionM.n_rows*maxTransitionM.n_cols);
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<2> global(total_states, state_space_size);
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                        const size_t x0 = idx[0];
+                        const size_t x1 = idx[1];
+                        size_t index = x0 * state_space_size + x1;
+                        size_t row = index%total_states;
+                        size_t col = index/total_states;
+                        double cdf_product = 1.0;
+                        size_t k = (row / state_space_size) % input_space_size;
+                        size_t i = row % state_space_size;
+                        const vec disturb = disturb_space.row(k).t();
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
+                        const vec state_end = state_space.row(col).t();
+                        costFunctionDataNormal data;
+                        data.dim = dim_x;
+                        data.state_end = state_end;
+                        data.second = disturb;
+                        data.eta = ss_eta;
+                        data.inv_cov = inv_covariance_matrix;
+                        data.det = covariance_matrix_determinant;
+                        data.dynamics2 = dynamics2;
+                        data.is_diagonal = diagonal;
+                        data.samples = calls;
+                        opt.set_max_objective(costFunctionNormal, &data);
+                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        cdfAccessor[index] = minf;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            cout << " Complete." << endl;
+        }
+        else if (noise == NoiseType::CUSTOM){
+            cout << "Parallel run for Custom TransitionMatrix... " << endl;
+            sycl::queue queue;
+            {
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(maxTransitionM.memptr(),maxTransitionM.n_rows*maxTransitionM.n_cols);
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<2> global(total_states, state_space_size);
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                        const size_t x0 = idx[0];
+                        const size_t x1 = idx[1];
+                        size_t index = x0 * state_space_size + x1;
+                        size_t row = index%total_states;
+                        size_t col = index/total_states;
+                        double cdf_product = 1.0;
+                        size_t k = (row / state_space_size) % input_space_size;
+                        size_t i = row % state_space_size;
+                        const vec disturb = disturb_space.row(k).t();
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
+                        const vec state_end = state_space.row(col).t();
+                        costcustom2 data;
+                        data.dim = dim_x;
+                        data.state_start = state_start;
+                        data.state_end = state_end;
+                        data.second = disturb;
+                        data.eta = ss_eta;
+                        data.dynamics = dynamics2;
+                        data.customPDF = customPDF;
+                        data.samples = calls;
+                        data.input_space_size = input_space_size;
+                        opt.set_max_objective(custom2, &data);
+                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        cdfAccessor[index] = minf;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            cout << " Complete." << endl;
+        }
+        else{
+            cout << "Unsupported noise combination, either swap offdiagonal/diagonal or change type of noise." << endl;
+        }
+    }else{
+        
+        const size_t total_states = state_space_size * input_space_size * disturb_space_size;
+        cout << "maximum transition Matrix dimensions: " << total_states << " x " << state_space_size << endl;
+        maxTransitionM.set_size(total_states, state_space_size);
+        cout << "Approximate memory required if stored: " << total_states*state_space_size*sizeof(double)/1000000.0 << "Mb, " << total_states*state_space_size*sizeof(double)/1000000000.0 << "Gb" << endl;
+        if (noise == NoiseType::NORMAL && diagonal == true){
+            cout << "Parallel run for Normal-diagonal TransitionMatrix... " << endl;
+            sycl::queue queue;
+            {
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(maxTransitionM.memptr(),maxTransitionM.n_rows*maxTransitionM.n_cols);
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<2> global(total_states, state_space_size);
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                        const size_t x0 = idx[0];
+                        const size_t x1 = idx[1];
+                        size_t index = x0 * state_space_size + x1;
+                        size_t row = index%total_states;
+                        size_t col = index/total_states;
+                        double cdf_product = 1.0;
+                        size_t l = row / (input_space_size * state_space_size);
+                        size_t k = (row / state_space_size) % input_space_size;
+                        size_t i = row % state_space_size;
+                        const vec disturb = disturb_space.row(l).t();
+                        const vec input = input_space.row(k).t();
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
+                        const vec state_end = state_space.row(col).t();
+                        costFunctionDataNormal data;
+                        data.state_end = state_end;
+                        data.input = input;
+                        data.disturb = disturb;
+                        data.eta = ss_eta;
+                        data.sigma = sigma;
+                        data.dynamics3 = dynamics3;
+                        data.is_diagonal = diagonal;
+                        opt.set_max_objective(costFunctionNormal, &data);
+                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        cdfAccessor[index] = minf;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            cout << " Complete." << endl;
+        }
+        else if (noise == NoiseType::NORMAL && diagonal == false){
+            cout << "Parallel run for Normal-offdiagonal TransitionMatrix... " << endl;
+            sycl::queue queue;
+            {
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(maxTransitionM.memptr(),maxTransitionM.n_rows*maxTransitionM.n_cols);
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<2> global(total_states, state_space_size);
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                        const size_t x0 = idx[0];
+                        const size_t x1 = idx[1];
+                        size_t index = x0 * state_space_size + x1;
+                        size_t row = index%total_states;
+                        size_t col = index/total_states;
+                        double cdf_product = 1.0;
+                        size_t l = row / (input_space_size * state_space_size);
+                        size_t k = (row / state_space_size) % input_space_size;
+                        size_t i = row % state_space_size;
+                        const vec disturb = disturb_space.row(l).t();
+                        const vec input = input_space.row(k).t();
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
+                        const vec state_end = state_space.row(col).t();
+                        costFunctionDataNormal data;
+                        data.dim = dim_x;
+                        data.state_end = state_end;
+                        data.input = input;
+                        data.disturb = disturb;
+                        data.eta = ss_eta;
+                        data.inv_cov = inv_covariance_matrix;
+                        data.det = covariance_matrix_determinant;
+                        data.dynamics3 = dynamics3;
+                        data.is_diagonal = diagonal;
+                        data.samples = calls;
+                        opt.set_max_objective(costFunctionNormal, &data);
+                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        cdfAccessor[index] = minf;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            cout << " Complete." << endl;
+        }
+        else if (noise == NoiseType::CUSTOM){
+            cout << "Parallel run for Custom TransitionMatrix... " << endl;
+            sycl::queue queue;
+            {
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(maxTransitionM.memptr(),maxTransitionM.n_rows*maxTransitionM.n_cols);
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<2> global(total_states, state_space_size);
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                        const size_t x0 = idx[0];
+                        const size_t x1 = idx[1];
+                        size_t index = x0 * state_space_size + x1;
+                        size_t row = index%total_states;
+                        size_t col = index/total_states;
+                        double cdf_product = 1.0;
+                        size_t l = row / (input_space_size * state_space_size);
+                        size_t k = (row / state_space_size) % input_space_size;
+                        size_t i = row % state_space_size;
+                        const vec disturb = disturb_space.row(l).t();
+                        const vec input = input_space.row(k).t();
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
+                        const vec state_end = state_space.row(col).t();
+                        costcustom3 data;
+                        data.dim = dim_x;
+                        data.state_start = state_start;
+                        data.state_end = state_end;
+                        data.input = input;
+                        data.disturb = disturb;
+                        data.eta = ss_eta;
+                        data.dynamics = dynamics3;
+                        data.customPDF = customPDF;
+                        data.samples = calls;
+                        opt.set_max_objective(custom3, &data);
+                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        cdfAccessor[index] = minf;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            cout << " Complete." << endl;
+        }
+        else{
+            cout << "Unsupported noise combination, either swap offdiagonal/diagonal or change type of noise." << endl;
+        }
+    }// Stop the timer
+    auto end = chrono::steady_clock::now();
+    auto duration = chrono::duration_cast<chrono::milliseconds>(end - start);
+    cout << "Execution time: " << duration.count()/1000.0 << " seconds" << endl;
 }
 
 ///Abstraction of minimal target transition vector
 void IMDP::minTargetTransitionVector(){
-    targetTransitionVectorImpl(minTargetM, true);
+    auto start = chrono::steady_clock::now();
+    cout << "Calculating maximal transition probability Vector." << endl;
+    if (disturb_space_size == 0 && input_space_size == 0){
+        const size_t total_states = state_space_size;
+        cout << "Target Vector dimensions before summation: " << total_states << " x " << target_space.n_rows << endl;
+        mat temp;
+        temp.set_size(total_states, target_space.n_rows);
+        cout << "Approximate memory required if stored: " << total_states*target_space.n_rows*sizeof(double)/1000000.0 << "Mb, " << total_states*target_space.n_rows*sizeof(double)/1000000000.0 << "Gb" << endl;
+        
+        if (noise == NoiseType::NORMAL && diagonal == true){
+            cout << "Parallel run for Normal-diagonal TargetTransitionVector... " << endl;
+            sycl::queue queue;
+            {
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<2> global(total_states, target_space.n_rows);
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                        const size_t x0 = idx[0];
+                        const size_t x1 = idx[1];
+                        size_t index = x0 * target_space.n_rows + x1;
+                        size_t row = index%total_states;
+                        size_t col = index/total_states;
+                        double cdf_product = 1.0;
+                        size_t i = row % state_space_size;
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
+                        const vec state_end = target_space.row(col).t();
+                        costFunctionDataNormal data;
+                        data.state_end = state_end;
+                        data.eta = ss_eta;
+                        data.sigma = sigma;
+                        data.dynamics1 = dynamics1;
+                        data.is_diagonal = diagonal;
+                        opt.set_min_objective(costFunctionNormal, &data);
+                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        cdfAccessor[index] = minf;
+                        
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            minTargetM = sum(temp,1);
+            cout << " Complete." << endl;
+        }
+        else if (noise == NoiseType::NORMAL && diagonal == false){
+            cout << "Parallel run for Normal-offdiagonal TargetTransitionVector... " << endl;
+            sycl::queue queue;
+            {
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<2> global(total_states, target_space.n_rows);
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                        const size_t x0 = idx[0];
+                        const size_t x1 = idx[1];
+                        size_t index = x0 * target_space.n_rows + x1;
+                        size_t row = index%total_states;
+                        size_t col = index/total_states;
+                        double cdf_product = 1.0;
+                        size_t i = row % state_space_size;
+                        const vec state_start = target_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
+                        const vec state_end = target_space.row(col).t();
+                        costFunctionDataNormal data;
+                        data.dim = dim_x;
+                        data.state_end = state_end;
+                        data.eta = ss_eta;
+                        data.inv_cov = inv_covariance_matrix;
+                        data.det = covariance_matrix_determinant;
+                        data.dynamics1 = dynamics1;
+                        data.is_diagonal = diagonal;
+                        data.samples = calls;
+                        opt.set_min_objective(costFunctionNormal, &data);
+                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        cdfAccessor[index] = minf;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            minTargetM = sum(temp,1);
+            cout << " Complete." << endl;
+        }else if (noise == NoiseType::CUSTOM){
+            cout << "Parallel run for Normal-offdiagonal TargetTransitionVector... " << endl;
+            sycl::queue queue;
+            {
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<2> global(total_states, target_space.n_rows);
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                        const size_t x0 = idx[0];
+                        const size_t x1 = idx[1];
+                        size_t index = x0 * target_space.n_rows + x1;
+                        size_t row = index%total_states;
+                        size_t col = index/total_states;
+                        double cdf_product = 1.0;
+                        size_t i = row % state_space_size;
+                        const vec state_start = target_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
+                        const vec state_end = target_space.row(col).t();
+                        costcustom1 data;
+                        data.dim = dim_x;
+                        data.state_start = state_start;
+                        data.state_end = state_end;
+                        data.eta = ss_eta;
+                        data.dynamics = dynamics1;
+                        data.customPDF = customPDF;
+                        data.samples = calls;
+                        opt.set_min_objective(custom1, &data);
+                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        cdfAccessor[index] = minf;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            minTargetM = sum(temp,1);
+            cout << " Complete." << endl;
+        }
+        else{
+            cout << "Unsupported noise combination, either swap offdiagonal/diagonal or change type of noise." << endl;
+        }
+    }
+    
+    else if (disturb_space_size == 0){
+        const size_t total_states = state_space_size * input_space_size;
+        cout << "Target Vector dimensions before summation: " << total_states << " x " << target_space.n_rows << endl;
+        mat temp;
+        temp.set_size(total_states, target_space.n_rows);
+        cout << "Approximate memory required if stored: " << total_states*target_space.n_rows*sizeof(double)/1000000.0 << "Mb, " << total_states*target_space.n_rows*sizeof(double)/1000000000.0 << "Gb" << endl;
+        
+        if (noise == NoiseType::NORMAL && diagonal == true){
+            cout << "Parallel run for Normal-diagonal TargetTransitionVector... " << endl;
+            sycl::queue queue;
+            {
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<2> global(total_states, target_space.n_rows);
+                    cgh.parallel_for<class SetVector>(global, [=](sycl::id<2> idx) {
+                        const size_t x0 = idx[0];
+                        const size_t x1 = idx[1];
+                        size_t index = x0 * target_space.n_rows + x1;
+                        size_t row = index%total_states;
+                        size_t col = index/total_states;
+                        double cdf_product = 1.0;
+                        size_t k = (row / state_space_size) % input_space_size;
+                        size_t i = row % state_space_size;
+                        const vec input = input_space.row(k).t();
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
+                        const vec state_end = target_space.row(col).t();
+                        costFunctionDataNormal data;
+                        data.state_end = state_end;
+                        data.second = input;
+                        data.eta = ss_eta;
+                        data.sigma = sigma;
+                        data.dynamics2 = dynamics2;
+                        data.is_diagonal = diagonal;
+                        opt.set_min_objective(costFunctionNormal, &data);
+                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        cdfAccessor[index] = minf;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            minTargetM = sum(temp,1);
+            cout << " Complete." << endl;
+        }
+        else if (noise == NoiseType::NORMAL && diagonal == false){
+            cout << "Parallel run for Normal-offdiagonal TargetTransitionVector... " << endl;
+            sycl::queue queue;
+            {
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<2> global(total_states, target_space.n_rows);
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                        const size_t x0 = idx[0];
+                        const size_t x1 = idx[1];
+                        size_t index = x0 * target_space.n_rows + x1;
+                        size_t row = index%total_states;
+                        size_t col = index/total_states;
+                        double cdf_product = 1.0;
+                        size_t k = (row / state_space_size) % input_space_size;
+                        size_t i = row % state_space_size;
+                        const vec input = input_space.row(k).t();
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
+                        const vec state_end = target_space.row(col).t();
+                        costFunctionDataNormal data;
+                        data.dim = dim_x;
+                        data.state_end = state_end;
+                        data.second = input;
+                        data.eta = ss_eta;
+                        data.inv_cov = inv_covariance_matrix;
+                        data.det = covariance_matrix_determinant;
+                        data.dynamics2 = dynamics2;
+                        data.samples = calls;
+                        data.is_diagonal = diagonal;
+                        opt.set_min_objective(costFunctionNormal, &data);
+                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        cdfAccessor[index] = minf;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            minTargetM = sum(temp,1);
+            cout << " Complete." << endl;
+        } else if (noise == NoiseType::CUSTOM){
+            cout << "Parallel run for Custom TargetTransitionVector... " << endl;
+            sycl::queue queue;
+            {
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<2> global(total_states, target_space.n_rows);
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                        const size_t x0 = idx[0];
+                        const size_t x1 = idx[1];
+                        size_t index = x0 * target_space.n_rows + x1;
+                        size_t row = index%total_states;
+                        size_t col = index/total_states;
+                        double cdf_product = 1.0;
+                        size_t k = (row / state_space_size) % input_space_size;
+                        size_t i = row % state_space_size;
+                        const vec input = input_space.row(k).t();
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
+                        const vec state_end = target_space.row(col).t();
+                        costcustom2 data;
+                        data.dim = dim_x;
+                        data.state_start = state_start;
+                        data.state_end = state_end;
+                        data.second = input;
+                        data.eta = ss_eta;
+                        data.dynamics = dynamics2;
+                        data.customPDF = customPDF;
+                        data.samples = calls;
+                        data.input_space_size = input_space_size;
+                        opt.set_min_objective(custom2, &data);
+                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        cdfAccessor[index] = minf;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            minTargetM = sum(temp,1);
+            cout << " Complete." << endl;
+        }
+        else{
+            cout << "Unsupported noise combination, either swap offdiagonal/diagonal or change type of noise." << endl;
+        }
+    }
+    else if (input_space_size == 0){
+        const size_t total_states = state_space_size * disturb_space_size;
+        cout << "Target Vector dimensions before summation: " << total_states << " x " << target_space.n_rows << endl;
+        mat temp;
+        temp.set_size(total_states, target_space.n_rows);
+        cout << "Approximate memory required if stored: " << total_states*target_space.n_rows*sizeof(double)/1000000.0 << "Mb, " << total_states*target_space.n_rows*sizeof(double)/1000000000.0 << "Gb" << endl;
+        
+        if (noise == NoiseType::NORMAL && diagonal == true){
+            cout << "Parallel run for Normal-diagonal TargetTransitionVector... " << endl;
+            sycl::queue queue;
+            {
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<2> global(total_states, target_space.n_rows);
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                        const size_t x0 = idx[0];
+                        const size_t x1 = idx[1];
+                        size_t index = x0 * target_space.n_rows + x1;
+                        size_t row = index%total_states;
+                        size_t col = index/total_states;
+                        double cdf_product = 1.0;
+                        size_t k = (row / state_space_size) % disturb_space_size;
+                        size_t i = row % state_space_size;
+                        const vec disturb = disturb_space.row(k).t();
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
+                        const vec state_end = target_space.row(col).t();
+                        costFunctionDataNormal data;
+                        data.state_end = state_end;
+                        data.second = disturb;
+                        data.eta = ss_eta;
+                        data.sigma = sigma;
+                        data.dynamics2 = dynamics2;
+                        data.is_diagonal = diagonal;
+                        opt.set_min_objective(costFunctionNormal, &data);
+                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        cdfAccessor[index] = minf;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            minTargetM = sum(temp,1);
+            cout << " Complete." << endl;
+        }
+        else if (noise == NoiseType::NORMAL && diagonal == false){
+            cout << "Parallel run for Normal-offdiagonal TargetTransitionVector... " << endl;
+            sycl::queue queue;
+            {
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<2> global(total_states, target_space.n_rows);
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                        const size_t x0 = idx[0];
+                        const size_t x1 = idx[1];
+                        size_t index = x0 * target_space.n_rows + x1;
+                        size_t row = index%total_states;
+                        size_t col = index/total_states;
+                        double cdf_product = 1.0;
+                        size_t k = (row / state_space_size) % input_space_size;
+                        size_t i = row % state_space_size;
+                        const vec disturb = disturb_space.row(k).t();
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
+                        const vec state_end = target_space.row(col).t();
+                        costFunctionDataNormal data;
+                        data.dim = dim_x;
+                        data.state_end = state_end;
+                        data.second = disturb;
+                        data.eta = ss_eta;
+                        data.inv_cov = inv_covariance_matrix;
+                        data.det = covariance_matrix_determinant;
+                        data.dynamics2 = dynamics2;
+                        data.is_diagonal = diagonal;
+                        data.samples = calls;
+                        opt.set_min_objective(costFunctionNormal, &data);
+                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        cdfAccessor[index] = minf;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            minTargetM = sum(temp,1);
+            cout << " Complete." << endl;
+        }
+        else if (noise == NoiseType::CUSTOM){
+            cout << "Parallel run for Custom TargetTransitionVector... " << endl;
+            sycl::queue queue;
+            {
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<2> global(total_states, target_space.n_rows);
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                        const size_t x0 = idx[0];
+                        const size_t x1 = idx[1];
+                        size_t index = x0 * target_space.n_rows + x1;
+                        size_t row = index%total_states;
+                        size_t col = index/total_states;
+                        double cdf_product = 1.0;
+                        size_t k = (row / state_space_size) % input_space_size;
+                        size_t i = row % state_space_size;
+                        const vec disturb = disturb_space.row(k).t();
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
+                        const vec state_end = target_space.row(col).t();
+                        costcustom2 data;
+                        data.dim = dim_x;
+                        data.state_start = state_start;
+                        data.state_end = state_end;
+                        data.second = disturb;
+                        data.eta = ss_eta;
+                        data.dynamics = dynamics2;
+                        data.customPDF = customPDF;
+                        data.samples = calls;
+                        data.input_space_size = input_space_size;
+                        opt.set_min_objective(custom2, &data);
+                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        cdfAccessor[index] = minf;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            minTargetM = sum(temp,1);
+            cout << " Complete." << endl;
+        }
+        else{
+            cout << "Unsupported noise combination, either swap offdiagonal/diagonal or change type of noise." << endl;
+        }
+    }else{
+        const size_t total_states = state_space_size * input_space_size * disturb_space_size;
+        cout << "Target Vector dimensions before summation: " << total_states << " x " << target_space.n_rows << endl;
+        mat temp;
+        temp.set_size(total_states, target_space.n_rows);
+        cout << "Approximate memory required if stored: " << total_states*target_space.n_rows*sizeof(double)/1000000.0 << "Mb, " << total_states*target_space.n_rows*sizeof(double)/1000000000.0 << "Gb" << endl;
+        
+        if (noise == NoiseType::NORMAL && diagonal == true){
+            cout << "Parallel run for Normal-diagonal TargetTransitionVector... " << endl;
+            sycl::queue queue;
+            {
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<2> global(total_states, target_space.n_rows);
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                        const size_t x0 = idx[0];
+                        const size_t x1 = idx[1];
+                        size_t index = x0 * target_space.n_rows + x1;
+                        size_t row = index%total_states;
+                        size_t col = index/total_states;
+                        double cdf_product = 1.0;
+                        size_t l = row / (input_space_size * state_space_size);
+                        size_t k = (row / state_space_size) % input_space_size;
+                        size_t i = row % state_space_size;
+                        const vec disturb = disturb_space.row(l).t();
+                        const vec input = input_space.row(k).t();
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
+                        const vec state_end = target_space.row(col).t();
+                        costFunctionDataNormal data;
+                        data.state_end = state_end;
+                        data.input = input;
+                        data.disturb = disturb;
+                        data.eta = ss_eta;
+                        data.sigma = sigma;
+                        data.dynamics3 = dynamics3;
+                        data.is_diagonal = diagonal;
+                        opt.set_min_objective(costFunctionNormal, &data);
+                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        cdfAccessor[index] = minf;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            minTargetM = sum(temp,1);
+            cout << " Complete." << endl;
+        }
+        else if (noise == NoiseType::NORMAL && diagonal == false){
+            cout << "Parallel run for Normal-offdiagonal TargetTransitionVector... " << endl;
+            sycl::queue queue;
+            {
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<2> global(total_states, target_space.n_rows);
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                        const size_t x0 = idx[0];
+                        const size_t x1 = idx[1];
+                        size_t index = x0 * target_space.n_rows + x1;
+                        size_t row = index%total_states;
+                        size_t col = index/total_states;
+                        double cdf_product = 1.0;
+                        size_t l = row / (input_space_size * state_space_size);
+                        size_t k = (row / state_space_size) % input_space_size;
+                        size_t i = row % state_space_size;
+                        const vec disturb = disturb_space.row(l).t();
+                        const vec input = input_space.row(k).t();
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
+                        const vec state_end = target_space.row(col).t();
+                        costFunctionDataNormal data;
+                        data.dim = dim_x;
+                        data.state_end = state_end;
+                        data.input = input;
+                        data.disturb = disturb;
+                        data.eta = ss_eta;
+                        data.inv_cov = inv_covariance_matrix;
+                        data.det = covariance_matrix_determinant;
+                        data.dynamics3 = dynamics3;
+                        data.is_diagonal = diagonal;
+                        data.samples = calls;
+                        opt.set_min_objective(costFunctionNormal, &data);
+                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        cdfAccessor[index] = minf;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            minTargetM = sum(temp,1);
+            cout << " Complete." << endl;
+        } else if (noise == NoiseType::CUSTOM){
+            cout << "Parallel run for Custom TargetTransitionVector... " << endl;
+            sycl::queue queue;
+            {
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<2> global(total_states, target_space.n_rows);
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                        const size_t x0 = idx[0];
+                        const size_t x1 = idx[1];
+                        size_t index = x0 * target_space.n_rows + x1;
+                        size_t row = index%total_states;
+                        size_t col = index/total_states;
+                        double cdf_product = 1.0;
+                        size_t l = row / (input_space_size * state_space_size);
+                        size_t k = (row / state_space_size) % input_space_size;
+                        size_t i = row % state_space_size;
+                        const vec disturb = disturb_space.row(l).t();
+                        const vec input = input_space.row(k).t();
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
+                        const vec state_end = target_space.row(col).t();
+                        costcustom3 data;
+                        data.dim = dim_x;
+                        data.state_start = state_start;
+                        data.state_end = state_end;
+                        data.input = input;
+                        data.disturb = disturb;
+                        data.eta = ss_eta;
+                        data.dynamics = dynamics3;
+                        data.customPDF = customPDF;
+                        data.samples = calls;
+                        opt.set_min_objective(custom3, &data);
+                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        cdfAccessor[index] = minf;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            minTargetM = sum(temp,1);
+            cout << " Complete." << endl;
+        }
+        else{
+            cout << "Unsupported noise combination, either swap offdiagonal/diagonal or change type of noise." << endl;
+        }
+    }
+    // Stop the timer
+    auto end = chrono::steady_clock::now();
+    auto duration = chrono::duration_cast<chrono::milliseconds>(end - start);
+    cout << "Execution time: " << duration.count()/1000.0 << " seconds" << endl;
 }
+
 
 /// Abstraction of maximal target transition vector
 void IMDP::maxTargetTransitionVector(){
-    targetTransitionVectorImpl(maxTargetM, false);
+    auto start = chrono::steady_clock::now();
+    cout << "Calculating maximal transition probability Vector." << endl;
+    if (disturb_space_size == 0 && input_space_size == 0){
+        const size_t total_states = state_space_size;
+        cout << "Target Vector dimensions before summation: " << total_states << " x " << target_space.n_rows << endl;
+        mat temp;
+        temp.set_size(total_states, target_space.n_rows);
+        cout << "Approximate memory required if stored: " << total_states*target_space.n_rows*sizeof(double)/1000000.0 << "Mb, " << total_states*target_space.n_rows*sizeof(double)/1000000000.0 << "Gb" << endl;
+        
+        if (noise == NoiseType::NORMAL && diagonal == true){
+            cout << "Parallel run for Normal-diagonal TargetTransitionVector... " << endl;
+            sycl::queue queue;
+            {
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<2> global(total_states, target_space.n_rows);
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                        const size_t x0 = idx[0];
+                        const size_t x1 = idx[1];
+                        size_t index = x0 * target_space.n_rows + x1;
+                        size_t row = index%total_states;
+                        size_t col = index/total_states;
+                        double cdf_product = 1.0;
+                        size_t i = row % state_space_size;
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
+                        const vec state_end = target_space.row(col).t();
+                        costFunctionDataNormal data;
+                        data.state_end = state_end;
+                        data.eta = ss_eta;
+                        data.sigma = sigma;
+                        data.dynamics1 = dynamics1;
+                        data.is_diagonal = diagonal;
+                        opt.set_max_objective(costFunctionNormal, &data);
+                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        cdfAccessor[index] = minf;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            maxTargetM = sum(temp,1);
+            cout << " Complete." << endl;
+        }
+        else if (noise == NoiseType::NORMAL && diagonal == false){
+            cout << "Parallel run for Normal-offdiagonal TargetTransitionVector... " << endl;
+            sycl::queue queue;
+            {
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<2> global(total_states, target_space.n_rows);
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                        const size_t x0 = idx[0];
+                        const size_t x1 = idx[1];
+                        size_t index = x0 * target_space.n_rows + x1;
+                        size_t row = index%total_states;
+                        size_t col = index/total_states;
+                        double cdf_product = 1.0;
+                        size_t i = row % state_space_size;
+                        const vec state_start = target_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
+                        const vec state_end = target_space.row(col).t();
+                        costFunctionDataNormal data;
+                        data.dim = dim_x;
+                        data.state_end = state_end;
+                        data.eta = ss_eta;
+                        data.inv_cov = inv_covariance_matrix;
+                        data.det = covariance_matrix_determinant;
+                        data.dynamics1 = dynamics1;
+                        data.is_diagonal = diagonal;
+                        data.samples = calls;
+                        opt.set_max_objective(costFunctionNormal, &data);
+                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        cdfAccessor[index] = minf;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            maxTargetM = sum(temp,1);
+            cout << " Complete." << endl;
+        } else if (noise == NoiseType::CUSTOM){
+            cout << "Parallel run for Custom TargetTransitionVector... " << endl;
+            sycl::queue queue;
+            {
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<2> global(total_states, target_space.n_rows);
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                        const size_t x0 = idx[0];
+                        const size_t x1 = idx[1];
+                        size_t index = x0 * target_space.n_rows + x1;
+                        size_t row = index%total_states;
+                        size_t col = index/total_states;
+                        double cdf_product = 1.0;
+                        size_t i = row % state_space_size;
+                        const vec state_start = target_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
+                        const vec state_end = target_space.row(col).t();
+                        costcustom1 data;
+                        data.dim = dim_x;
+                        data.state_start = state_start;
+                        data.state_end = state_end;
+                        data.eta = ss_eta;
+                        data.dynamics = dynamics1;
+                        data.customPDF = customPDF;
+                        data.samples = calls;
+                        opt.set_max_objective(custom1, &data);
+                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        cdfAccessor[index] = minf;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            maxTargetM = sum(temp,1);
+            cout << " Complete." << endl;
+        }
+        else{
+            cout << "Unsupported noise combination, either swap offdiagonal/diagonal or change type of noise." << endl;
+        }
+    }
+    
+    else if (disturb_space_size == 0){
+        const size_t total_states = state_space_size * input_space_size;
+        cout << "Target Vector dimensions before summation: " << total_states << " x " << target_space.n_rows << endl;
+        mat temp;
+        temp.set_size(total_states, target_space.n_rows);
+        cout << "Approximate memory required if stored: " << total_states*target_space.n_rows*sizeof(double)/1000000.0 << "Mb, " << total_states*target_space.n_rows*sizeof(double)/1000000000.0 << "Gb" << endl;
+        
+        if (noise == NoiseType::NORMAL && diagonal == true){
+            cout << "Parallel run for Normal-diagonal TargetTransitionVector... " << endl;
+            sycl::queue queue;
+            {
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<2> global(total_states, target_space.n_rows);
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                        const size_t x0 = idx[0];
+                        const size_t x1 = idx[1];
+                        size_t index = x0 * target_space.n_rows + x1;
+                        size_t row = index%total_states;
+                        size_t col = index/total_states;
+                        double cdf_product = 1.0;
+                        size_t k = (row / state_space_size) % input_space_size;
+                        size_t i = row % state_space_size;
+                        const vec input = input_space.row(k).t();
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
+                        const vec state_end = target_space.row(col).t();
+                        costFunctionDataNormal data;
+                        data.state_end = state_end;
+                        data.second = input;
+                        data.eta = ss_eta;
+                        data.sigma = sigma;
+                        data.dynamics2 = dynamics2;
+                        data.is_diagonal = diagonal;
+                        opt.set_max_objective(costFunctionNormal, &data);
+                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        cdfAccessor[index] = minf;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            maxTargetM = sum(temp,1);
+            cout << " Complete." << endl;
+        }
+        else if (noise == NoiseType::NORMAL && diagonal == false){
+            cout << "Parallel run for Normal-offdiagonal TargetTransitionVector... " << endl;
+            sycl::queue queue;
+            {
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<2> global(total_states, target_space.n_rows);
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                        const size_t x0 = idx[0];
+                        const size_t x1 = idx[1];
+                        size_t index = x0 * target_space.n_rows + x1;
+                        size_t row = index%total_states;
+                        size_t col = index/total_states;
+                        double cdf_product = 1.0;
+                        size_t k = (row / state_space_size) % input_space_size;
+                        size_t i = row % state_space_size;
+                        const vec input = input_space.row(k).t();
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
+                        const vec state_end = target_space.row(col).t();
+                        costFunctionDataNormal data;
+                        data.dim = dim_x;
+                        data.state_end = state_end;
+                        data.second = input;
+                        data.eta = ss_eta;
+                        data.inv_cov = inv_covariance_matrix;
+                        data.det = covariance_matrix_determinant;
+                        data.dynamics2 = dynamics2;
+                        data.is_diagonal = diagonal;
+                        data.samples = calls;
+                        opt.set_max_objective(costFunctionNormal, &data);
+                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        cdfAccessor[index] = minf;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            maxTargetM = sum(temp,1);
+            cout << " Complete." << endl;
+        } else if (noise == NoiseType::CUSTOM){
+            cout << "Parallel run for Custom TargetTransitionVector... " << endl;
+            sycl::queue queue;
+            {
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<2> global(total_states, target_space.n_rows);
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                        const size_t x0 = idx[0];
+                        const size_t x1 = idx[1];
+                        size_t index = x0 * target_space.n_rows + x1;
+                        size_t row = index%total_states;
+                        size_t col = index/total_states;
+                        double cdf_product = 1.0;
+                        size_t k = (row / state_space_size) % input_space_size;
+                        size_t i = row % state_space_size;
+                        const vec input = input_space.row(k).t();
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
+                        const vec state_end = target_space.row(col).t();
+                        costcustom2 data;
+                        data.dim = dim_x;
+                        data.state_start = state_start;
+                        data.state_end = state_end;
+                        data.second = input;
+                        data.eta = ss_eta;
+                        data.dynamics = dynamics2;
+                        data.customPDF = customPDF;
+                        data.samples = calls;
+                        data.input_space_size = input_space_size;
+                        opt.set_max_objective(custom2, &data);
+                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        cdfAccessor[index] = minf;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            maxTargetM = sum(temp,1);
+            cout << " Complete." << endl;
+        }
+        else{
+            cout << "Unsupported noise combination, either swap offdiagonal/diagonal or change type of noise." << endl;
+        }
+    }
+    else if (input_space_size == 0){
+        const size_t total_states = state_space_size * disturb_space_size;
+        cout << "Target Vector dimensions before summation: " << total_states << " x " << target_space.n_rows << endl;
+        mat temp;
+        temp.set_size(total_states, target_space.n_rows);
+        cout << "Approximate memory required if stored: " << total_states*target_space.n_rows*sizeof(double)/1000000.0 << "Mb, " << total_states*target_space.n_rows*sizeof(double)/1000000000.0 << "Gb" << endl;
+        
+        if (noise == NoiseType::NORMAL && diagonal == true){
+            cout << "Parallel run for Normal-diagonal TargetTransitionVector... " << endl;
+            sycl::queue queue;
+            {
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<2> global(total_states, target_space.n_rows);
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                        const size_t x0 = idx[0];
+                        const size_t x1 = idx[1];
+                        size_t index = x0 * target_space.n_rows + x1;
+                        size_t row = index%total_states;
+                        size_t col = index/total_states;
+                        double cdf_product = 1.0;
+                        size_t k = (row / state_space_size) % disturb_space_size;
+                        size_t i = row % state_space_size;
+                        const vec disturb = disturb_space.row(k).t();
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
+                        const vec state_end = target_space.row(col).t();
+                        costFunctionDataNormal data;
+                        data.state_end = state_end;
+                        data.second = disturb;
+                        data.eta = ss_eta;
+                        data.sigma = sigma;
+                        data.dynamics2 = dynamics2;
+                        data.is_diagonal = diagonal;
+                        opt.set_max_objective(costFunctionNormal, &data);
+                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        cdfAccessor[index] = minf;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            maxTargetM = sum(temp,1);
+            cout << " Complete." << endl;
+        }
+        else if (noise == NoiseType::NORMAL && diagonal == false){
+            cout << "Parallel run for Normal-offdiagonal TargetTransitionVector... " << endl;
+            sycl::queue queue;
+            {
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<2> global(total_states, target_space.n_rows);
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                        const size_t x0 = idx[0];
+                        const size_t x1 = idx[1];
+                        size_t index = x0 * target_space.n_rows + x1;
+                        size_t row = index%total_states;
+                        size_t col = index/total_states;
+                        double cdf_product = 1.0;
+                        size_t k = (row / state_space_size) % input_space_size;
+                        size_t i = row % state_space_size;
+                        const vec disturb = disturb_space.row(k).t();
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
+                        const vec state_end = target_space.row(col).t();
+                        costFunctionDataNormal data;
+                        data.dim = dim_x;
+                        data.state_end = state_end;
+                        data.second = disturb;
+                        data.eta = ss_eta;
+                        data.inv_cov = inv_covariance_matrix;
+                        data.det = covariance_matrix_determinant;
+                        data.dynamics2 = dynamics2;
+                        data.is_diagonal = diagonal;
+                        data.samples = calls;
+                        opt.set_max_objective(costFunctionNormal, &data);
+                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        cdfAccessor[index] = minf;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            maxTargetM = sum(temp,1);
+            cout << " Complete." << endl;
+        } else if (noise == NoiseType::CUSTOM){
+            cout << "Parallel run for Custom TargetTransitionVector... " << endl;
+            sycl::queue queue;
+            {
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<2> global(total_states, target_space.n_rows);
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                        const size_t x0 = idx[0];
+                        const size_t x1 = idx[1];
+                        size_t index = x0 * target_space.n_rows + x1;
+                        size_t row = index%total_states;
+                        size_t col = index/total_states;
+                        double cdf_product = 1.0;
+                        size_t k = (row / state_space_size) % input_space_size;
+                        size_t i = row % state_space_size;
+                        const vec disturb = disturb_space.row(k).t();
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
+                        const vec state_end = target_space.row(col).t();
+                        costcustom2 data;
+                        data.dim = dim_x;
+                        data.state_start = state_start;
+                        data.state_end = state_end;
+                        data.second = disturb;
+                        data.eta = ss_eta;
+                        data.dynamics = dynamics2;
+                        data.customPDF = customPDF;
+                        data.samples = calls;
+                        data.input_space_size = input_space_size;
+                        opt.set_max_objective(custom2, &data);
+                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        cdfAccessor[index] = minf;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            maxTargetM = sum(temp,1);
+            cout << " Complete." << endl;
+        }
+        else{
+            cout << "Unsupported noise combination, either swap offdiagonal/diagonal or change type of noise." << endl;
+        }
+    }else{
+        
+        const size_t total_states = state_space_size * input_space_size * disturb_space_size;
+        cout << "Target Vector dimensions before summation: " << total_states << " x " << target_space.n_rows << endl;
+        mat temp;
+        temp.set_size(total_states, target_space.n_rows);
+        cout << "Approximate memory required if stored: " << total_states*target_space.n_rows*sizeof(double)/1000000.0 << "Mb, " << total_states*target_space.n_rows*sizeof(double)/1000000000.0 << "Gb" << endl;
+        
+        if (noise == NoiseType::NORMAL && diagonal == true){
+            cout << "Parallel run for Normal-diagonal TargetTransitionVector... " << endl;
+            sycl::queue queue;
+            {
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<2> global(total_states, target_space.n_rows);
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                        const size_t x0 = idx[0];
+                        const size_t x1 = idx[1];
+                        size_t index = x0 * target_space.n_rows + x1;
+                        size_t row = index%total_states;
+                        size_t col = index/total_states;
+                        double cdf_product = 1.0;
+                        size_t l = row / (input_space_size * state_space_size);
+                        size_t k = (row / state_space_size) % input_space_size;
+                        size_t i = row % state_space_size;
+                        const vec disturb = disturb_space.row(l).t();
+                        const vec input = input_space.row(k).t();
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
+                        const vec state_end = target_space.row(col).t();
+                        costFunctionDataNormal data;
+                        data.state_end = state_end;
+                        data.input = input;
+                        data.disturb = disturb;
+                        data.eta = ss_eta;
+                        data.sigma = sigma;
+                        data.dynamics3 = dynamics3;
+                        data.is_diagonal = diagonal;
+                        opt.set_max_objective(costFunctionNormal, &data);
+                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        cdfAccessor[index] = minf;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            maxTargetM = sum(temp,1);
+            cout << " Complete." << endl;
+        }
+        else if (noise == NoiseType::NORMAL && diagonal == false){
+            cout << "Parallel run for Normal-offdiagonal TargetTransitionVector... " << endl;
+            sycl::queue queue;
+            {
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<2> global(total_states, target_space.n_rows);
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                        const size_t x0 = idx[0];
+                        const size_t x1 = idx[1];
+                        size_t index = x0 * target_space.n_rows + x1;
+                        size_t row = index%total_states;
+                        size_t col = index/total_states;
+                        double cdf_product = 1.0;
+                        size_t l = row / (input_space_size * state_space_size);
+                        size_t k = (row / state_space_size) % input_space_size;
+                        size_t i = row % state_space_size;
+                        const vec disturb = disturb_space.row(l).t();
+                        const vec input = input_space.row(k).t();
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
+                        const vec state_end = target_space.row(col).t();
+                        costFunctionDataNormal data;
+                        data.dim = dim_x;
+                        data.state_end = state_end;
+                        data.input = input;
+                        data.disturb = disturb;
+                        data.eta = ss_eta;
+                        data.inv_cov = inv_covariance_matrix;
+                        data.det = covariance_matrix_determinant;
+                        data.is_diagonal = diagonal;
+                        data.dynamics3 = dynamics3;
+                        data.samples = calls;
+                        data.is_diagonal = diagonal;
+                        opt.set_max_objective(costFunctionNormal, &data);
+                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        cdfAccessor[index] = minf;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            maxTargetM = sum(temp,1);
+            cout << " Complete." << endl;
+        } else if (noise == NoiseType::CUSTOM){
+            cout << "Parallel run for Custom TargetTransitionVector... " << endl;
+            sycl::queue queue;
+            {
+                // Create a SYCL buffer to store the space
+                sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
+                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<2> global(total_states, target_space.n_rows);
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                        const size_t x0 = idx[0];
+                        const size_t x1 = idx[1];
+                        size_t index = x0 * target_space.n_rows + x1;
+                        size_t row = index%total_states;
+                        size_t col = index/total_states;
+                        double cdf_product = 1.0;
+                        size_t l = row / (input_space_size * state_space_size);
+                        size_t k = (row / state_space_size) % input_space_size;
+                        size_t i = row % state_space_size;
+                        const vec disturb = disturb_space.row(l).t();
+                        const vec input = input_space.row(k).t();
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+                        
+                        // Prepare data for costfunction
+                        const vec state_end = target_space.row(col).t();
+                        costcustom3 data;
+                        data.dim = dim_x;
+                        data.state_start = state_start;
+                        data.state_end = state_end;
+                        data.input = input;
+                        data.disturb = disturb;
+                        data.eta = ss_eta;
+                        data.dynamics = dynamics3;
+                        data.customPDF = customPDF;
+                        data.samples = calls;
+                        opt.set_max_objective(custom3, &data);
+                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        cdfAccessor[index] = minf;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            maxTargetM = sum(temp,1);
+            cout << " Complete." << endl;
+        }
+        else{
+            cout << "Unsupported noise combination, either swap offdiagonal/diagonal or change type of noise." << endl;
+        }
+    }
+    // Stop the timer
+    auto end = chrono::steady_clock::now();
+    auto duration = chrono::duration_cast<chrono::milliseconds>(end - start);
+    cout << "Execution time: " << duration.count()/1000.0 << " seconds" << endl;
 }
+
+/* Low-cost Abstractions */
+
+/// Low-cost abstraction of transition matrices
+
 
 /* Low-cost Abstractions */
 
@@ -2501,48 +7987,64 @@ void IMDP::targetTransitionVectorBounds(){
 
 /* Synthesis Functions */
 
-/// infinite horizon reachability synthesis
-void IMDP::infiniteHorizonReachController(bool IMDP_lower) {
+/// Internal implementation for infinite horizon controller synthesis (reach and safe)
+void IMDP::infiniteHorizonControllerImpl(bool IMDP_lower, bool is_reach) {
     auto start = chrono::steady_clock::now();
-    cout << "Finding control policy for infinite horizon reach controller... " << endl;
-    
+    if (is_reach) {
+        cout << "Finding control policy for infinite horizon reach controller... " << endl;
+    } else {
+        cout << "Finding control policy for infinite horizon safe controller... " << endl;
+    }
+
+    // LP configuration: Reach uses n+2 columns (P + Target + Avoid), Safe uses n+1 (P + Avoid)
+    // Direction is inverted between reach and safe for the same IMDP_lower setting
+
     if(input_space_size == 0 && disturb_space_size == 0){
         vec first0(state_space_size, 1, fill::zeros);
         vec firstnew0(state_space_size, 1, fill::zeros);
         vec first1(state_space_size, 1, fill::ones);
         vec firstnew1(state_space_size, 1, fill::zeros);
-        
+
         double max_diff = 1.0;
         double min_diff = 1.0;
         size_t converge = 0;
         cout << "first loop iterations: " << endl;
         while (max_diff > epsilon) {
             converge++;
-            cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
-            if (IMDP_lower == true){ // for IMDP lower bound
+            if (is_reach) {
+                cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
+            } else {
+                cout << "Max: " << max_diff << " Min: " << min_diff << endl;
+            }
+
+            // Determine LP direction based on is_reach and IMDP_lower
+            // Reach: IMDP_lower=true -> GLP_MIN, IMDP_lower=false -> GLP_MAX
+            // Safe:  IMDP_lower=true -> GLP_MAX, IMDP_lower=false -> GLP_MIN (inverted)
+            bool use_min_direction = is_reach ? IMDP_lower : !IMDP_lower;
+
+            if (use_min_direction){ // GLP_MIN case
                 sycl::queue queue;
                 {
-                    // Create a SYCL buffer to store the space
                     sycl::buffer<double> cdfBuffer0(firstnew0.memptr(),firstnew0.n_rows);
                     sycl::buffer<double> cdfBuffer1(firstnew1.memptr(),firstnew1.n_rows);
-                    
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+
                     queue.submit([&](sycl::handler& cgh) {
                         auto cdfAccessor0 = cdfBuffer0.get_access<sycl::access::mode::discard_write>(cgh);
                         auto cdfAccessor1 = cdfBuffer1.get_access<sycl::access::mode::discard_write>(cgh);
-                        
+
                         cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size), [=](sycl::item<1> item) {
                             size_t index = item.get_id(0);
-                            
+
                             glp_term_out(GLP_OFF);
                             glp_prob *lp;
                             lp = glp_create_prob();
                             glp_set_prob_name(lp, "SimpleLP");
                             glp_set_obj_dir(lp, GLP_MIN);
-                            
-                            // Add columns (variables) to the problem for the P vector
-                            size_t n = minTransitionM.row(index).n_cols; // Number of elements in P vector
-                            glp_add_cols(lp, n+2);
+
+                            size_t n = minTransitionM.row(index).n_cols;
+                            size_t num_extra_cols = is_reach ? 2 : 1;
+                            glp_add_cols(lp, n + num_extra_cols);
+
                             for (size_t i = 1; i <= n; ++i) {
                                 glp_set_col_name(lp, i, ("P_" + to_string(i)).c_str());
                                 if(minTransitionM.row(index)(i - 1) == maxTransitionM.row(index)(i - 1)){
@@ -2550,89 +8052,109 @@ void IMDP::infiniteHorizonReachController(bool IMDP_lower) {
                                 }else{
                                     glp_set_col_bnds(lp, i, GLP_DB, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
                                 }
-                                glp_set_obj_coef(lp, i, first1(i-1)); // Set objective coefficients as 1.0, multiply by V later
+                                glp_set_obj_coef(lp, i, first1(i-1));
                             }
-                            glp_set_col_name(lp, n+1, "T");
-                            if(minTargetM(index) == maxTargetM(index)){
-                                glp_set_col_bnds(lp, n+1, GLP_FX, minTargetM(index), maxTargetM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+1, GLP_DB, minTargetM(index), maxTargetM(index));
+
+                            if (is_reach) {
+                                // Reach: add Target column (n+1) then Avoid column (n+2)
+                                glp_set_col_name(lp, n+1, "T");
+                                if(minTargetM(index) == maxTargetM(index)){
+                                    glp_set_col_bnds(lp, n+1, GLP_FX, minTargetM(index), maxTargetM(index));
+                                }else{
+                                    glp_set_col_bnds(lp, n+1, GLP_DB, minTargetM(index), maxTargetM(index));
+                                }
+                                glp_set_obj_coef(lp, n+1, 1.0);
+
+                                glp_set_col_name(lp, n+2, "A");
+                                if(minAvoidM(index) == maxAvoidM(index)){
+                                    glp_set_col_bnds(lp, n+2, GLP_FX, minAvoidM(index), maxAvoidM(index));
+                                }else{
+                                    glp_set_col_bnds(lp, n+2, GLP_DB, minAvoidM(index), maxAvoidM(index));
+                                }
+                                glp_set_obj_coef(lp, n+2, 0.0);
+                            } else {
+                                // Safe: only Avoid column (n+1)
+                                glp_set_col_name(lp, n+1, "A");
+                                if(minAvoidM(index) == maxAvoidM(index)){
+                                    glp_set_col_bnds(lp, n+1, GLP_FX, minAvoidM(index), maxAvoidM(index));
+                                }else{
+                                    glp_set_col_bnds(lp, n+1, GLP_DB, minAvoidM(index), maxAvoidM(index));
+                                }
+                                glp_set_obj_coef(lp, n+1, 1.0);
                             }
-                            glp_set_obj_coef(lp, n+1, 1.0); // Set objective coefficients from V vector
-                            
-                            glp_set_col_name(lp, n+2, "A");
-                            if(minAvoidM(index) == maxAvoidM(index)){
-                                glp_set_col_bnds(lp, n+2, GLP_FX, minAvoidM(index), maxAvoidM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+2, GLP_DB, minAvoidM(index), maxAvoidM(index));
-                            }
-                            glp_set_obj_coef(lp, n+2, 0.0); // Set objective coefficients from V vector
-                            
-                            // Add a constraint for the sum of elements in P = 1
+
                             glp_add_rows(lp, 1);
                             glp_set_row_name(lp, 1, "Constraint");
-                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0); // Sum of P elements = 1
-                            vector<int> ia = {0}; // GLPK uses 1-based indexing, so 0 is added as a placeholder
-                            vector<int> ja(n + 3); // Indices of the P vector elements
-                            vector<double> ar(n + 3); // Coefficients for the P vector elements in the constraint
+                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0);
+                            vector<int> ia = {0};
+                            vector<int> ja(n + num_extra_cols + 1);
+                            vector<double> ar(n + num_extra_cols + 1);
                             for (size_t i = 1; i <= n; ++i) {
                                 ja[i] = i;
-                                ar[i] = 1.0; // Coefficient 1 for the corresponding P element
+                                ar[i] = 1.0;
                             }
                             ja[n+1] = n+1;
                             ar[n+1] = 1.0;
-                            ja[n+2] = n+2;
-                            ar[n+2] = 1.0;
-                            glp_set_mat_row(lp, 1, n+2, &ja[0], &ar[0]);
-                            
-                            // Use the simplex method to solve the LP problem
+                            if (is_reach) {
+                                ja[n+2] = n+2;
+                                ar[n+2] = 1.0;
+                            }
+                            glp_set_mat_row(lp, 1, n + num_extra_cols, &ja[0], &ar[0]);
+
                             glp_simplex(lp, nullptr);
-                            
-                            // Retrieve the optimal objective value and P vector values
+
                             cdfAccessor0[index] = 0;
                             cdfAccessor1[index] = 0;
-                            
+
                             for (size_t i = 1; i <= n; ++i) {
                                 cdfAccessor0[index] += glp_get_col_prim(lp, i)*first0(i-1);
                                 cdfAccessor1[index] += glp_get_col_prim(lp, i)*first1(i-1);
                             }
-                            cdfAccessor0[index] += glp_get_col_prim(lp,n+1);
-                            cdfAccessor1[index] += glp_get_col_prim(lp,n+1);
-                            // Clean up GLPK data structures
+                            if (is_reach) {
+                                cdfAccessor0[index] += glp_get_col_prim(lp, n+1);
+                                cdfAccessor1[index] += glp_get_col_prim(lp, n+1);
+                            } else {
+                                cdfAccessor0[index] += glp_get_col_prim(lp, n+1);
+                                cdfAccessor1[index] += glp_get_col_prim(lp, n+1);
+                            }
                             glp_delete_prob(lp);
                         });
                     });
                 }
                 queue.wait_and_throw();
                 if((approx_equal(first1, firstnew1, "absdiff", 1e-8)) and ((approx_equal(first0, firstnew0, "absdiff", 1e-8)))){
-                    cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is an absorbing state in the state space, try running the finite Horizon solution using this number of steps." << endl;
+                    if (is_reach) {
+                        cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is an absorbing state in the state space, try running the finite Horizon solution using this number of steps." << endl;
+                    } else {
+                        cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is a safe solution, try running the finite Horizon solution using this number of steps." << endl;
+                    }
                     break;
                 }
                 first0 = firstnew0;
                 first1 = firstnew1;
-            }else{ // for IMDP upper bound
+            }else{ // GLP_MAX case
                 sycl::queue queue;
                 {
-                    // Create a SYCL buffer to store the space
                     sycl::buffer<double> cdfBuffer0(firstnew0.memptr(),firstnew0.n_rows);
                     sycl::buffer<double> cdfBuffer1(firstnew1.memptr(),firstnew1.n_rows);
-                    
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+
                     queue.submit([&](sycl::handler& cgh) {
                         auto cdfAccessor0 = cdfBuffer0.get_access<sycl::access::mode::discard_write>(cgh);
                         auto cdfAccessor1 = cdfBuffer1.get_access<sycl::access::mode::discard_write>(cgh);
-                        
+
                         cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size), [=](sycl::item<1> item) {
                             size_t index = item.get_id(0);
-                            
+
                             glp_term_out(GLP_OFF);
                             glp_prob *lp;
                             lp = glp_create_prob();
                             glp_set_prob_name(lp, "SimpleLP");
                             glp_set_obj_dir(lp, GLP_MAX);
-                            // Add columns (variables) to the problem for the P vector
-                            size_t n = minTransitionM.row(index).n_cols; // Number of elements in P vector
-                            glp_add_cols(lp, n+2);
+
+                            size_t n = minTransitionM.row(index).n_cols;
+                            size_t num_extra_cols = is_reach ? 2 : 1;
+                            glp_add_cols(lp, n + num_extra_cols);
+
                             for (size_t i = 1; i <= n; ++i) {
                                 glp_set_col_name(lp, i, ("P_" + to_string(i)).c_str());
                                 if(minTransitionM.row(index)(i - 1) == maxTransitionM.row(index)(i - 1)){
@@ -2640,63 +8162,84 @@ void IMDP::infiniteHorizonReachController(bool IMDP_lower) {
                                 }else{
                                     glp_set_col_bnds(lp, i, GLP_DB, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
                                 }
-                                glp_set_obj_coef(lp, i, first1(i-1)); // Set objective coefficients as 1.0, multiply by V later
+                                glp_set_obj_coef(lp, i, first1(i-1));
                             }
-                            glp_set_col_name(lp, n+1, "T");
-                            if(minTargetM(index) == maxTargetM(index)){
-                                glp_set_col_bnds(lp, n+1, GLP_FX, minTargetM(index), maxTargetM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+1, GLP_DB, minTargetM(index), maxTargetM(index));
+
+                            if (is_reach) {
+                                glp_set_col_name(lp, n+1, "T");
+                                if(minTargetM(index) == maxTargetM(index)){
+                                    glp_set_col_bnds(lp, n+1, GLP_FX, minTargetM(index), maxTargetM(index));
+                                }else{
+                                    glp_set_col_bnds(lp, n+1, GLP_DB, minTargetM(index), maxTargetM(index));
+                                }
+                                glp_set_obj_coef(lp, n+1, 1.0);
+
+                                glp_set_col_name(lp, n+2, "A");
+                                if(minAvoidM(index) == maxAvoidM(index)){
+                                    glp_set_col_bnds(lp, n+2, GLP_FX, minAvoidM(index), maxAvoidM(index));
+                                }else{
+                                    glp_set_col_bnds(lp, n+2, GLP_DB, minAvoidM(index), maxAvoidM(index));
+                                }
+                                glp_set_obj_coef(lp, n+2, 0.0);
+                            } else {
+                                glp_set_col_name(lp, n+1, "A");
+                                if(minAvoidM(index) == maxAvoidM(index)){
+                                    glp_set_col_bnds(lp, n+1, GLP_FX, minAvoidM(index), maxAvoidM(index));
+                                }else{
+                                    glp_set_col_bnds(lp, n+1, GLP_DB, minAvoidM(index), maxAvoidM(index));
+                                }
+                                glp_set_obj_coef(lp, n+1, 1.0);
                             }
-                            glp_set_obj_coef(lp, n+1, 1.0); // Set objective coefficients from V vector
-                            
-                            glp_set_col_name(lp, n+2, "A");
-                            if(minAvoidM(index) == maxAvoidM(index)){
-                                glp_set_col_bnds(lp, n+2, GLP_FX, minAvoidM(index), maxAvoidM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+2, GLP_DB, minAvoidM(index), maxAvoidM(index));
-                            }
-                            glp_set_obj_coef(lp, n+2, 0.0); // Set objective coefficients from V vector
-                            
-                            // Add a constrasize_t for the sum of elements in P <= 1
+
                             glp_add_rows(lp, 1);
                             glp_set_row_name(lp, 1, "Constraint");
-                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0); // Sum of P elements = 1
-                            vector<int> ia = {0}; // GLPK uses 1-based indexing, so 0 is added as a placeholder
-                            vector<int> ja(n + 3); // Indices of the P vector elements
-                            vector<double> ar(n + 3); // Coefficients for the P vector elements in the constraint
+                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0);
+                            vector<int> ia = {0};
+                            vector<int> ja(n + num_extra_cols + 1);
+                            vector<double> ar(n + num_extra_cols + 1);
                             for (size_t i = 1; i <= n; ++i) {
                                 ja[i] = i;
-                                ar[i] = 1.0; // Coefficient 1 for the corresponding P element
+                                ar[i] = 1.0;
                             }
                             ja[n+1] = n+1;
                             ar[n+1] = 1.0;
-                            ja[n+2] = n+2;
-                            ar[n+2] = 1.0;
-                            glp_set_mat_row(lp, 1, n+2, &ja[0], &ar[0]);
-                            
-                            // Use the simplex method to solve the LP problem
+                            if (is_reach) {
+                                ja[n+2] = n+2;
+                                ar[n+2] = 1.0;
+                            }
+                            glp_set_mat_row(lp, 1, n + num_extra_cols, &ja[0], &ar[0]);
+
                             glp_simplex(lp, nullptr);
-                            
-                            // Retrieve the optimal objective value and P vector values
+
                             cdfAccessor0[index] = 0;
                             cdfAccessor1[index] = 0;
-                            
+
                             for (size_t i = 1; i <= n; ++i) {
                                 cdfAccessor0[index] += glp_get_col_prim(lp, i)*first0(i-1);
                                 cdfAccessor1[index] += glp_get_col_prim(lp, i)*first1(i-1);
                             }
-                            cdfAccessor0[index] += glp_get_col_prim(lp,n+1);
-                            cdfAccessor1[index] += glp_get_col_prim(lp,n+1);
-                            // Clean up GLPK data structures
+                            if (is_reach) {
+                                cdfAccessor0[index] += glp_get_col_prim(lp, n+1);
+                                cdfAccessor1[index] += glp_get_col_prim(lp, n+1);
+                            } else {
+                                cdfAccessor0[index] += glp_get_col_prim(lp, n+1);
+                                cdfAccessor1[index] += glp_get_col_prim(lp, n+1);
+                            }
                             glp_delete_prob(lp);
                         });
                     });
                 }
                 queue.wait_and_throw();
-                if((approx_equal(first1, firstnew1, "absdiff", 1e-8)) and ((approx_equal(first0, firstnew0, "absdiff", 1e-8)))){
-                    cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is an absorbing state in the solution, try running the finite Horizon solution using this number of steps." << endl;
-                    break;
+                if (is_reach) {
+                    if((approx_equal(first1, firstnew1, "absdiff", 1e-8)) and ((approx_equal(first0, firstnew0, "absdiff", 1e-8)))){
+                        cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is an absorbing state in the solution, try running the finite Horizon solution using this number of steps." << endl;
+                        break;
+                    }
+                } else {
+                    if((approx_equal(firstnew1, first1, "absdiff", 1e-8)) and ((approx_equal(firstnew0, first0, "absdiff", 1e-8)))){
+                        cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is a safe solution, try running the finite Horizon solution using this number of steps." << endl;
+                        break;
+                    }
                 }
                 first0 = firstnew0;
                 first1 = firstnew1;
@@ -2705,49 +8248,57 @@ void IMDP::infiniteHorizonReachController(bool IMDP_lower) {
             min_diff = min(abs(first1-first0));
         }
         cout << endl;
-        
+
         if (IMDP_lower){
             cout << "verification lower bound found, finding upper bound." << endl;
         }else{
             cout << "verification upper bound found, finding lower bound." << endl;
         }
-        
+
         vec second0(state_space_size, 1, fill::zeros);
         mat secondnew0(state_space_size, 1, fill::zeros);
         vec second1(state_space_size, 1, fill::ones);
         mat secondnew1(state_space_size, 1, fill::zeros);
-        
+
         max_diff = 1.0;
         min_diff = 1.0;
         converge = 0;
         cout << "second loop iterations: " << endl;
-        
+
+        // Second phase: direction is opposite to first phase
+        bool use_min_direction_second = is_reach ? !IMDP_lower : IMDP_lower;
+
         while (max_diff > epsilon) {
             converge++;
-            cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
-            if (IMDP_lower == true){ // for IMDP upper bound (opposite to before)
+            if (is_reach) {
+                cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
+            } else {
+                cout << "Max: " << max_diff << " Min: " << min_diff << endl;
+            }
+
+            if (!use_min_direction_second){ // GLP_MAX case (opposite for second phase)
                 sycl::queue queue;
                 {
-                    // Create a SYCL buffer to store the space
                     sycl::buffer<double> cdfBuffer0(secondnew0.memptr(),secondnew0.n_rows);
                     sycl::buffer<double> cdfBuffer1(secondnew1.memptr(),secondnew1.n_rows);
-                    
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+
                     queue.submit([&](sycl::handler& cgh) {
                         auto cdfAccessor0 = cdfBuffer0.get_access<sycl::access::mode::discard_write>(cgh);
                         auto cdfAccessor1 = cdfBuffer1.get_access<sycl::access::mode::discard_write>(cgh);
-                        
+
                         cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size), [=](sycl::item<1> item) {
                             size_t index = item.get_id(0);
                             glp_term_out(GLP_OFF);
-                            
+
                             glp_prob *lp;
                             lp = glp_create_prob();
                             glp_set_prob_name(lp, "SimpleLP");
                             glp_set_obj_dir(lp, GLP_MAX);
-                            // Add columns (variables) to the problem for the P vector
-                            size_t n = minTransitionM.row(index).n_cols; // Number of elements in P vector
-                            glp_add_cols(lp, n+2);
+
+                            size_t n = minTransitionM.row(index).n_cols;
+                            size_t num_extra_cols = is_reach ? 2 : 1;
+                            glp_add_cols(lp, n + num_extra_cols);
+
                             for (size_t i = 1; i <= n; ++i) {
                                 glp_set_col_name(lp, i, ("P_" + to_string(i)).c_str());
                                 if(minTransitionM.row(index)(i - 1) == maxTransitionM.row(index)(i - 1)){
@@ -2755,91 +8306,110 @@ void IMDP::infiniteHorizonReachController(bool IMDP_lower) {
                                 }else{
                                     glp_set_col_bnds(lp, i, GLP_DB, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
                                 }
-                                glp_set_obj_coef(lp, i, second1(i-1)); // Set objective coefficients as 1.0, multiply by V later
+                                glp_set_obj_coef(lp, i, second1(i-1));
                             }
-                            glp_set_col_name(lp, n+1, "T");
-                            if(minTargetM(index) == maxTargetM(index)){
-                                glp_set_col_bnds(lp, n+1, GLP_FX, minTargetM(index), maxTargetM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+1, GLP_DB, minTargetM(index), maxTargetM(index));
+
+                            if (is_reach) {
+                                glp_set_col_name(lp, n+1, "T");
+                                if(minTargetM(index) == maxTargetM(index)){
+                                    glp_set_col_bnds(lp, n+1, GLP_FX, minTargetM(index), maxTargetM(index));
+                                }else{
+                                    glp_set_col_bnds(lp, n+1, GLP_DB, minTargetM(index), maxTargetM(index));
+                                }
+                                glp_set_obj_coef(lp, n+1, 1.0);
+                                glp_set_col_name(lp, n+2, "A");
+                                if(minAvoidM(index) == maxAvoidM(index)){
+                                    glp_set_col_bnds(lp, n+2, GLP_FX, minAvoidM(index), maxAvoidM(index));
+                                }else{
+                                    glp_set_col_bnds(lp, n+2, GLP_DB, minAvoidM(index), maxAvoidM(index));
+                                }
+                                glp_set_obj_coef(lp, n+2, 0.0);
+                            } else {
+                                glp_set_col_name(lp, n+1, "A");
+                                if(minAvoidM(index) == maxAvoidM(index)){
+                                    glp_set_col_bnds(lp, n+1, GLP_FX, minAvoidM(index), maxAvoidM(index));
+                                }else{
+                                    glp_set_col_bnds(lp, n+1, GLP_DB, minAvoidM(index), maxAvoidM(index));
+                                }
+                                glp_set_obj_coef(lp, n+1, 1.0);
                             }
-                            glp_set_obj_coef(lp, n+1, 1.0); // Set objective coefficients from V vector
-                            glp_set_col_name(lp, n+2, "A");
-                            if(minAvoidM(index) == maxAvoidM(index)){
-                                glp_set_col_bnds(lp, n+2, GLP_FX, minAvoidM(index), maxAvoidM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+2, GLP_DB, minAvoidM(index), maxAvoidM(index));
-                            }
-                            glp_set_obj_coef(lp, n+2, 0.0); // Set objective coefficients from V vector
-                            
+
                             glp_add_rows(lp, 1);
                             glp_set_row_name(lp, 1, "Constraint");
-                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0); // Sum of P elements = 1
-                            vector<int> ia = {0}; // GLPK uses 1-based indexing, so 0 is added as a placeholder
-                            vector<int> ja(n + 3); // Indices of the P vector elements
-                            vector<double> ar(n + 3); // Coefficients for the P vector elements in the constraint
+                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0);
+                            vector<int> ia = {0};
+                            vector<int> ja(n + num_extra_cols + 1);
+                            vector<double> ar(n + num_extra_cols + 1);
                             for (size_t i = 1; i <= n; ++i) {
                                 ja[i] = i;
-                                ar[i] = 1.0; // Coefficient 1 for the corresponding P element
+                                ar[i] = 1.0;
                             }
                             ja[n+1] = n+1;
                             ar[n+1] = 1.0;
-                            ja[n+2] = n+2;
-                            ar[n+2] = 1.0;
-                            //glp_set_matrix(lp, n, ia, ja, ar);
-                            glp_set_mat_row(lp, 1, n+2, &ja[0], &ar[0]);
-                            
-                            // Use the simplex method to solve the LP problem
+                            if (is_reach) {
+                                ja[n+2] = n+2;
+                                ar[n+2] = 1.0;
+                            }
+                            glp_set_mat_row(lp, 1, n + num_extra_cols, &ja[0], &ar[0]);
+
                             glp_simplex(lp, nullptr);
-                            
-                            // Retrieve the optimal objective value and P vector values
+
                             cdfAccessor0[index] = 0;
                             cdfAccessor1[index] = 0;
-                            
-                            //vector<double> optimal_P(n+1);
+
                             for (size_t i = 1; i <= n; ++i) {
                                 cdfAccessor0[index] += glp_get_col_prim(lp, i)*second0(i-1);
                                 cdfAccessor1[index] += glp_get_col_prim(lp, i)*second1(i-1);
                             }
-                            cdfAccessor0[index] += glp_get_col_prim(lp,n+1);
-                            cdfAccessor1[index] += glp_get_col_prim(lp,n+1);
-                            // Clean up GLPK data structures
+                            if (is_reach) {
+                                cdfAccessor0[index] += glp_get_col_prim(lp, n+1);
+                                cdfAccessor1[index] += glp_get_col_prim(lp, n+1);
+                            } else {
+                                cdfAccessor0[index] += glp_get_col_prim(lp, n+1);
+                                cdfAccessor1[index] += glp_get_col_prim(lp, n+1);
+                            }
                             glp_delete_prob(lp);
                         });
                     });
                 }
                 queue.wait_and_throw();
-                if((approx_equal(second1, secondnew1, "absdiff", 1e-8)) and ((approx_equal(second0, secondnew0, "absdiff", 1e-8)))){
-                    cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is an absorbing state in the solution, try running the finite Horizon solution using this number of steps." << endl;
-                    break;
+                if (is_reach) {
+                    if((approx_equal(second1, secondnew1, "absdiff", 1e-8)) and ((approx_equal(second0, secondnew0, "absdiff", 1e-8)))){
+                        cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is an absorbing state in the solution, try running the finite Horizon solution using this number of steps." << endl;
+                        break;
+                    }
+                } else {
+                    if((approx_equal(secondnew1, second1, "absdiff", 1e-8)) and ((approx_equal(secondnew0, second0, "absdiff", 1e-8)))){
+                        cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is a safe solution, try running the finite Horizon solution using this number of steps." << endl;
+                        break;
+                    }
                 }
                 second0 = secondnew0;
                 second1 = secondnew1;
-            }else{ // for IMDP lower bound (opposite to first)
+            }else{ // GLP_MIN case
                 sycl::queue queue;
                 {
-                    // Create a SYCL buffer to store the space
                     sycl::buffer<double> cdfBuffer0(secondnew0.memptr(),secondnew0.n_rows);
                     sycl::buffer<double> cdfBuffer1(secondnew1.memptr(),secondnew1.n_rows);
-                    
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+
                     queue.submit([&](sycl::handler& cgh) {
                         auto cdfAccessor0 = cdfBuffer0.get_access<sycl::access::mode::discard_write>(cgh);
                         auto cdfAccessor1 = cdfBuffer1.get_access<sycl::access::mode::discard_write>(cgh);
-                        
+
                         cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size), [=](sycl::item<1> item) {
                             size_t index = item.get_id(0);
-                            
+
                             glp_term_out(GLP_OFF);
-                            
+
                             glp_prob *lp;
                             lp = glp_create_prob();
                             glp_set_prob_name(lp, "SimpleLP");
                             glp_set_obj_dir(lp, GLP_MIN);
-                            
-                            // Add columns (variables) to the problem for the P vector
-                            size_t n = minTransitionM.row(index).n_cols; // Number of elements in P vector
-                            glp_add_cols(lp, n+2);
+
+                            size_t n = minTransitionM.row(index).n_cols;
+                            size_t num_extra_cols = is_reach ? 2 : 1;
+                            glp_add_cols(lp, n + num_extra_cols);
+
                             for (size_t i = 1; i <= n; ++i) {
                                 glp_set_col_name(lp, i, ("P_" + to_string(i)).c_str());
                                 if(minTransitionM.row(index)(i - 1) == maxTransitionM.row(index)(i - 1)){
@@ -2847,62 +8417,83 @@ void IMDP::infiniteHorizonReachController(bool IMDP_lower) {
                                 }else{
                                     glp_set_col_bnds(lp, i, GLP_DB, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
                                 }
-                                glp_set_obj_coef(lp, i, second1(i-1)); // Set objective coefficients as 1.0, multiply by V later
+                                glp_set_obj_coef(lp, i, second1(i-1));
                             }
-                            glp_set_col_name(lp, n+1, "T");
-                            if(minTargetM(index) == maxTargetM(index)){
-                                glp_set_col_bnds(lp, n+1, GLP_FX, minTargetM(index), maxTargetM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+1, GLP_DB, minTargetM(index), maxTargetM(index));
+
+                            if (is_reach) {
+                                glp_set_col_name(lp, n+1, "T");
+                                if(minTargetM(index) == maxTargetM(index)){
+                                    glp_set_col_bnds(lp, n+1, GLP_FX, minTargetM(index), maxTargetM(index));
+                                }else{
+                                    glp_set_col_bnds(lp, n+1, GLP_DB, minTargetM(index), maxTargetM(index));
+                                }
+                                glp_set_obj_coef(lp, n+1, 1.0);
+                                glp_set_col_name(lp, n+2, "A");
+                                if(minAvoidM(index) == maxAvoidM(index)){
+                                    glp_set_col_bnds(lp, n+2, GLP_FX, minAvoidM(index), maxAvoidM(index));
+                                }else{
+                                    glp_set_col_bnds(lp, n+2, GLP_DB, minAvoidM(index), maxAvoidM(index));
+                                }
+                                glp_set_obj_coef(lp, n+2, 0.0);
+                            } else {
+                                glp_set_col_name(lp, n+1, "A");
+                                if(minAvoidM(index) == maxAvoidM(index)){
+                                    glp_set_col_bnds(lp, n+1, GLP_FX, minAvoidM(index), maxAvoidM(index));
+                                }else{
+                                    glp_set_col_bnds(lp, n+1, GLP_DB, minAvoidM(index), maxAvoidM(index));
+                                }
+                                glp_set_obj_coef(lp, n+1, 1.0);
                             }
-                            glp_set_obj_coef(lp, n+1, 1.0); // Set objective coefficients from V vector
-                            glp_set_col_name(lp, n+2, "A");
-                            if(minAvoidM(index) == maxAvoidM(index)){
-                                glp_set_col_bnds(lp, n+2, GLP_FX, minAvoidM(index), maxAvoidM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+2, GLP_DB, minAvoidM(index), maxAvoidM(index));
-                            }
-                            glp_set_obj_coef(lp, n+2, 0.0); // Set objective coefficients from V vector
-                            // Add a constraint for the sum of elements in P = 1
+
                             glp_add_rows(lp, 1);
                             glp_set_row_name(lp, 1, "Constraint");
-                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0); // Sum of P elements = 1
-                            vector<int> ia = {0}; // GLPK uses 1-based indexing, so 0 is added as a placeholder
-                            vector<int> ja(n + 3); // Indices of the P vector elements
-                            vector<double> ar(n + 3); // Coefficients for the P vector elements in the constraint
+                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0);
+                            vector<int> ia = {0};
+                            vector<int> ja(n + num_extra_cols + 1);
+                            vector<double> ar(n + num_extra_cols + 1);
                             for (size_t i = 1; i <= n; ++i) {
                                 ja[i] = i;
-                                ar[i] = 1.0; // Coefficient 1 for the corresponding P element
+                                ar[i] = 1.0;
                             }
                             ja[n+1] = n+1;
                             ar[n+1] = 1.0;
-                            ja[n+2] = n+2;
-                            ar[n+2] = 1.0;
-                            //glp_set_matrix(lp, n, ia, ja, ar);
-                            glp_set_mat_row(lp, 1, n+2, &ja[0], &ar[0]);
-                            
-                            // Use the simplex method to solve the LP problem
+                            if (is_reach) {
+                                ja[n+2] = n+2;
+                                ar[n+2] = 1.0;
+                            }
+                            glp_set_mat_row(lp, 1, n + num_extra_cols, &ja[0], &ar[0]);
+
                             glp_simplex(lp, nullptr);
-                            
-                            // Retrieve the optimal objective value and P vector values
+
                             cdfAccessor0[index] = 0;
                             cdfAccessor1[index] = 0;
-                            
+
                             for (size_t i = 1; i <= n; ++i) {
                                 cdfAccessor0[index] += glp_get_col_prim(lp, i)*second0(i-1);
                                 cdfAccessor1[index] += glp_get_col_prim(lp, i)*second1(i-1);
                             }
-                            cdfAccessor0[index] += glp_get_col_prim(lp,n+1);
-                            cdfAccessor1[index] += glp_get_col_prim(lp,n+1);
-                            // Clean up GLPK data structures
+                            if (is_reach) {
+                                cdfAccessor0[index] += glp_get_col_prim(lp, n+1);
+                                cdfAccessor1[index] += glp_get_col_prim(lp, n+1);
+                            } else {
+                                cdfAccessor0[index] += glp_get_col_prim(lp, n+1);
+                                cdfAccessor1[index] += glp_get_col_prim(lp, n+1);
+                            }
                             glp_delete_prob(lp);
                         });
                     });
                 }
                 queue.wait_and_throw();
-                if((approx_equal(second1, secondnew1, "absdiff", 1e-8)) and ((approx_equal(second0, secondnew0, "absdiff", 1e-8)))){
-                    cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is an absorbing state in the solution, try running the finite Horizon solution using this number of steps." << endl;
-                    break;
+                if (is_reach) {
+                    if((approx_equal(second1, secondnew1, "absdiff", 1e-8)) and ((approx_equal(second0, secondnew0, "absdiff", 1e-8)))){
+                        cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is an absorbing state in the solution, try running the finite Horizon solution using this number of steps." << endl;
+                        break;
+                    }
+                } else {
+                    if((approx_equal(secondnew1, second1, "absdiff", 1e-8)) and ((approx_equal(secondnew0, second0, "absdiff", 1e-8)))){
+                        cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is a safe solution, try running the finite Horizon solution using this number of steps." << endl;
+                        break;
+                    }
                 }
                 second0 = secondnew0;
                 second1 = secondnew1;
@@ -2911,56 +8502,68 @@ void IMDP::infiniteHorizonReachController(bool IMDP_lower) {
             min_diff = min(abs(second1-second0));
         }
         cout << endl;
-        
+
         if (IMDP_lower){
             cout << "Upper bound found." << endl;
         }else{
             cout << "Lower bound found." << endl;
         }
-        
+
         controller.set_size(state_space_size, dim_x + 2);
         controller.cols(0,dim_x-1) = state_space;
-        controller.col(dim_x) = first0;
-        controller.col(dim_x + 1) = second1;
-        
+        if (is_reach) {
+            controller.col(dim_x) = first0;
+            controller.col(dim_x + 1) = second1;
+        } else {
+            controller.col(dim_x) = ones(state_space_size)-first0;
+            controller.col(dim_x + 1) = ones(state_space_size)-second0;
+        }
+
     }else if(input_space_size == 0){
+        // Disturbance only case - verification with disturbance
         vec first0(state_space_size, 1, fill::zeros);
         mat firstnew0(state_space_size*disturb_space_size, 1, fill::zeros);
         vec first1(state_space_size, 1, fill::ones);
         mat firstnew1(state_space_size*disturb_space_size, 1, fill::zeros);
-        //reduce matrix by choosing minimal probability from disturbances at each state
+
         double min_diff = 1.0;
         double max_diff = 1.0;
         size_t converge = 0;
         cout << "first loop iterations: " << endl;
         while (max_diff > epsilon) {
             converge++;
-            cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
-            if (IMDP_lower == true){ // for IMDP lower bound
-                
+            if (is_reach) {
+                cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
+            } else {
+                cout << "Max: " << max_diff << " Min: " << min_diff << endl;
+            }
+
+            bool use_min_direction = is_reach ? IMDP_lower : !IMDP_lower;
+
+            if (use_min_direction){
                 sycl::queue queue;
                 {
-                    // Create a SYCL buffer to store the space
                     sycl::buffer<double> cdfBuffer0(firstnew0.memptr(),firstnew0.n_rows);
                     sycl::buffer<double> cdfBuffer1(firstnew1.memptr(),firstnew1.n_rows);
-                    
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+
                     queue.submit([&](sycl::handler& cgh) {
                         auto cdfAccessor0 = cdfBuffer0.get_access<sycl::access::mode::discard_write>(cgh);
                         auto cdfAccessor1 = cdfBuffer1.get_access<sycl::access::mode::discard_write>(cgh);
-                        
+
                         cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size*disturb_space_size), [=](sycl::item<1> item) {
                             size_t index = item.get_id(0);
-                            
+
                             glp_term_out(GLP_OFF);
-                            
+
                             glp_prob *lp;
                             lp = glp_create_prob();
                             glp_set_prob_name(lp, "SimpleLP");
                             glp_set_obj_dir(lp, GLP_MIN);
-                            // Add columns (variables) to the problem for the P vector
-                            size_t n = minTransitionM.row(index).n_cols; // Number of elements in P vector
-                            glp_add_cols(lp, n+2);
+
+                            size_t n = minTransitionM.row(index).n_cols;
+                            size_t num_extra_cols = is_reach ? 2 : 1;
+                            glp_add_cols(lp, n + num_extra_cols);
+
                             for (size_t i = 1; i <= n; ++i) {
                                 glp_set_col_name(lp, i, ("P_" + to_string(i)).c_str());
                                 if(minTransitionM.row(index)(i - 1) == maxTransitionM.row(index)(i - 1)){
@@ -2968,96 +8571,106 @@ void IMDP::infiniteHorizonReachController(bool IMDP_lower) {
                                 }else{
                                     glp_set_col_bnds(lp, i, GLP_DB, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
                                 }
-                                glp_set_obj_coef(lp, i, first1(i-1)); // Set objective coefficients as 1.0, multiply by V later
+                                glp_set_obj_coef(lp, i, first1(i-1));
                             }
-                            glp_set_col_name(lp, n+1, "T");
-                            if(minTargetM(index) == maxTargetM(index)){
-                                glp_set_col_bnds(lp, n+1, GLP_FX, minTargetM(index), maxTargetM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+1, GLP_DB, minTargetM(index), maxTargetM(index));
+
+                            if (is_reach) {
+                                glp_set_col_name(lp, n+1, "T");
+                                if(minTargetM(index) == maxTargetM(index)){
+                                    glp_set_col_bnds(lp, n+1, GLP_FX, minTargetM(index), maxTargetM(index));
+                                }else{
+                                    glp_set_col_bnds(lp, n+1, GLP_DB, minTargetM(index), maxTargetM(index));
+                                }
+                                glp_set_obj_coef(lp, n+1, 1.0);
+
+                                glp_set_col_name(lp, n+2, "A");
+                                if(minAvoidM(index) == maxAvoidM(index)){
+                                    glp_set_col_bnds(lp, n+2, GLP_FX, minAvoidM(index), maxAvoidM(index));
+                                }else{
+                                    glp_set_col_bnds(lp, n+2, GLP_DB, minAvoidM(index), maxAvoidM(index));
+                                }
+                                glp_set_obj_coef(lp, n+2, 0.0);
+                            } else {
+                                glp_set_col_name(lp, n+1, "A");
+                                if(minAvoidM(index) == maxAvoidM(index)){
+                                    glp_set_col_bnds(lp, n+1, GLP_FX, minAvoidM(index), maxAvoidM(index));
+                                }else{
+                                    glp_set_col_bnds(lp, n+1, GLP_DB, minAvoidM(index), maxAvoidM(index));
+                                }
+                                glp_set_obj_coef(lp, n+1, 1.0);
                             }
-                            glp_set_obj_coef(lp, n+1, 1.0); // Set objective coefficients from V vector
-                            
-                            glp_set_col_name(lp, n+2, "A");
-                            if(minAvoidM(index) == maxAvoidM(index)){
-                                glp_set_col_bnds(lp, n+2, GLP_FX, minAvoidM(index), maxAvoidM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+2, GLP_DB, minAvoidM(index), maxAvoidM(index));
-                            }
-                            glp_set_obj_coef(lp, n+2, 0.0); // Set objective coefficients from V vector
-                            
-                            // Add a constraint for the sum of elements in P = 1
+
                             glp_add_rows(lp, 1);
                             glp_set_row_name(lp, 1, "Constraint");
-                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0); // Sum of P elements = 1
-                            vector<int> ia = {0}; // GLPK uses 1-based indexing, so 0 is added as a placeholder
-                            vector<int> ja(n + 3); // Indices of the P vector elements
-                            vector<double> ar(n + 3); // Coefficients for the P vector elements in the constraint
+                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0);
+                            vector<int> ia = {0};
+                            vector<int> ja(n + num_extra_cols + 1);
+                            vector<double> ar(n + num_extra_cols + 1);
                             for (size_t i = 1; i <= n; ++i) {
                                 ja[i] = i;
-                                ar[i] = 1.0; // Coefficient 1 for the corresponding P element
+                                ar[i] = 1.0;
                             }
                             ja[n+1] = n+1;
                             ar[n+1] = 1.0;
-                            ja[n+2] = n+2;
-                            ar[n+2] = 1.0;
-                            glp_set_mat_row(lp, 1, n+2, &ja[0], &ar[0]);
-                            
-                            // Use the simplex method to solve the LP problem
+                            if (is_reach) {
+                                ja[n+2] = n+2;
+                                ar[n+2] = 1.0;
+                            }
+                            glp_set_mat_row(lp, 1, n + num_extra_cols, &ja[0], &ar[0]);
+
                             glp_simplex(lp, nullptr);
-                            
-                            // Retrieve the optimal objective value and P vector values
+
                             cdfAccessor0[index] = 0;
                             cdfAccessor1[index] = 0;
-                            
+
                             for (size_t i = 1; i <= n; ++i) {
                                 cdfAccessor0[index] += glp_get_col_prim(lp, i)*first0(i-1);
                                 cdfAccessor1[index] += glp_get_col_prim(lp, i)*first1(i-1);
                             }
-                            cdfAccessor0[index] += glp_get_col_prim(lp,n+1);
-                            cdfAccessor1[index] += glp_get_col_prim(lp,n+1);
-                            // Clean up GLPK data structures
+                            if (is_reach) {
+                                cdfAccessor0[index] += glp_get_col_prim(lp, n+1);
+                                cdfAccessor1[index] += glp_get_col_prim(lp, n+1);
+                            } else {
+                                cdfAccessor0[index] += glp_get_col_prim(lp, n+1);
+                                cdfAccessor1[index] += glp_get_col_prim(lp, n+1);
+                            }
                             glp_delete_prob(lp);
                         });
                     });
                 }
                 queue.wait_and_throw();
-                
-                /*Resize to minimise over disturbance - worst case scenario*/
+
+                // Resize and reduce over disturbances
                 firstnew0.reshape(state_space_size, disturb_space_size);
                 firstnew1.reshape(state_space_size, disturb_space_size);
-                vec check0 = conv_to< colvec >::from(min(firstnew0,1));
-                vec check1 = conv_to< colvec >::from(min(firstnew1,1));
-                if((approx_equal(first1, check1, "absdiff", 1e-8)) and ((approx_equal(first0, check0, "absdiff", 1e-8)))){
-                    cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is an absorbing state in the solution, try running the finite Horizon solution using this number of steps." << endl;
-                    break;
-                }
-                first0 = check0;
-                first1 = check1;
-                
-            }else{ // for IMDP upper bound
+                first0 = conv_to<colvec>::from(min(firstnew0, 1));
+                first1 = conv_to<colvec>::from(min(firstnew1, 1));
+                firstnew0.reshape(state_space_size*disturb_space_size, 1);
+                firstnew1.reshape(state_space_size*disturb_space_size, 1);
+            }else{
                 sycl::queue queue;
                 {
-                    // Create a SYCL buffer to store the space
                     sycl::buffer<double> cdfBuffer0(firstnew0.memptr(),firstnew0.n_rows);
                     sycl::buffer<double> cdfBuffer1(firstnew1.memptr(),firstnew1.n_rows);
-                    
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+
                     queue.submit([&](sycl::handler& cgh) {
                         auto cdfAccessor0 = cdfBuffer0.get_access<sycl::access::mode::discard_write>(cgh);
                         auto cdfAccessor1 = cdfBuffer1.get_access<sycl::access::mode::discard_write>(cgh);
-                        
+
                         cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size*disturb_space_size), [=](sycl::item<1> item) {
                             size_t index = item.get_id(0);
+
                             glp_term_out(GLP_OFF);
-                            
+
                             glp_prob *lp;
                             lp = glp_create_prob();
                             glp_set_prob_name(lp, "SimpleLP");
                             glp_set_obj_dir(lp, GLP_MAX);
-                            // Add columns (variables) to the problem for the P vector
-                            size_t n = minTransitionM.row(index).n_cols; // Number of elements in P vector
-                            glp_add_cols(lp, n+2);
+
+                            size_t n = minTransitionM.row(index).n_cols;
+                            size_t num_extra_cols = is_reach ? 2 : 1;
+                            glp_add_cols(lp, n + num_extra_cols);
+
                             for (size_t i = 1; i <= n; ++i) {
                                 glp_set_col_name(lp, i, ("P_" + to_string(i)).c_str());
                                 if(minTransitionM.row(index)(i - 1) == maxTransitionM.row(index)(i - 1)){
@@ -3065,122 +8678,139 @@ void IMDP::infiniteHorizonReachController(bool IMDP_lower) {
                                 }else{
                                     glp_set_col_bnds(lp, i, GLP_DB, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
                                 }
-                                glp_set_obj_coef(lp, i, first1(i-1)); // Set objective coefficients as 1.0, multiply by V later
+                                glp_set_obj_coef(lp, i, first1(i-1));
                             }
-                            glp_set_col_name(lp, n+1, "T");
-                            if(minTargetM(index) == maxTargetM(index)){
-                                glp_set_col_bnds(lp, n+1, GLP_FX, minTargetM(index), maxTargetM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+1, GLP_DB, minTargetM(index), maxTargetM(index));
+
+                            if (is_reach) {
+                                glp_set_col_name(lp, n+1, "T");
+                                if(minTargetM(index) == maxTargetM(index)){
+                                    glp_set_col_bnds(lp, n+1, GLP_FX, minTargetM(index), maxTargetM(index));
+                                }else{
+                                    glp_set_col_bnds(lp, n+1, GLP_DB, minTargetM(index), maxTargetM(index));
+                                }
+                                glp_set_obj_coef(lp, n+1, 1.0);
+
+                                glp_set_col_name(lp, n+2, "A");
+                                if(minAvoidM(index) == maxAvoidM(index)){
+                                    glp_set_col_bnds(lp, n+2, GLP_FX, minAvoidM(index), maxAvoidM(index));
+                                }else{
+                                    glp_set_col_bnds(lp, n+2, GLP_DB, minAvoidM(index), maxAvoidM(index));
+                                }
+                                glp_set_obj_coef(lp, n+2, 0.0);
+                            } else {
+                                glp_set_col_name(lp, n+1, "A");
+                                if(minAvoidM(index) == maxAvoidM(index)){
+                                    glp_set_col_bnds(lp, n+1, GLP_FX, minAvoidM(index), maxAvoidM(index));
+                                }else{
+                                    glp_set_col_bnds(lp, n+1, GLP_DB, minAvoidM(index), maxAvoidM(index));
+                                }
+                                glp_set_obj_coef(lp, n+1, 1.0);
                             }
-                            glp_set_obj_coef(lp, n+1, 1.0); // Set objective coefficients from V vector
-                            
-                            glp_set_col_name(lp, n+2, "A");
-                            if(minAvoidM(index) == maxAvoidM(index)){
-                                glp_set_col_bnds(lp, n+2, GLP_FX, minAvoidM(index), maxAvoidM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+2, GLP_DB, minAvoidM(index), maxAvoidM(index));
-                            }
-                            glp_set_obj_coef(lp, n+2, 0.0); // Set objective coefficients from V vector
-                            
-                            // Add a constraint for the sum of elements in P = 1
+
                             glp_add_rows(lp, 1);
                             glp_set_row_name(lp, 1, "Constraint");
-                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0); // Sum of P elements = 1
-                            vector<int> ia = {0}; // GLPK uses 1-based indexing, so 0 is added as a placeholder
-                            vector<int> ja(n + 3); // Indices of the P vector elements
-                            vector<double> ar(n + 3); // Coefficients for the P vector elements in the constraint
+                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0);
+                            vector<int> ia = {0};
+                            vector<int> ja(n + num_extra_cols + 1);
+                            vector<double> ar(n + num_extra_cols + 1);
                             for (size_t i = 1; i <= n; ++i) {
                                 ja[i] = i;
-                                ar[i] = 1.0; // Coefficient 1 for the corresponding P element
+                                ar[i] = 1.0;
                             }
                             ja[n+1] = n+1;
                             ar[n+1] = 1.0;
-                            ja[n+2] = n+2;
-                            ar[n+2] = 1.0;
-                            //glp_set_matrix(lp, n, ia, ja, ar);
-                            glp_set_mat_row(lp, 1, n+2, &ja[0], &ar[0]);
-                            
-                            // Use the simplex method to solve the LP problem
+                            if (is_reach) {
+                                ja[n+2] = n+2;
+                                ar[n+2] = 1.0;
+                            }
+                            glp_set_mat_row(lp, 1, n + num_extra_cols, &ja[0], &ar[0]);
+
                             glp_simplex(lp, nullptr);
-                            
-                            // Retrieve the optimal objective value and P vector values
+
                             cdfAccessor0[index] = 0;
                             cdfAccessor1[index] = 0;
-                            
+
                             for (size_t i = 1; i <= n; ++i) {
                                 cdfAccessor0[index] += glp_get_col_prim(lp, i)*first0(i-1);
                                 cdfAccessor1[index] += glp_get_col_prim(lp, i)*first1(i-1);
                             }
-                            cdfAccessor0[index] += glp_get_col_prim(lp,n+1);
-                            cdfAccessor1[index] += glp_get_col_prim(lp,n+1);
-                            // Clean up GLPK data structures
+                            if (is_reach) {
+                                cdfAccessor0[index] += glp_get_col_prim(lp, n+1);
+                                cdfAccessor1[index] += glp_get_col_prim(lp, n+1);
+                            } else {
+                                cdfAccessor0[index] += glp_get_col_prim(lp, n+1);
+                                cdfAccessor1[index] += glp_get_col_prim(lp, n+1);
+                            }
                             glp_delete_prob(lp);
                         });
                     });
                 }
                 queue.wait_and_throw();
-                
-                /*Resize to minimise over disturbance - worst case scenario*/
+
+                // Resize and reduce over disturbances
                 firstnew0.reshape(state_space_size, disturb_space_size);
                 firstnew1.reshape(state_space_size, disturb_space_size);
-                vec check0 = conv_to< colvec >::from(min(firstnew0,1));
-                vec check1 = conv_to< colvec >::from(min(firstnew1,1));
-                if((approx_equal(first1, check1, "absdiff", 1e-8)) and ((approx_equal(first0, check0, "absdiff", 1e-8)))){
-                    cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is an absorbing state in the solution, try running the finite Horizon solution using this number of steps." << endl;
-                    break;
-                }
-                first0 = check0;
-                first1 = check1;
+                first0 = conv_to<colvec>::from(min(firstnew0, 1));
+                first1 = conv_to<colvec>::from(min(firstnew1, 1));
+                firstnew0.reshape(state_space_size*disturb_space_size, 1);
+                firstnew1.reshape(state_space_size*disturb_space_size, 1);
             }
             max_diff = max(abs(first1-first0));
             min_diff = min(abs(first1-first0));
         }
         cout << endl;
-        
+
         if (IMDP_lower){
             cout << "verification lower bound found, finding upper bound." << endl;
         }else{
             cout << "verification upper bound found, finding lower bound." << endl;
         }
-        
+
+        // Second phase
         vec second0(state_space_size, 1, fill::zeros);
         mat secondnew0(state_space_size*disturb_space_size, 1, fill::zeros);
         vec second1(state_space_size, 1, fill::ones);
         mat secondnew1(state_space_size*disturb_space_size, 1, fill::zeros);
-        
-        min_diff = 1.0;
+
         max_diff = 1.0;
+        min_diff = 1.0;
         converge = 0;
         cout << "second loop iterations: " << endl;
-        
+
         while (max_diff > epsilon) {
             converge++;
-            cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
-            if (IMDP_lower == true){ // for IMDP upper bound (opposite to before)
+            if (is_reach) {
+                cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
+            } else {
+                cout << "Max: " << max_diff << " Min: " << min_diff << endl;
+            }
+
+            bool use_min_direction_second = is_reach ? !IMDP_lower : IMDP_lower;
+
+            if (!use_min_direction_second){
                 sycl::queue queue;
                 {
-                    // Create a SYCL buffer to store the space
                     sycl::buffer<double> cdfBuffer0(secondnew0.memptr(),secondnew0.n_rows);
                     sycl::buffer<double> cdfBuffer1(secondnew1.memptr(),secondnew1.n_rows);
-                    
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+
                     queue.submit([&](sycl::handler& cgh) {
                         auto cdfAccessor0 = cdfBuffer0.get_access<sycl::access::mode::discard_write>(cgh);
                         auto cdfAccessor1 = cdfBuffer1.get_access<sycl::access::mode::discard_write>(cgh);
-                        
+
                         cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size*disturb_space_size), [=](sycl::item<1> item) {
                             size_t index = item.get_id(0);
-                            
+
                             glp_term_out(GLP_OFF);
-                            
+
                             glp_prob *lp;
                             lp = glp_create_prob();
                             glp_set_prob_name(lp, "SimpleLP");
                             glp_set_obj_dir(lp, GLP_MAX);
-                            // Add columns (variables) to the problem for the P vector
-                            size_t n = minTransitionM.row(index).n_cols; // Number of elements in P vector
-                            glp_add_cols(lp, n+2);
+
+                            size_t n = minTransitionM.row(index).n_cols;
+                            size_t num_extra_cols = is_reach ? 2 : 1;
+                            glp_add_cols(lp, n + num_extra_cols);
+
                             for (size_t i = 1; i <= n; ++i) {
                                 glp_set_col_name(lp, i, ("P_" + to_string(i)).c_str());
                                 if(minTransitionM.row(index)(i - 1) == maxTransitionM.row(index)(i - 1)){
@@ -3188,95 +8818,104 @@ void IMDP::infiniteHorizonReachController(bool IMDP_lower) {
                                 }else{
                                     glp_set_col_bnds(lp, i, GLP_DB, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
                                 }
-                                glp_set_obj_coef(lp, i, second1(i-1)); // Set objective coefficients as 1.0, multiply by V later
+                                glp_set_obj_coef(lp, i, second1(i-1));
                             }
-                            glp_set_col_name(lp, n+1, "T");
-                            if(minTargetM(index) == maxTargetM(index)){
-                                glp_set_col_bnds(lp, n+1, GLP_FX, minTargetM(index), maxTargetM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+1, GLP_DB, minTargetM(index), maxTargetM(index));
+
+                            if (is_reach) {
+                                glp_set_col_name(lp, n+1, "T");
+                                if(minTargetM(index) == maxTargetM(index)){
+                                    glp_set_col_bnds(lp, n+1, GLP_FX, minTargetM(index), maxTargetM(index));
+                                }else{
+                                    glp_set_col_bnds(lp, n+1, GLP_DB, minTargetM(index), maxTargetM(index));
+                                }
+                                glp_set_obj_coef(lp, n+1, 1.0);
+                                glp_set_col_name(lp, n+2, "A");
+                                if(minAvoidM(index) == maxAvoidM(index)){
+                                    glp_set_col_bnds(lp, n+2, GLP_FX, minAvoidM(index), maxAvoidM(index));
+                                }else{
+                                    glp_set_col_bnds(lp, n+2, GLP_DB, minAvoidM(index), maxAvoidM(index));
+                                }
+                                glp_set_obj_coef(lp, n+2, 0.0);
+                            } else {
+                                glp_set_col_name(lp, n+1, "A");
+                                if(minAvoidM(index) == maxAvoidM(index)){
+                                    glp_set_col_bnds(lp, n+1, GLP_FX, minAvoidM(index), maxAvoidM(index));
+                                }else{
+                                    glp_set_col_bnds(lp, n+1, GLP_DB, minAvoidM(index), maxAvoidM(index));
+                                }
+                                glp_set_obj_coef(lp, n+1, 1.0);
                             }
-                            glp_set_obj_coef(lp, n+1, 1.0); // Set objective coefficients from V vector
-                            
-                            glp_set_col_name(lp, n+2, "A");
-                            if(minAvoidM(index) == maxAvoidM(index)){
-                                glp_set_col_bnds(lp, n+2, GLP_FX, minAvoidM(index), maxAvoidM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+2, GLP_DB, minAvoidM(index), maxAvoidM(index));
-                            }
-                            glp_set_obj_coef(lp, n+2, 0.0); // Set objective coefficients from V vector
-                            
-                            // Add a constraint for the sum of elements in P = 1
+
                             glp_add_rows(lp, 1);
                             glp_set_row_name(lp, 1, "Constraint");
-                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0); // Sum of P elements = 1
-                            vector<int> ia = {0}; // GLPK uses 1-based indexing, so 0 is added as a placeholder
-                            vector<int> ja(n + 3); // Indices of the P vector elements
-                            vector<double> ar(n + 3); // Coefficients for the P vector elements in the constraint
+                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0);
+                            vector<int> ia = {0};
+                            vector<int> ja(n + num_extra_cols + 1);
+                            vector<double> ar(n + num_extra_cols + 1);
                             for (size_t i = 1; i <= n; ++i) {
                                 ja[i] = i;
-                                ar[i] = 1.0; // Coefficient 1 for the corresponding P element
+                                ar[i] = 1.0;
                             }
                             ja[n+1] = n+1;
                             ar[n+1] = 1.0;
-                            ja[n+2] = n+2;
-                            ar[n+2] = 1.0;
-                            //glp_set_matrix(lp, n, ia, ja, ar);
-                            glp_set_mat_row(lp, 1, n+2, &ja[0], &ar[0]);
-                            
-                            // Use the simplex method to solve the LP problem
+                            if (is_reach) {
+                                ja[n+2] = n+2;
+                                ar[n+2] = 1.0;
+                            }
+                            glp_set_mat_row(lp, 1, n + num_extra_cols, &ja[0], &ar[0]);
+
                             glp_simplex(lp, nullptr);
-                            
-                            // Retrieve the optimal objective value and P vector values
+
                             cdfAccessor0[index] = 0;
                             cdfAccessor1[index] = 0;
-                            
+
                             for (size_t i = 1; i <= n; ++i) {
                                 cdfAccessor0[index] += glp_get_col_prim(lp, i)*second0(i-1);
                                 cdfAccessor1[index] += glp_get_col_prim(lp, i)*second1(i-1);
                             }
-                            cdfAccessor0[index] += glp_get_col_prim(lp,n+1);
-                            cdfAccessor1[index] += glp_get_col_prim(lp,n+1);
-                            // Clean up GLPK data structures
+                            if (is_reach) {
+                                cdfAccessor0[index] += glp_get_col_prim(lp, n+1);
+                                cdfAccessor1[index] += glp_get_col_prim(lp, n+1);
+                            } else {
+                                cdfAccessor0[index] += glp_get_col_prim(lp, n+1);
+                                cdfAccessor1[index] += glp_get_col_prim(lp, n+1);
+                            }
                             glp_delete_prob(lp);
                         });
                     });
                 }
                 queue.wait_and_throw();
-                /*Resize to minimise over disturbance - worst case scenario*/
+
                 secondnew0.reshape(state_space_size, disturb_space_size);
                 secondnew1.reshape(state_space_size, disturb_space_size);
-                vec check0 = conv_to< colvec >::from(min(secondnew0,1));
-                vec check1 = conv_to< colvec >::from(min(secondnew1,1));
-                if((approx_equal(second1, check1, "absdiff", 1e-8)) and ((approx_equal(second0, check0, "absdiff", 1e-8)))){
-                    cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is an absorbing state in the solution, try running the finite Horizon solution using this number of steps." << endl;
-                    break;
-                }
-                second0 = check0;
-                second1 = check1;
-            }else{ // for IMDP lower bound (opposite to first)
+                second0 = conv_to<colvec>::from(min(secondnew0, 1));
+                second1 = conv_to<colvec>::from(min(secondnew1, 1));
+                secondnew0.reshape(state_space_size*disturb_space_size, 1);
+                secondnew1.reshape(state_space_size*disturb_space_size, 1);
+            }else{
                 sycl::queue queue;
                 {
-                    // Create a SYCL buffer to store the space
                     sycl::buffer<double> cdfBuffer0(secondnew0.memptr(),secondnew0.n_rows);
                     sycl::buffer<double> cdfBuffer1(secondnew1.memptr(),secondnew1.n_rows);
-                    
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+
                     queue.submit([&](sycl::handler& cgh) {
                         auto cdfAccessor0 = cdfBuffer0.get_access<sycl::access::mode::discard_write>(cgh);
                         auto cdfAccessor1 = cdfBuffer1.get_access<sycl::access::mode::discard_write>(cgh);
-                        
+
                         cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size*disturb_space_size), [=](sycl::item<1> item) {
                             size_t index = item.get_id(0);
-                            
+
                             glp_term_out(GLP_OFF);
+
                             glp_prob *lp;
                             lp = glp_create_prob();
                             glp_set_prob_name(lp, "SimpleLP");
                             glp_set_obj_dir(lp, GLP_MIN);
-                            // Add columns (variables) to the problem for the P vector
-                            size_t n = minTransitionM.row(index).n_cols; // Number of elements in P vector
-                            glp_add_cols(lp, n+2);
+
+                            size_t n = minTransitionM.row(index).n_cols;
+                            size_t num_extra_cols = is_reach ? 2 : 1;
+                            glp_add_cols(lp, n + num_extra_cols);
+
                             for (size_t i = 1; i <= n; ++i) {
                                 glp_set_col_name(lp, i, ("P_" + to_string(i)).c_str());
                                 if(minTransitionM.row(index)(i - 1) == maxTransitionM.row(index)(i - 1)){
@@ -3284,129 +8923,151 @@ void IMDP::infiniteHorizonReachController(bool IMDP_lower) {
                                 }else{
                                     glp_set_col_bnds(lp, i, GLP_DB, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
                                 }
-                                glp_set_obj_coef(lp, i, second1(i-1)); // Set objective coefficients as 1.0, multiply by V later
+                                glp_set_obj_coef(lp, i, second1(i-1));
                             }
-                            glp_set_col_name(lp, n+1, "T");
-                            if(minTargetM(index) == maxTargetM(index)){
-                                glp_set_col_bnds(lp, n+1, GLP_FX, minTargetM(index), maxTargetM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+1, GLP_DB, minTargetM(index), maxTargetM(index));
+
+                            if (is_reach) {
+                                glp_set_col_name(lp, n+1, "T");
+                                if(minTargetM(index) == maxTargetM(index)){
+                                    glp_set_col_bnds(lp, n+1, GLP_FX, minTargetM(index), maxTargetM(index));
+                                }else{
+                                    glp_set_col_bnds(lp, n+1, GLP_DB, minTargetM(index), maxTargetM(index));
+                                }
+                                glp_set_obj_coef(lp, n+1, 1.0);
+                                glp_set_col_name(lp, n+2, "A");
+                                if(minAvoidM(index) == maxAvoidM(index)){
+                                    glp_set_col_bnds(lp, n+2, GLP_FX, minAvoidM(index), maxAvoidM(index));
+                                }else{
+                                    glp_set_col_bnds(lp, n+2, GLP_DB, minAvoidM(index), maxAvoidM(index));
+                                }
+                                glp_set_obj_coef(lp, n+2, 0.0);
+                            } else {
+                                glp_set_col_name(lp, n+1, "A");
+                                if(minAvoidM(index) == maxAvoidM(index)){
+                                    glp_set_col_bnds(lp, n+1, GLP_FX, minAvoidM(index), maxAvoidM(index));
+                                }else{
+                                    glp_set_col_bnds(lp, n+1, GLP_DB, minAvoidM(index), maxAvoidM(index));
+                                }
+                                glp_set_obj_coef(lp, n+1, 1.0);
                             }
-                            glp_set_obj_coef(lp, n+1, 1.0); // Set objective coefficients from V vector
-                            
-                            glp_set_col_name(lp, n+2, "A");
-                            if(minAvoidM(index) == maxAvoidM(index)){
-                                glp_set_col_bnds(lp, n+2, GLP_FX, minAvoidM(index), maxAvoidM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+2, GLP_DB, minAvoidM(index), maxAvoidM(index));
-                            }
-                            glp_set_obj_coef(lp, n+2, 0.0); // Set objective coefficients from V vector
-                            
-                            // Add a constraint for the sum of elements in P = 1
+
                             glp_add_rows(lp, 1);
                             glp_set_row_name(lp, 1, "Constraint");
-                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0); // Sum of P elements = 1
-                            vector<int> ia = {0}; // GLPK uses 1-based indexing, so 0 is added as a placeholder
-                            vector<int> ja(n + 3); // Indices of the P vector elements
-                            vector<double> ar(n + 3); // Coefficients for the P vector elements in the constraint
+                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0);
+                            vector<int> ia = {0};
+                            vector<int> ja(n + num_extra_cols + 1);
+                            vector<double> ar(n + num_extra_cols + 1);
                             for (size_t i = 1; i <= n; ++i) {
                                 ja[i] = i;
-                                ar[i] = 1.0; // Coefficient 1 for the corresponding P element
+                                ar[i] = 1.0;
                             }
                             ja[n+1] = n+1;
                             ar[n+1] = 1.0;
-                            ja[n+2] = n+2;
-                            ar[n+2] = 1.0;
-                            //glp_set_matrix(lp, n, ia, ja, ar);
-                            glp_set_mat_row(lp, 1, n+2, &ja[0], &ar[0]);
-                            
-                            // Use the simplex method to solve the LP problem
+                            if (is_reach) {
+                                ja[n+2] = n+2;
+                                ar[n+2] = 1.0;
+                            }
+                            glp_set_mat_row(lp, 1, n + num_extra_cols, &ja[0], &ar[0]);
+
                             glp_simplex(lp, nullptr);
-                            
-                            // Retrieve the optimal objective value and P vector values
+
                             cdfAccessor0[index] = 0;
                             cdfAccessor1[index] = 0;
-                            
+
                             for (size_t i = 1; i <= n; ++i) {
                                 cdfAccessor0[index] += glp_get_col_prim(lp, i)*second0(i-1);
                                 cdfAccessor1[index] += glp_get_col_prim(lp, i)*second1(i-1);
                             }
-                            cdfAccessor0[index] += glp_get_col_prim(lp,n+1);
-                            cdfAccessor1[index] += glp_get_col_prim(lp,n+1);
-                            // Clean up GLPK data structures
+                            if (is_reach) {
+                                cdfAccessor0[index] += glp_get_col_prim(lp, n+1);
+                                cdfAccessor1[index] += glp_get_col_prim(lp, n+1);
+                            } else {
+                                cdfAccessor0[index] += glp_get_col_prim(lp, n+1);
+                                cdfAccessor1[index] += glp_get_col_prim(lp, n+1);
+                            }
                             glp_delete_prob(lp);
-                            
-                            
                         });
                     });
                 }
                 queue.wait_and_throw();
-                /*Resize to minimise over disturbance - worst case scenario*/
+
                 secondnew0.reshape(state_space_size, disturb_space_size);
                 secondnew1.reshape(state_space_size, disturb_space_size);
-                vec check0 = conv_to< colvec >::from(min(secondnew0,1));
-                vec check1 = conv_to< colvec >::from(min(secondnew1,1));
-                if((approx_equal(second1, check1, "absdiff", 1e-8)) and ((approx_equal(second0, check0, "absdiff", 1e-8)))){
-                    cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is an absorbing state in the solution, try running the finite Horizon solution using this number of steps." << endl;
-                    break;
-                }
-                second0 = check0;
-                second1 = check1;
+                second0 = conv_to<colvec>::from(min(secondnew0, 1));
+                second1 = conv_to<colvec>::from(min(secondnew1, 1));
+                secondnew0.reshape(state_space_size*disturb_space_size, 1);
+                secondnew1.reshape(state_space_size*disturb_space_size, 1);
             }
             max_diff = max(abs(second1-second0));
             min_diff = min(abs(second1-second0));
         }
         cout << endl;
-        
+
         if (IMDP_lower){
             cout << "Upper bound found." << endl;
         }else{
             cout << "Lower bound found." << endl;
         }
-        
+
         controller.set_size(state_space_size, dim_x + 2);
-        controller.cols(0,dim_x-1) = state_space;
-        controller.col(dim_x) = first0;
-        controller.col(dim_x + 1) = second1;
-        
-    }else if (disturb_space_size == 0){
+        controller.cols(0, dim_x - 1) = state_space;
+        if (is_reach) {
+            controller.col(dim_x) = first0;
+            controller.col(dim_x + 1) = second1;
+        } else {
+            controller.col(dim_x) = ones(state_space_size) - first0;
+            controller.col(dim_x + 1) = ones(state_space_size) - second1;
+        }
+
+    }else{
+        // Input-based synthesis (controller synthesis with inputs)
+        // This is the main controller synthesis case
+
         vec first0(state_space_size, 1, fill::zeros);
         mat firstnew0(state_space_size*input_space_size, 1, fill::zeros);
         vec first1(state_space_size, 1, fill::ones);
         mat firstnew1(state_space_size*input_space_size, 1, fill::zeros);
-        uvec U_pos(state_space_size, 1, fill::zeros);
-        
-        double max_diff = 1.0;
+        uvec U_pos(state_space_size);
+
         double min_diff = 1.0;
+        double max_diff = 1.0;
         size_t converge = 0;
         cout << "first loop iterations: " << endl;
+
         while (max_diff > epsilon) {
             converge++;
-            cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
-            if (IMDP_lower == true){ // for IMDP lower bound
-                
+            if (is_reach) {
+                cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
+            } else {
+                cout << "Max: " << max_diff << " Min: " << min_diff << endl;
+            }
+
+            bool use_min_direction = is_reach ? IMDP_lower : !IMDP_lower;
+
+            if (use_min_direction){
                 sycl::queue queue;
                 {
-                    // Create a SYCL buffer to store the space
                     sycl::buffer<double> cdfBuffer0(firstnew0.memptr(),firstnew0.n_rows);
                     sycl::buffer<double> cdfBuffer1(firstnew1.memptr(),firstnew1.n_rows);
-                    
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+
                     queue.submit([&](sycl::handler& cgh) {
                         auto cdfAccessor0 = cdfBuffer0.get_access<sycl::access::mode::discard_write>(cgh);
                         auto cdfAccessor1 = cdfBuffer1.get_access<sycl::access::mode::discard_write>(cgh);
-                        
+
                         cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size*input_space_size), [=](sycl::item<1> item) {
                             size_t index = item.get_id(0);
-                            
+
                             glp_term_out(GLP_OFF);
+
                             glp_prob *lp;
                             lp = glp_create_prob();
                             glp_set_prob_name(lp, "SimpleLP");
                             glp_set_obj_dir(lp, GLP_MIN);
-                            // Add columns (variables) to the problem for the P vector
-                            size_t n = minTransitionM.row(index).n_cols; // Number of elements in P vector
-                            glp_add_cols(lp, n+2);
+
+                            size_t n = minTransitionM.row(index).n_cols;
+                            size_t num_extra_cols = is_reach ? 2 : 1;
+                            glp_add_cols(lp, n + num_extra_cols);
+
                             for (size_t i = 1; i <= n; ++i) {
                                 glp_set_col_name(lp, i, ("P_" + to_string(i)).c_str());
                                 if(minTransitionM.row(index)(i - 1) == maxTransitionM.row(index)(i - 1)){
@@ -3414,111 +9075,124 @@ void IMDP::infiniteHorizonReachController(bool IMDP_lower) {
                                 }else{
                                     glp_set_col_bnds(lp, i, GLP_DB, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
                                 }
-                                glp_set_obj_coef(lp, i, first1(i-1)); // Set objective coefficients as 1.0, multiply by V later
+                                glp_set_obj_coef(lp, i, first1(i-1));
                             }
-                            glp_set_col_name(lp, n+1, "T");
-                            if(minTargetM(index) == maxTargetM(index)){
-                                glp_set_col_bnds(lp, n+1, GLP_FX, minTargetM(index), maxTargetM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+1, GLP_DB, minTargetM(index), maxTargetM(index));
+
+                            if (is_reach) {
+                                glp_set_col_name(lp, n+1, "T");
+                                if(minTargetM(index) == maxTargetM(index)){
+                                    glp_set_col_bnds(lp, n+1, GLP_FX, minTargetM(index), maxTargetM(index));
+                                }else{
+                                    glp_set_col_bnds(lp, n+1, GLP_DB, minTargetM(index), maxTargetM(index));
+                                }
+                                glp_set_obj_coef(lp, n+1, 1.0);
+
+                                glp_set_col_name(lp, n+2, "A");
+                                if(minAvoidM(index) == maxAvoidM(index)){
+                                    glp_set_col_bnds(lp, n+2, GLP_FX, minAvoidM(index), maxAvoidM(index));
+                                }else{
+                                    glp_set_col_bnds(lp, n+2, GLP_DB, minAvoidM(index), maxAvoidM(index));
+                                }
+                                glp_set_obj_coef(lp, n+2, 0.0);
+                            } else {
+                                glp_set_col_name(lp, n+1, "A");
+                                if(minAvoidM(index) == maxAvoidM(index)){
+                                    glp_set_col_bnds(lp, n+1, GLP_FX, minAvoidM(index), maxAvoidM(index));
+                                }else{
+                                    glp_set_col_bnds(lp, n+1, GLP_DB, minAvoidM(index), maxAvoidM(index));
+                                }
+                                glp_set_obj_coef(lp, n+1, 1.0);
                             }
-                            glp_set_obj_coef(lp, n+1, 1.0); // Set objective coefficients from V vector
-                            glp_set_col_name(lp, n+2, "A");
-                            if(minAvoidM(index) == maxAvoidM(index)){
-                                glp_set_col_bnds(lp, n+2, GLP_FX, minAvoidM(index), maxAvoidM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+2, GLP_DB, minAvoidM(index), maxAvoidM(index));
-                            }
-                            glp_set_obj_coef(lp, n+2, 0.0); // Set objective coefficients from V vector
-                            // Add a constraint for the sum of elements in P = 1
+
                             glp_add_rows(lp, 1);
                             glp_set_row_name(lp, 1, "Constraint");
-                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0); // Sum of P elements = 1
-                            vector<int> ia = {0}; // GLPK uses 1-based indexing, so 0 is added as a placeholder
-                            vector<int> ja(n + 3); // Indices of the P vector elements
-                            vector<double> ar(n + 3); // Coefficients for the P vector elements in the constraint
+                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0);
+                            vector<int> ia = {0};
+                            vector<int> ja(n + num_extra_cols + 1);
+                            vector<double> ar(n + num_extra_cols + 1);
                             for (size_t i = 1; i <= n; ++i) {
                                 ja[i] = i;
-                                ar[i] = 1.0; // Coefficient 1 for the corresponding P element
+                                ar[i] = 1.0;
                             }
                             ja[n+1] = n+1;
                             ar[n+1] = 1.0;
-                            ja[n+2] = n+2;
-                            ar[n+2] = 1.0;
-                            glp_set_mat_row(lp, 1, n+2, &ja[0], &ar[0]);
-                            
-                            // Use the simplex method to solve the LP problem
+                            if (is_reach) {
+                                ja[n+2] = n+2;
+                                ar[n+2] = 1.0;
+                            }
+                            glp_set_mat_row(lp, 1, n + num_extra_cols, &ja[0], &ar[0]);
+
                             glp_simplex(lp, nullptr);
-                            
-                            // Retrieve the optimal objective value and P vector values
+
                             cdfAccessor0[index] = 0;
                             cdfAccessor1[index] = 0;
-                            
+
                             for (size_t i = 1; i <= n; ++i) {
                                 cdfAccessor0[index] += glp_get_col_prim(lp, i)*first0(i-1);
                                 cdfAccessor1[index] += glp_get_col_prim(lp, i)*first1(i-1);
                             }
-                            cdfAccessor0[index] += glp_get_col_prim(lp,n+1);
-                            cdfAccessor1[index] += glp_get_col_prim(lp,n+1);
-                            // Clean up GLPK data structures
+                            if (is_reach) {
+                                cdfAccessor0[index] += glp_get_col_prim(lp, n+1);
+                                cdfAccessor1[index] += glp_get_col_prim(lp, n+1);
+                            } else {
+                                cdfAccessor0[index] += glp_get_col_prim(lp, n+1);
+                                cdfAccessor1[index] += glp_get_col_prim(lp, n+1);
+                            }
                             glp_delete_prob(lp);
-                            
                         });
                     });
                 }
                 queue.wait_and_throw();
-                
-                /*Resize to maximise over input*/
+
+                // Resize and reduce over inputs - maximize probability for reach, minimize for safe
                 firstnew0.reshape(state_space_size, input_space_size);
                 firstnew1.reshape(state_space_size, input_space_size);
-                vec check0 = conv_to< colvec >::from(max(firstnew0,1));
-                vec check1 = conv_to< colvec >::from(max(firstnew1,1));
-                if((approx_equal(first1, check1, "absdiff", 1e-8)) and ((approx_equal(first0, check0, "absdiff", 1e-8)))){
-                    cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is an absorbing state in the solution, try running the finite Horizon solution using this number of steps." << endl;
+                if (is_reach) {
+                    // Reach: maximize
+                    first0 = conv_to<colvec>::from(max(firstnew0, 1));
+                    first1 = conv_to<colvec>::from(max(firstnew1, 1));
+                    U_pos = index_max(firstnew1, 1);
+                } else {
+                    // Safe: minimize (worst case)
+                    first0 = conv_to<colvec>::from(min(firstnew0, 1));
+                    first1 = conv_to<colvec>::from(min(firstnew1, 1));
+                    U_pos = index_min(firstnew1, 1);
+                }
+                firstnew0.reshape(state_space_size*input_space_size, 1);
+                firstnew1.reshape(state_space_size*input_space_size, 1);
+
+                if((approx_equal(first1, firstnew1.col(0), "absdiff", 1e-8)) and ((approx_equal(first0, firstnew0.col(0), "absdiff", 1e-8)))){
+                    if (is_reach) {
+                        cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is an absorbing state in the solution, try running the finite Horizon solution using this number of steps." << endl;
+                    } else {
+                        cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is a safe solution, try running the finite Horizon solution using this number of steps." << endl;
+                    }
                     break;
                 }
-                first0 = check0;
-                first1 = check1;
-                
-                sycl::queue Q;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<uword> cdfBuffer0(U_pos.memptr(),U_pos.n_rows);
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                    Q.submit([&](sycl::handler& cgh) {
-                        auto cdfAccessor0 = cdfBuffer0.get_access<sycl::access::mode::discard_write>(cgh);
-                        cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size), [=](sycl::item<1> item) {
-                            size_t index = item.get_id(0);
-                            firstnew0.row(index).max(cdfAccessor0[index]);
-                        });
-                    });
-                }
-                Q.wait_and_throw();
-                
-            }else{ // for IMDP upper bound
-                
+            }else{
                 sycl::queue queue;
                 {
-                    // Create a SYCL buffer to store the space
                     sycl::buffer<double> cdfBuffer0(firstnew0.memptr(),firstnew0.n_rows);
                     sycl::buffer<double> cdfBuffer1(firstnew1.memptr(),firstnew1.n_rows);
-                    
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+
                     queue.submit([&](sycl::handler& cgh) {
                         auto cdfAccessor0 = cdfBuffer0.get_access<sycl::access::mode::discard_write>(cgh);
                         auto cdfAccessor1 = cdfBuffer1.get_access<sycl::access::mode::discard_write>(cgh);
-                        
+
                         cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size*input_space_size), [=](sycl::item<1> item) {
                             size_t index = item.get_id(0);
+
                             glp_term_out(GLP_OFF);
-                            
+
                             glp_prob *lp;
                             lp = glp_create_prob();
                             glp_set_prob_name(lp, "SimpleLP");
                             glp_set_obj_dir(lp, GLP_MAX);
-                            // Add columns (variables) to the problem for the P vector
-                            size_t n = minTransitionM.row(index).n_cols; // Number of elements in P vector
-                            glp_add_cols(lp, n+2);
+
+                            size_t n = minTransitionM.row(index).n_cols;
+                            size_t num_extra_cols = is_reach ? 2 : 1;
+                            glp_add_cols(lp, n + num_extra_cols);
+
                             for (size_t i = 1; i <= n; ++i) {
                                 glp_set_col_name(lp, i, ("P_" + to_string(i)).c_str());
                                 if(minTransitionM.row(index)(i - 1) == maxTransitionM.row(index)(i - 1)){
@@ -3526,99 +9200,111 @@ void IMDP::infiniteHorizonReachController(bool IMDP_lower) {
                                 }else{
                                     glp_set_col_bnds(lp, i, GLP_DB, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
                                 }
-                                glp_set_obj_coef(lp, i, first1(i-1)); // Set objective coefficients as 1.0, multiply by V later
+                                glp_set_obj_coef(lp, i, first1(i-1));
                             }
-                            glp_set_col_name(lp, n+1, "T");
-                            if(minTargetM(index) == maxTargetM(index)){
-                                glp_set_col_bnds(lp, n+1, GLP_FX, minTargetM(index), maxTargetM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+1, GLP_DB, minTargetM(index), maxTargetM(index));
+
+                            if (is_reach) {
+                                glp_set_col_name(lp, n+1, "T");
+                                if(minTargetM(index) == maxTargetM(index)){
+                                    glp_set_col_bnds(lp, n+1, GLP_FX, minTargetM(index), maxTargetM(index));
+                                }else{
+                                    glp_set_col_bnds(lp, n+1, GLP_DB, minTargetM(index), maxTargetM(index));
+                                }
+                                glp_set_obj_coef(lp, n+1, 1.0);
+
+                                glp_set_col_name(lp, n+2, "A");
+                                if(minAvoidM(index) == maxAvoidM(index)){
+                                    glp_set_col_bnds(lp, n+2, GLP_FX, minAvoidM(index), maxAvoidM(index));
+                                }else{
+                                    glp_set_col_bnds(lp, n+2, GLP_DB, minAvoidM(index), maxAvoidM(index));
+                                }
+                                glp_set_obj_coef(lp, n+2, 0.0);
+                            } else {
+                                glp_set_col_name(lp, n+1, "A");
+                                if(minAvoidM(index) == maxAvoidM(index)){
+                                    glp_set_col_bnds(lp, n+1, GLP_FX, minAvoidM(index), maxAvoidM(index));
+                                }else{
+                                    glp_set_col_bnds(lp, n+1, GLP_DB, minAvoidM(index), maxAvoidM(index));
+                                }
+                                glp_set_obj_coef(lp, n+1, 1.0);
                             }
-                            glp_set_obj_coef(lp, n+1, 1.0); // Set objective coefficients from V vector
-                            glp_set_col_name(lp, n+2, "A");
-                            if(minAvoidM(index) == maxAvoidM(index)){
-                                glp_set_col_bnds(lp, n+2, GLP_FX, minAvoidM(index), maxAvoidM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+2, GLP_DB, minAvoidM(index), maxAvoidM(index));
-                            }
-                            glp_set_obj_coef(lp, n+2, 0.0); // Set objective coefficients from V vector
-                            
-                            // Add a constraint for the sum of elements in P = 1
+
                             glp_add_rows(lp, 1);
                             glp_set_row_name(lp, 1, "Constraint");
-                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0); // Sum of P elements = 1
-                            vector<int> ia = {0}; // GLPK uses 1-based indexing, so 0 is added as a placeholder
-                            vector<int> ja(n + 3); // Indices of the P vector elements
-                            vector<double> ar(n + 3); // Coefficients for the P vector elements in the constraint
+                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0);
+                            vector<int> ia = {0};
+                            vector<int> ja(n + num_extra_cols + 1);
+                            vector<double> ar(n + num_extra_cols + 1);
                             for (size_t i = 1; i <= n; ++i) {
                                 ja[i] = i;
-                                ar[i] = 1.0; // Coefficient 1 for the corresponding P element
+                                ar[i] = 1.0;
                             }
                             ja[n+1] = n+1;
                             ar[n+1] = 1.0;
-                            ja[n+2] = n+2;
-                            ar[n+2] = 1.0;
-                            glp_set_mat_row(lp, 1, n+2, &ja[0], &ar[0]);
-                            
-                            // Use the simplex method to solve the LP problem
+                            if (is_reach) {
+                                ja[n+2] = n+2;
+                                ar[n+2] = 1.0;
+                            }
+                            glp_set_mat_row(lp, 1, n + num_extra_cols, &ja[0], &ar[0]);
+
                             glp_simplex(lp, nullptr);
-                            
-                            // Retrieve the optimal objective value and P vector values
+
                             cdfAccessor0[index] = 0;
                             cdfAccessor1[index] = 0;
-                            
+
                             for (size_t i = 1; i <= n; ++i) {
                                 cdfAccessor0[index] += glp_get_col_prim(lp, i)*first0(i-1);
                                 cdfAccessor1[index] += glp_get_col_prim(lp, i)*first1(i-1);
                             }
-                            cdfAccessor0[index] += glp_get_col_prim(lp,n+1);
-                            cdfAccessor1[index] += glp_get_col_prim(lp,n+1);
-                            // Clean up GLPK data structures
+                            if (is_reach) {
+                                cdfAccessor0[index] += glp_get_col_prim(lp, n+1);
+                                cdfAccessor1[index] += glp_get_col_prim(lp, n+1);
+                            } else {
+                                cdfAccessor0[index] += glp_get_col_prim(lp, n+1);
+                                cdfAccessor1[index] += glp_get_col_prim(lp, n+1);
+                            }
                             glp_delete_prob(lp);
                         });
                     });
                 }
                 queue.wait_and_throw();
-                
-                /*Resize to maximise over input*/
+
+                // Resize and reduce over inputs
                 firstnew0.reshape(state_space_size, input_space_size);
                 firstnew1.reshape(state_space_size, input_space_size);
-                vec check0 = conv_to< colvec >::from(max(firstnew0,1));
-                vec check1 = conv_to< colvec >::from(max(firstnew1,1));
-                if((approx_equal(first1, check1, "absdiff", 1e-8)) and ((approx_equal(first0, check0, "absdiff", 1e-8)))){
-                    cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is an absorbing state in the solution, try running the finite Horizon solution using this number of steps." << endl;
+                if (is_reach) {
+                    first0 = conv_to<colvec>::from(max(firstnew0, 1));
+                    first1 = conv_to<colvec>::from(max(firstnew1, 1));
+                    U_pos = index_max(firstnew1, 1);
+                } else {
+                    first0 = conv_to<colvec>::from(min(firstnew0, 1));
+                    first1 = conv_to<colvec>::from(min(firstnew1, 1));
+                    U_pos = index_min(firstnew1, 1);
+                }
+                firstnew0.reshape(state_space_size*input_space_size, 1);
+                firstnew1.reshape(state_space_size*input_space_size, 1);
+
+                if((approx_equal(first1, firstnew1.col(0), "absdiff", 1e-8)) and ((approx_equal(first0, firstnew0.col(0), "absdiff", 1e-8)))){
+                    if (is_reach) {
+                        cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is an absorbing state in the solution, try running the finite Horizon solution using this number of steps." << endl;
+                    } else {
+                        cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is a safe solution, try running the finite Horizon solution using this number of steps." << endl;
+                    }
                     break;
                 }
-                first0 = check0;
-                first1 = check1;
-                
-                /*Choose input to store for controller*/
-                sycl::queue Q;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<uword> cdfBuffer0(U_pos.memptr(),U_pos.n_rows);
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                    Q.submit([&](sycl::handler& cgh) {
-                        auto cdfAccessor0 = cdfBuffer0.get_access<sycl::access::mode::discard_write>(cgh);
-                        cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size), [=](sycl::item<1> item) {
-                            size_t index = item.get_id(0);
-                            firstnew0.row(index).max(cdfAccessor0[index]);
-                        });
-                    });
-                }
-                Q.wait_and_throw();
-                
             }
             max_diff = max(abs(first1-first0));
             min_diff = min(abs(first1-first0));
         }
         cout << endl;
+
         if (IMDP_lower){
             cout << "control policy for lower bound found, finding upper bound." << endl;
         }else{
             cout << "control policy for upper bound found, finding lower bound." << endl;
         }
-        
+
+        // Second phase with fixed controller from U_pos
         vec second0(state_space_size, 1, fill::zeros);
         mat secondnew0(state_space_size, 1, fill::zeros);
         vec second1(state_space_size, 1, fill::ones);
@@ -3633,7 +9319,7 @@ void IMDP::infiniteHorizonReachController(bool IMDP_lower) {
         vec tempTTmax(state_space_size, 1, fill::zeros);
         vec tempATmax(state_space_size, 1, fill::zeros);
         vec tempATmin(state_space_size, 1, fill::zeros);
-        
+
         cout << "Create reduced matrix where input is fixed." << endl;
         for (size_t i = 0; i < state_space_size; i++){
             tempTmin.row(i) = minTransitionM.row(U_pos(i)*state_space_size+i);
@@ -3643,24 +9329,28 @@ void IMDP::infiniteHorizonReachController(bool IMDP_lower) {
             tempATmin(i) = minAvoidM(U_pos(i)*state_space_size+i);
             tempATmax(i) = maxAvoidM(U_pos(i)*state_space_size+i);
         }
-        
+
         cout << "Matrix Fixed" << endl;
         while (max_diff > epsilon) {
             converge++;
-            cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
-            if (IMDP_lower == true){ // for IMDP upper bound (opposite to before)
-                
+            if (is_reach) {
+                cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
+            } else {
+                cout << "Max: " << max_diff << " Min: " << min_diff << endl;
+            }
+
+            bool use_min_direction_second = is_reach ? !IMDP_lower : IMDP_lower;
+
+            if (!use_min_direction_second){
                 sycl::queue queue;
                 {
-                    // Create a SYCL buffer to store the space
                     sycl::buffer<double> cdfBuffer0(secondnew0.memptr(),secondnew0.n_rows);
                     sycl::buffer<double> cdfBuffer1(secondnew1.memptr(),secondnew1.n_rows);
-                    
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+
                     queue.submit([&](sycl::handler& cgh) {
                         auto cdfAccessor0 = cdfBuffer0.get_access<sycl::access::mode::discard_write>(cgh);
                         auto cdfAccessor1 = cdfBuffer1.get_access<sycl::access::mode::discard_write>(cgh);
-                        
+
                         cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size), [=](sycl::item<1> item) {
                             size_t index = item.get_id(0);
                             glp_term_out(GLP_OFF);
@@ -3668,9 +9358,11 @@ void IMDP::infiniteHorizonReachController(bool IMDP_lower) {
                             lp = glp_create_prob();
                             glp_set_prob_name(lp, "SimpleLP");
                             glp_set_obj_dir(lp, GLP_MAX);
-                            // Add columns (variables) to the problem for the P vector
-                            size_t n = tempTmin.row(index).n_cols; // Number of elements in P vector
-                            glp_add_cols(lp, n+2);
+
+                            size_t n = tempTmin.row(index).n_cols;
+                            size_t num_extra_cols = is_reach ? 2 : 1;
+                            glp_add_cols(lp, n + num_extra_cols);
+
                             for (size_t i = 1; i <= n; ++i) {
                                 glp_set_col_name(lp, i, ("P_" + to_string(i)).c_str());
                                 if(tempTmin.row(index)(i - 1) == tempTmax.row(index)(i - 1)){
@@ -3678,91 +9370,106 @@ void IMDP::infiniteHorizonReachController(bool IMDP_lower) {
                                 }else{
                                     glp_set_col_bnds(lp, i, GLP_DB, tempTmin.row(index)(i - 1), tempTmax.row(index)(i - 1));
                                 }
-                                glp_set_obj_coef(lp, i, second1(i-1)); // Set objective coefficients as 1.0, multiply by V later
+                                glp_set_obj_coef(lp, i, second1(i-1));
                             }
-                            glp_set_col_name(lp, n+1, "T");
-                            if(tempTTmin(index) == tempTTmax(index)){
-                                glp_set_col_bnds(lp, n+1, GLP_FX, tempTTmin(index), tempTTmax(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+1, GLP_DB,tempTTmin(index), tempTTmax(index));
+
+                            if (is_reach) {
+                                glp_set_col_name(lp, n+1, "T");
+                                if(tempTTmin(index) == tempTTmax(index)){
+                                    glp_set_col_bnds(lp, n+1, GLP_FX, tempTTmin(index), tempTTmax(index));
+                                }else{
+                                    glp_set_col_bnds(lp, n+1, GLP_DB, tempTTmin(index), tempTTmax(index));
+                                }
+                                glp_set_obj_coef(lp, n+1, 1.0);
+                                glp_set_col_name(lp, n+2, "A");
+                                if(tempATmin(index) == tempATmax(index)){
+                                    glp_set_col_bnds(lp, n+2, GLP_FX, tempATmin(index), tempATmax(index));
+                                }else{
+                                    glp_set_col_bnds(lp, n+2, GLP_DB, tempATmin(index), tempATmax(index));
+                                }
+                                glp_set_obj_coef(lp, n+2, 0.0);
+                            } else {
+                                glp_set_col_name(lp, n+1, "A");
+                                if(tempATmin(index) == tempATmax(index)){
+                                    glp_set_col_bnds(lp, n+1, GLP_FX, tempATmin(index), tempATmax(index));
+                                }else{
+                                    glp_set_col_bnds(lp, n+1, GLP_DB, tempATmin(index), tempATmax(index));
+                                }
+                                glp_set_obj_coef(lp, n+1, 1.0);
                             }
-                            glp_set_obj_coef(lp, n+1, 1.0); // Set objective coefficients from V vector
-                            glp_set_col_name(lp, n+2, "A");
-                            if(tempATmin(index) == tempATmax(index)){
-                                glp_set_col_bnds(lp, n+2, GLP_FX, tempATmin(index), tempATmax(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+2, GLP_DB, tempATmin(index), tempATmax(index));
-                            }
-                            glp_set_obj_coef(lp, n+2, 0.0); // Set objective coefficients from V vector
-                            
-                            // Add a constraint for the sum of elements in P = 1
+
                             glp_add_rows(lp, 1);
                             glp_set_row_name(lp, 1, "Constraint");
-                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0); // Sum of P elements = 1
-                            vector<int> ia = {0}; // GLPK uses 1-based indexing, so 0 is added as a placeholder
-                            vector<int> ja(n + 3); // Indices of the P vector elements
-                            vector<double> ar(n + 3); // Coefficients for the P vector elements in the constraint
+                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0);
+                            vector<int> ia = {0};
+                            vector<int> ja(n + num_extra_cols + 1);
+                            vector<double> ar(n + num_extra_cols + 1);
                             for (size_t i = 1; i <= n; ++i) {
                                 ja[i] = i;
-                                ar[i] = 1.0; // Coefficient 1 for the corresponding P element
+                                ar[i] = 1.0;
                             }
                             ja[n+1] = n+1;
                             ar[n+1] = 1.0;
-                            ja[n+2] = n+2;
-                            ar[n+2] = 1.0;
-                            //glp_set_matrix(lp, n, ia, ja, ar);
-                            glp_set_mat_row(lp, 1, n+2, &ja[0], &ar[0]);
-                            
-                            // Use the simplex method to solve the LP problem
+                            if (is_reach) {
+                                ja[n+2] = n+2;
+                                ar[n+2] = 1.0;
+                            }
+                            glp_set_mat_row(lp, 1, n + num_extra_cols, &ja[0], &ar[0]);
+
                             glp_simplex(lp, nullptr);
-                            
-                            // Retrieve the optimal objective value and P vector values
+
                             cdfAccessor0[index] = 0;
                             cdfAccessor1[index] = 0;
                             for (size_t i = 1; i <= n; ++i) {
                                 cdfAccessor0[index] += glp_get_col_prim(lp, i)*second0(i-1);
                                 cdfAccessor1[index] += glp_get_col_prim(lp, i)*second1(i-1);
                             }
-                            cdfAccessor0[index] += glp_get_col_prim(lp,n+1);
-                            cdfAccessor1[index] += glp_get_col_prim(lp,n+1);
-                            // Clean up GLPK data structures
+                            if (is_reach) {
+                                cdfAccessor0[index] += glp_get_col_prim(lp, n+1);
+                                cdfAccessor1[index] += glp_get_col_prim(lp, n+1);
+                            } else {
+                                cdfAccessor0[index] += glp_get_col_prim(lp, n+1);
+                                cdfAccessor1[index] += glp_get_col_prim(lp, n+1);
+                            }
                             glp_delete_prob(lp);
-                            
                         });
                     });
                 }
                 queue.wait_and_throw();
                 if((approx_equal(second1, secondnew1, "absdiff", 1e-8)) and ((approx_equal(second0, secondnew0, "absdiff", 1e-8)))){
-                    cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is an absorbing state in the solution, try running the finite Horizon solution using this number of steps." << endl;
+                    if (is_reach) {
+                        cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is an absorbing state in the solution, try running the finite Horizon solution using this number of steps." << endl;
+                    } else {
+                        cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is a safe solution, try running the finite Horizon solution using this number of steps." << endl;
+                    }
                     break;
                 }
                 second0 = secondnew0;
                 second1 = secondnew1;
-                
-            }else{ // for IMDP lower bound (opposite to first)
-                
+
+            }else{
                 sycl::queue queue;
                 {
-                    // Create a SYCL buffer to store the space
                     sycl::buffer<double> cdfBuffer0(secondnew0.memptr(),secondnew0.n_rows);
                     sycl::buffer<double> cdfBuffer1(secondnew1.memptr(),secondnew1.n_rows);
-                    
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+
                     queue.submit([&](sycl::handler& cgh) {
                         auto cdfAccessor0 = cdfBuffer0.get_access<sycl::access::mode::discard_write>(cgh);
                         auto cdfAccessor1 = cdfBuffer1.get_access<sycl::access::mode::discard_write>(cgh);
-                        
+
                         cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size), [=](sycl::item<1> item) {
                             size_t index = item.get_id(0);
-                            
+
                             glp_term_out(GLP_OFF);
                             glp_prob *lp;
                             lp = glp_create_prob();
                             glp_set_prob_name(lp, "SimpleLP");
                             glp_set_obj_dir(lp, GLP_MIN);
-                            // Add columns (variables) to the problem for the P vector
-                            size_t n = tempTmin.row(index).n_cols; // Number of elements in P vector
-                            glp_add_cols(lp, n+2);
+
+                            size_t n = tempTmin.row(index).n_cols;
+                            size_t num_extra_cols = is_reach ? 2 : 1;
+                            glp_add_cols(lp, n + num_extra_cols);
+
                             for (size_t i = 1; i <= n; ++i) {
                                 glp_set_col_name(lp, i, ("P_" + to_string(i)).c_str());
                                 if(tempTmin.row(index)(i - 1) == tempTmax.row(index)(i - 1)){
@@ -3770,60 +9477,78 @@ void IMDP::infiniteHorizonReachController(bool IMDP_lower) {
                                 }else{
                                     glp_set_col_bnds(lp, i, GLP_DB, tempTmin.row(index)(i - 1), tempTmax.row(index)(i - 1));
                                 }
-                                glp_set_obj_coef(lp, i, second1(i-1)); // Set objective coefficients as 1.0, multiply by V later
+                                glp_set_obj_coef(lp, i, second1(i-1));
                             }
-                            glp_set_col_name(lp, n+1, "T");
-                            if(tempTTmin(index) == tempTTmax(index)){
-                                glp_set_col_bnds(lp, n+1, GLP_FX, tempTTmin(index), tempTTmax(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+1, GLP_DB,tempTTmin(index), tempTTmax(index));
+
+                            if (is_reach) {
+                                glp_set_col_name(lp, n+1, "T");
+                                if(tempTTmin(index) == tempTTmax(index)){
+                                    glp_set_col_bnds(lp, n+1, GLP_FX, tempTTmin(index), tempTTmax(index));
+                                }else{
+                                    glp_set_col_bnds(lp, n+1, GLP_DB, tempTTmin(index), tempTTmax(index));
+                                }
+                                glp_set_obj_coef(lp, n+1, 1.0);
+                                glp_set_col_name(lp, n+2, "A");
+                                if(tempATmin(index) == tempATmax(index)){
+                                    glp_set_col_bnds(lp, n+2, GLP_FX, tempATmin(index), tempATmax(index));
+                                }else{
+                                    glp_set_col_bnds(lp, n+2, GLP_DB, tempATmin(index), tempATmax(index));
+                                }
+                                glp_set_obj_coef(lp, n+2, 0.0);
+                            } else {
+                                glp_set_col_name(lp, n+1, "A");
+                                if(tempATmin(index) == tempATmax(index)){
+                                    glp_set_col_bnds(lp, n+1, GLP_FX, tempATmin(index), tempATmax(index));
+                                }else{
+                                    glp_set_col_bnds(lp, n+1, GLP_DB, tempATmin(index), tempATmax(index));
+                                }
+                                glp_set_obj_coef(lp, n+1, 1.0);
                             }
-                            glp_set_obj_coef(lp, n+1, 1.0); // Set objective coefficients from V vector
-                            glp_set_col_name(lp, n+2, "A");
-                            if(tempATmin(index) == tempATmax(index)){
-                                glp_set_col_bnds(lp, n+2, GLP_FX, tempATmin(index), tempATmax(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+2, GLP_DB, tempATmin(index), tempATmax(index));
-                            }
-                            glp_set_obj_coef(lp, n+2, 0.0); // Set objective coefficients from V vector
-                            
-                            // Add a constraint for the sum of elements in P = 1
+
                             glp_add_rows(lp, 1);
                             glp_set_row_name(lp, 1, "Constraint");
-                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0); // Sum of P elements = 1
-                            vector<int> ia = {0}; // GLPK uses 1-based indexing, so 0 is added as a placeholder
-                            vector<int> ja(n + 3); // Indices of the P vector elements
-                            vector<double> ar(n + 3); // Coefficients for the P vector elements in the constraint
+                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0);
+                            vector<int> ia = {0};
+                            vector<int> ja(n + num_extra_cols + 1);
+                            vector<double> ar(n + num_extra_cols + 1);
                             for (size_t i = 1; i <= n; ++i) {
                                 ja[i] = i;
-                                ar[i] = 1.0; // Coefficient 1 for the corresponding P element
+                                ar[i] = 1.0;
                             }
                             ja[n+1] = n+1;
                             ar[n+1] = 1.0;
-                            ja[n+2] = n+2;
-                            ar[n+1] = 1.0;
-                            glp_set_mat_row(lp, 1, n+2, &ja[0], &ar[0]);
-                            
-                            // Use the simplex method to solve the LP problem
+                            if (is_reach) {
+                                ja[n+2] = n+2;
+                                ar[n+2] = 1.0;
+                            }
+                            glp_set_mat_row(lp, 1, n + num_extra_cols, &ja[0], &ar[0]);
+
                             glp_simplex(lp, nullptr);
-                            
-                            // Retrieve the optimal objective value and P vector values
+
                             cdfAccessor0[index] = 0;
                             cdfAccessor1[index] = 0;
                             for (size_t i = 1; i <= n; ++i) {
                                 cdfAccessor0[index] += glp_get_col_prim(lp, i)*second0(i-1);
                                 cdfAccessor1[index] += glp_get_col_prim(lp, i)*second1(i-1);
                             }
-                            cdfAccessor0[index] += glp_get_col_prim(lp,n+1);
-                            cdfAccessor1[index] += glp_get_col_prim(lp,n+1);
-                            // Clean up GLPK data structures
+                            if (is_reach) {
+                                cdfAccessor0[index] += glp_get_col_prim(lp, n+1);
+                                cdfAccessor1[index] += glp_get_col_prim(lp, n+1);
+                            } else {
+                                cdfAccessor0[index] += glp_get_col_prim(lp, n+1);
+                                cdfAccessor1[index] += glp_get_col_prim(lp, n+1);
+                            }
                             glp_delete_prob(lp);
                         });
                     });
                 }
                 queue.wait_and_throw();
                 if((approx_equal(second1, secondnew1, "absdiff", 1e-8)) and ((approx_equal(second0, secondnew0, "absdiff", 1e-8)))){
-                    cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is an absorbing state in the solution, try running the finite Horizon solution using this number of steps." << endl;
+                    if (is_reach) {
+                        cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is an absorbing state in the solution, try running the finite Horizon solution using this number of steps." << endl;
+                    } else {
+                        cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is a safe solution, try running the finite Horizon solution using this number of steps." << endl;
+                    }
                     break;
                 }
                 second0 = secondnew0;
@@ -3833,576 +9558,103 @@ void IMDP::infiniteHorizonReachController(bool IMDP_lower) {
             min_diff = min(abs(second1-second0));
         }
         cout << endl;
-        
+
         if (IMDP_lower){
             cout << "Upper bound found." << endl;
         }else{
             cout << "Lower bound found." << endl;
         }
-        
+
         controller.set_size(state_space_size, dim_x + dim_u + 2);
         controller.cols(0,dim_x-1) = state_space;
-        controller.col(dim_x+dim_u) = first0;
-        controller.col(dim_x+dim_u + 1) = second1;
-        for (size_t i = 0; i < state_space_size; ++i) {
-            controller.row(i).cols(dim_x, dim_x + dim_u - 1) = input_space.row(U_pos(i));
+        if (is_reach) {
+            controller.col(dim_x+dim_u) = first0;
+            controller.col(dim_x+dim_u + 1) = second1;
+        } else {
+            controller.col(dim_x+dim_u) = ones(state_space_size) - first0;
+            controller.col(dim_x+dim_u + 1) = ones(state_space_size) - second1;
         }
-    }else{
-        vec first0(state_space_size, 1, fill::zeros);
-        mat firstnew0(state_space_size*input_space_size*disturb_space_size, 1, fill::zeros);
-        vec first1(state_space_size, 1, fill::ones);
-        mat firstnew1(state_space_size*input_space_size*disturb_space_size, 1, fill::zeros);
-        uvec U_pos(state_space_size, 1, fill::zeros);
-        mat input_and_state0(input_space_size*state_space_size, 1, fill::zeros);
-        mat input_and_state1(input_space_size*state_space_size, 1, fill::zeros);
-        
-        double max_diff = 1.0;
-        double min_diff = 1.0;
-        size_t converge = 0;
-        cout << "first loop iterations: " << endl;
-        while (max_diff > epsilon) {
-            converge++;
-            cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
-            if (IMDP_lower == true){ // for IMDP lower bound
-                sycl::queue queue;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<double> cdfBuffer0(firstnew0.memptr(),firstnew0.n_rows);
-                    sycl::buffer<double> cdfBuffer1(firstnew1.memptr(),firstnew1.n_rows);
-                    
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                    queue.submit([&](sycl::handler& cgh) {
-                        auto cdfAccessor0 = cdfBuffer0.get_access<sycl::access::mode::discard_write>(cgh);
-                        auto cdfAccessor1 = cdfBuffer1.get_access<sycl::access::mode::discard_write>(cgh);
-                        
-                        cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size*input_space_size*disturb_space_size), [=](sycl::item<1> item) {
-                            size_t index = item.get_id(0);
-                            
-                            glp_term_out(GLP_OFF);
-                            
-                            glp_prob *lp;
-                            lp = glp_create_prob();
-                            glp_set_prob_name(lp, "SimpleLP");
-                            glp_set_obj_dir(lp, GLP_MIN);
-                            // Add columns (variables) to the problem for the P vector
-                            size_t n = minTransitionM.row(index).n_cols; // Number of elements in P vector
-                            glp_add_cols(lp, n+2);
-                            for (size_t i = 1; i <= n; ++i) {
-                                glp_set_col_name(lp, i, ("P_" + to_string(i)).c_str());
-                                if(minTransitionM.row(index)(i - 1) == maxTransitionM.row(index)(i - 1)){
-                                    glp_set_col_bnds(lp, i, GLP_FX, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
-                                }else{
-                                    glp_set_col_bnds(lp, i, GLP_DB, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
-                                }
-                                glp_set_obj_coef(lp, i, first1(i-1)); // Set objective coefficients as 1.0, multiply by V later
-                            }
-                            glp_set_col_name(lp, n+1, "T");
-                            if(minTargetM(index) == maxTargetM(index)){
-                                glp_set_col_bnds(lp, n+1, GLP_FX, minTargetM(index), maxTargetM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+1, GLP_DB, minTargetM(index), maxTargetM(index));
-                            }
-                            glp_set_obj_coef(lp, n+1, 1.0); // Set objective coefficients from V vector
-                            
-                            glp_set_col_name(lp, n+2, "A");
-                            if(minAvoidM(index) == maxAvoidM(index)){
-                                glp_set_col_bnds(lp, n+2, GLP_FX, minAvoidM(index), maxAvoidM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+2, GLP_DB, minAvoidM(index), maxAvoidM(index));
-                            }
-                            glp_set_obj_coef(lp, n+2, 0.0); // Set objective coefficients from V vector
-                            
-                            // Add a constraint for the sum of elements in P = 1
-                            glp_add_rows(lp, 1);
-                            glp_set_row_name(lp, 1, "Constraint");
-                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0); // Sum of P elements = 1
-                            vector<int> ia = {0}; // GLPK uses 1-based indexing, so 0 is added as a placeholder
-                            vector<int> ja(n + 3); // Indices of the P vector elements
-                            vector<double> ar(n + 3); // Coefficients for the P vector elements in the constraint
-                            for (size_t i = 1; i <= n; ++i) {
-                                ja[i] = i;
-                                ar[i] = 1.0; // Coefficient 1 for the corresponding P element
-                            }
-                            ja[n+1] = n+1;
-                            ar[n+1] = 1.0;
-                            ja[n+2] = n+2;
-                            ar[n+1] = 1.0;
-                            //glp_set_matrix(lp, n, ia, ja, ar);
-                            glp_set_mat_row(lp, 1, n+2, &ja[0], &ar[0]);
-                            
-                            // Use the simplex method to solve the LP problem
-                            glp_simplex(lp, nullptr);
-                            
-                            // Retrieve the optimal objective value and P vector values
-                            cdfAccessor0[index] = 0;
-                            cdfAccessor1[index] = 0;
-                            
-                            for (size_t i = 1; i <= n; ++i) {
-                                cdfAccessor0[index] += glp_get_col_prim(lp, i)*first0(i-1);
-                                cdfAccessor1[index] += glp_get_col_prim(lp, i)*first1(i-1);
-                            }
-                            cdfAccessor0[index] += glp_get_col_prim(lp,n+1);
-                            cdfAccessor1[index] += glp_get_col_prim(lp,n+1);
-                            // Clean up GLPK data structures
-                            glp_delete_prob(lp);
-                            
-                        });
-                    });
-                }
-                queue.wait_and_throw();
-                /*Resize to minimise over disturbance - worst case scenario*/
-                firstnew0.reshape(state_space_size*input_space_size,disturb_space_size);
-                firstnew1.reshape(state_space_size*input_space_size,disturb_space_size);
-                input_and_state0 = min(firstnew0,1);
-                input_and_state1 = min(firstnew1,1);
-                
-                /*Resize to maximise over input*/
-                input_and_state0.reshape(state_space_size, input_space_size);
-                input_and_state1.reshape(state_space_size, input_space_size);
-                vec check0 = conv_to< colvec >::from(max(input_and_state0,1));
-                vec check1 = conv_to< colvec >::from(max(input_and_state1,1));
-                if((approx_equal(first1, check1, "absdiff", 1e-8)) and ((approx_equal(first0, check0, "absdiff", 1e-8)))){
-                    cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is an absorbing state in the solution, try running the finite Horizon solution using this number of steps." << endl;
-                    break;
-                }
-                first0 = check0;
-                first1 = check1;
-                sycl::queue Q;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<uword> cdfBuffer0(U_pos.memptr(),U_pos.n_rows);
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                    Q.submit([&](sycl::handler& cgh) {
-                        auto cdfAccessor0 = cdfBuffer0.get_access<sycl::access::mode::discard_write>(cgh);
-                        cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size), [=](sycl::item<1> item) {
-                            size_t index = item.get_id(0);
-                            input_and_state0.row(index).max(cdfAccessor0[index]);
-                        });
-                    });
-                }
-                Q.wait_and_throw();
-            }else{ // for IMDP upper bound
-                sycl::queue queue;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<double> cdfBuffer0(firstnew0.memptr(),firstnew0.n_rows);
-                    sycl::buffer<double> cdfBuffer1(firstnew1.memptr(),firstnew1.n_rows);
-                    
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                    queue.submit([&](sycl::handler& cgh) {
-                        auto cdfAccessor0 = cdfBuffer0.get_access<sycl::access::mode::discard_write>(cgh);
-                        auto cdfAccessor1 = cdfBuffer1.get_access<sycl::access::mode::discard_write>(cgh);
-                        
-                        cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size*input_space_size*disturb_space_size), [=](sycl::item<1> item) {
-                            size_t index = item.get_id(0);
-                            glp_term_out(GLP_OFF);
-                            
-                            glp_prob *lp;
-                            lp = glp_create_prob();
-                            glp_set_prob_name(lp, "SimpleLP");
-                            glp_set_obj_dir(lp, GLP_MAX);
-                            // Add columns (variables) to the problem for the P vector
-                            size_t n = minTransitionM.row(index).n_cols; // Number of elements in P vector
-                            glp_add_cols(lp, n+2);
-                            for (size_t i = 1; i <= n; ++i) {
-                                glp_set_col_name(lp, i, ("P_" + to_string(i)).c_str());
-                                if(minTransitionM.row(index)(i - 1) == maxTransitionM.row(index)(i - 1)){
-                                    glp_set_col_bnds(lp, i, GLP_FX, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
-                                }else{
-                                    glp_set_col_bnds(lp, i, GLP_DB, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
-                                }
-                                glp_set_obj_coef(lp, i, first1(i-1)); // Set objective coefficients as 1.0, multiply by V later
-                            }
-                            glp_set_col_name(lp, n+1, "T");
-                            if(minTargetM(index) == maxTargetM(index)){
-                                glp_set_col_bnds(lp, n+1, GLP_FX, minTargetM(index), maxTargetM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+1, GLP_DB, minTargetM(index), maxTargetM(index));
-                            }
-                            glp_set_obj_coef(lp, n+1, 1.0); // Set objective coefficients from V vector
-                            
-                            glp_set_col_name(lp, n+2, "A");
-                            if(minAvoidM(index) == maxAvoidM(index)){
-                                glp_set_col_bnds(lp, n+2, GLP_FX, minAvoidM(index), maxAvoidM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+2, GLP_DB, minAvoidM(index), maxAvoidM(index));
-                            }
-                            glp_set_obj_coef(lp, n+2, 0.0); // Set objective coefficients from V vector
-                            
-                            // Add a constraint for the sum of elements in P = 1
-                            glp_add_rows(lp, 1);
-                            glp_set_row_name(lp, 1, "Constraint");
-                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0); // Sum of P elements = 1
-                            vector<int> ia = {0}; // GLPK uses 1-based indexing, so 0 is added as a placeholder
-                            vector<int> ja(n + 3); // Indices of the P vector elements
-                            vector<double> ar(n + 3); // Coefficients for the P vector elements in the constraint
-                            for (size_t i = 1; i <= n; ++i) {
-                                ja[i] = i;
-                                ar[i] = 1.0; // Coefficient 1 for the corresponding P element
-                            }
-                            ja[n+1] = n+1;
-                            ar[n+1] = 1.0;
-                            ja[n+2] = n+2;
-                            ar[n+2] = 1.0;
-                            glp_set_mat_row(lp, 1, n+2, &ja[0], &ar[0]);
-                            
-                            // Use the simplex method to solve the LP problem
-                            glp_simplex(lp, nullptr);
-                            
-                            // Retrieve the optimal objective value and P vector values
-                            cdfAccessor0[index] = 0;
-                            cdfAccessor1[index] = 0;
-                            
-                            for (size_t i = 1; i <= n; ++i) {
-                                cdfAccessor0[index] += glp_get_col_prim(lp, i)*first0(i-1);
-                                cdfAccessor1[index] += glp_get_col_prim(lp, i)*first1(i-1);
-                            }
-                            cdfAccessor0[index] += glp_get_col_prim(lp,n+1);
-                            cdfAccessor1[index] += glp_get_col_prim(lp,n+1);
-                            // Clean up GLPK data structures
-                            glp_delete_prob(lp);
-                            
-                        });
-                    });
-                }
-                queue.wait_and_throw();
-                /*Resize to maximise over disturbance - best case scenario*/
-                firstnew0.reshape(state_space_size*input_space_size,disturb_space_size);
-                firstnew1.reshape(state_space_size*input_space_size,disturb_space_size);
-                input_and_state0 = min(firstnew0,1);
-                input_and_state1 = min(firstnew1,1);
-                
-                /*Resize to maximise over input*/
-                input_and_state0.reshape(state_space_size, input_space_size);
-                input_and_state1.reshape(state_space_size, input_space_size);
-                vec check0 = conv_to< colvec >::from(max(input_and_state0,1));
-                vec check1 = conv_to< colvec >::from(max(input_and_state1,1));
-                if((approx_equal(first1, check1, "absdiff", 1e-8)) and ((approx_equal(first0, check0, "absdiff", 1e-8)))){
-                    cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is an absorbing state in the solution, try running the finite Horizon solution using this number of steps." << endl;
-                    break;
-                }
-                first0 = check0;
-                first1 = check1;
-                
-                sycl::queue Q;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<uword> cdfBuffer0(U_pos.memptr(),U_pos.n_rows);
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                    Q.submit([&](sycl::handler& cgh) {
-                        auto cdfAccessor0 = cdfBuffer0.get_access<sycl::access::mode::discard_write>(cgh);
-                        cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size), [=](sycl::item<1> item) {
-                            size_t index = item.get_id(0);
-                            input_and_state0.row(index).max(cdfAccessor0[index]);
-                        });
-                    });
-                }
-                Q.wait_and_throw();
-            }
-            max_diff = max(abs(first1-first0));
-            min_diff = min(abs(first1-first0));
-        }
-        cout << endl;
-        
-        if (IMDP_lower){
-            cout << "control policy for lower bound found, finding upper bound." << endl;
-        }else{
-            cout << "control policy for upper bound found, finding lower bound." << endl;
-        }
-        vec second0(state_space_size, 1, fill::zeros);
-        mat secondnew0(state_space_size*disturb_space_size, 1, fill::zeros);
-        vec second1(state_space_size, 1, fill::ones);
-        mat secondnew1(state_space_size*disturb_space_size, 1, fill::zeros);
-        
-        mat tempTmin(state_space_size*disturb_space_size, state_space_size, fill::zeros);
-        mat tempTmax(state_space_size*disturb_space_size, state_space_size, fill::zeros);
-        vec tempTTmin(state_space_size*disturb_space_size, 1, fill::zeros);
-        vec tempTTmax(state_space_size*disturb_space_size, 1, fill::zeros);
-        vec tempATmin(state_space_size*disturb_space_size, 1, fill::zeros);
-        vec tempATmax(state_space_size*disturb_space_size, 1, fill::zeros);
-        
-        cout << "Create reduced matrix where input is fixed." << endl;
-        for (size_t j = 0; j < disturb_space_size; j++){
-            for (size_t i = 0; i < state_space_size; i++){
-                tempTmin.row(j*state_space_size+i) = minTransitionM.row(j*input_space_size*state_space_size+U_pos(i)*state_space_size+i);
-                tempTmax.row(j*state_space_size+i) = maxTransitionM.row(j*input_space_size*state_space_size+U_pos(i)*state_space_size+i);
-                tempTTmin(j*state_space_size+i)= minTargetM(j*input_space_size*state_space_size+U_pos(i)*state_space_size+i);
-                tempTTmax(j*state_space_size+i)= maxTargetM(j*input_space_size*state_space_size+U_pos(i)*state_space_size+i);
-                tempATmin(j*state_space_size+i)= minAvoidM(j*input_space_size*state_space_size+U_pos(i)*state_space_size+i);
-                tempATmax(j*state_space_size+i)= maxAvoidM(j*input_space_size*state_space_size+U_pos(i)*state_space_size+i);
-            }
-        }
-        
-        max_diff = 1.0;
-        min_diff = 1.0;
-        converge = 0;
-        cout << "second loop iterations: " << endl;
-        
-        while (max_diff > epsilon) {
-            converge++;
-            cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
-            if (IMDP_lower == true){ // for IMDP upper bound (opposite to before)
-                sycl::queue queue;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<double> cdfBuffer0(secondnew0.memptr(),secondnew0.n_rows);
-                    sycl::buffer<double> cdfBuffer1(secondnew1.memptr(),secondnew1.n_rows);
-                    
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                    queue.submit([&](sycl::handler& cgh) {
-                        auto cdfAccessor0 = cdfBuffer0.get_access<sycl::access::mode::discard_write>(cgh);
-                        auto cdfAccessor1 = cdfBuffer1.get_access<sycl::access::mode::discard_write>(cgh);
-                        
-                        cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size*disturb_space_size), [=](sycl::item<1> item) {
-                            size_t index = item.get_id(0);
-                            glp_term_out(GLP_OFF);
-                            glp_prob *lp;
-                            lp = glp_create_prob();
-                            glp_set_prob_name(lp, "SimpleLP");
-                            glp_set_obj_dir(lp, GLP_MAX);
-                            // Add columns (variables) to the problem for the P vector
-                            size_t n = tempTmin.row(index).n_cols; // Number of elements in P vector
-                            glp_add_cols(lp, n+2);
-                            for (size_t i = 1; i <= n; ++i) {
-                                glp_set_col_name(lp, i, ("P_" + to_string(i)).c_str());
-                                if(tempTmin.row(index)(i - 1) == tempTmax.row(index)(i - 1)){
-                                    glp_set_col_bnds(lp, i, GLP_FX, tempTmin.row(index)(i - 1), tempTmax.row(index)(i - 1));
-                                }else{
-                                    glp_set_col_bnds(lp, i, GLP_DB, tempTmin.row(index)(i - 1), tempTmax.row(index)(i - 1));
-                                }
-                                glp_set_obj_coef(lp, i, second1(i-1)); // Set objective coefficients as 1.0, multiply by V later
-                            }
-                            glp_set_col_name(lp, n+1, "T");
-                            if(tempTTmin(index) == tempTTmax(index)){
-                                glp_set_col_bnds(lp, n+1, GLP_FX, tempTTmin(index), tempTTmax(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+1, GLP_DB,tempTTmin(index), tempTTmax(index));
-                            }
-                            glp_set_obj_coef(lp, n+1, 1.0); // Set objective coefficients from V vector
-                            
-                            glp_set_col_name(lp, n+2, "A");
-                            if(tempATmin(index) == tempATmax(index)){
-                                glp_set_col_bnds(lp, n+1, GLP_FX, tempATmin(index), tempATmax(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+1, GLP_DB,tempATmin(index), tempATmax(index));
-                            }
-                            glp_set_obj_coef(lp, n+2, 0.0); // Set objective coefficients from V vector
-                            
-                            // Add a constraint for the sum of elements in P = 1
-                            glp_add_rows(lp, 1);
-                            glp_set_row_name(lp, 1, "Constraint");
-                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0); // Sum of P elements = 1
-                            vector<int> ia = {0}; // GLPK uses 1-based indexing, so 0 is added as a placeholder
-                            vector<int> ja(n + 3); // Indices of the P vector elements
-                            vector<double> ar(n + 3); // Coefficients for the P vector elements in the constraint
-                            for (size_t i = 1; i <= n; ++i) {
-                                ja[i] = i;
-                                ar[i] = 1.0; // Coefficient 1 for the corresponding P element
-                            }
-                            ja[n+1] = n+1;
-                            ar[n+1] = 1.0;
-                            ja[n+2] = n+2;
-                            ar[n+2] = 1.0;
-                            glp_set_mat_row(lp, 1, n+2, &ja[0], &ar[0]);
-                            
-                            // Use the simplex method to solve the LP problem
-                            glp_simplex(lp, nullptr);
-                            
-                            // Retrieve the optimal objective value and P vector values
-                            cdfAccessor0[index] = 0;
-                            cdfAccessor1[index] = 0;
-                            for (size_t i = 1; i <= n; ++i) {
-                                cdfAccessor0[index] += glp_get_col_prim(lp, i)*second0(i-1);
-                                cdfAccessor1[index] += glp_get_col_prim(lp, i)*second1(i-1);
-                            }
-                            cdfAccessor0[index] += glp_get_col_prim(lp,n+1);
-                            cdfAccessor1[index] += glp_get_col_prim(lp,n+1);
-                            // Clean up GLPK data structures
-                            glp_delete_prob(lp);
-                        });
-                    });
-                }
-                queue.wait_and_throw();
-                
-                /*Resize to maximise over disturbance - best case scenario*/
-                secondnew0.reshape(state_space_size,disturb_space_size);
-                secondnew1.reshape(state_space_size,disturb_space_size);
-                vec check0 = conv_to< colvec >::from(min(secondnew0,1));
-                vec check1 = conv_to< colvec >::from(min(secondnew1,1));
-                if((approx_equal(second1, check1, "absdiff", 1e-8)) and ((approx_equal(second0, check0, "absdiff", 1e-8)))){
-                    cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is an absorbing state in the solution, try running the finite Horizon solution using this number of steps." << endl;
-                    break;
-                }
-                second0 = check0;
-                second1 = check1;
-                
-                
-            }else{ // for IMDP lower bound (opposite to first)
-                sycl::queue queue;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<double> cdfBuffer0(secondnew0.memptr(),secondnew0.n_rows);
-                    sycl::buffer<double> cdfBuffer1(secondnew1.memptr(),secondnew1.n_rows);
-                    
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                    queue.submit([&](sycl::handler& cgh) {
-                        auto cdfAccessor0 = cdfBuffer0.get_access<sycl::access::mode::discard_write>(cgh);
-                        auto cdfAccessor1 = cdfBuffer1.get_access<sycl::access::mode::discard_write>(cgh);
-                        
-                        cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size*disturb_space_size), [=](sycl::item<1> item) {
-                            size_t index = item.get_id(0);
-                            glp_term_out(GLP_OFF);
-                            glp_prob *lp;
-                            lp = glp_create_prob();
-                            glp_set_prob_name(lp, "SimpleLP");
-                            glp_set_obj_dir(lp, GLP_MIN);
-                            // Add columns (variables) to the problem for the P vector
-                            size_t n = tempTmin.row(index).n_cols; // Number of elements in P vector
-                            glp_add_cols(lp, n+2);
-                            for (size_t i = 1; i <= n; ++i) {
-                                glp_set_col_name(lp, i, ("P_" + to_string(i)).c_str());
-                                if(tempTmin.row(index)(i - 1) == tempTmax.row(index)(i - 1)){
-                                    glp_set_col_bnds(lp, i, GLP_FX, tempTmin.row(index)(i - 1), tempTmax.row(index)(i - 1));
-                                }else{
-                                    glp_set_col_bnds(lp, i, GLP_DB, tempTmin.row(index)(i - 1), tempTmax.row(index)(i - 1));
-                                }
-                                glp_set_obj_coef(lp, i, second1(i-1)); // Set objective coefficients as 1.0, multiply by V later
-                            }
-                            glp_set_col_name(lp, n+1, "T");
-                            if(tempTTmin(index) == tempTTmax(index)){
-                                glp_set_col_bnds(lp, n+1, GLP_FX, tempTTmin(index), tempTTmax(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+1, GLP_DB,tempTTmin(index), tempTTmax(index));
-                            }
-                            glp_set_obj_coef(lp, n+1, 1.0); // Set objective coefficients from V vector
-                            
-                            glp_set_col_name(lp, n+2, "A");
-                            if(tempATmin(index) == tempATmax(index)){
-                                glp_set_col_bnds(lp, n+1, GLP_FX, tempATmin(index), tempATmax(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+1, GLP_DB,tempATmin(index), tempATmax(index));
-                            }
-                            glp_set_obj_coef(lp, n+2, 0.0); // Set objective coefficients from V vector
-                            
-                            // Add a constraint for the sum of elements in P = 1
-                            glp_add_rows(lp, 1);
-                            glp_set_row_name(lp, 1, "Constraint");
-                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0); // Sum of P elements = 1
-                            vector<int> ia = {0}; // GLPK uses 1-based indexing, so 0 is added as a placeholder
-                            vector<int> ja(n + 3); // Indices of the P vector elements
-                            vector<double> ar(n + 3); // Coefficients for the P vector elements in the constraint
-                            for (size_t i = 1; i <= n; ++i) {
-                                ja[i] = i;
-                                ar[i] = 1.0; // Coefficient 1 for the corresponding P element
-                            }
-                            ja[n+1] = n+1;
-                            ar[n+1] = 1.0;
-                            ja[n+2] = n+2;
-                            ar[n+2] = 1.0;
-                            glp_set_mat_row(lp, 1, n+2, &ja[0], &ar[0]);
-                            
-                            // Use the simplex method to solve the LP problem
-                            glp_simplex(lp, nullptr);
-                            
-                            // Retrieve the optimal objective value and P vector values
-                            cdfAccessor0[index] = 0;
-                            cdfAccessor1[index] = 0;
-                            for (size_t i = 1; i <= n; ++i) {
-                                cdfAccessor0[index] += glp_get_col_prim(lp, i)*second0(i-1);
-                                cdfAccessor1[index] += glp_get_col_prim(lp, i)*second1(i-1);
-                            }
-                            cdfAccessor0[index] += glp_get_col_prim(lp,n+1);
-                            cdfAccessor1[index] += glp_get_col_prim(lp,n+1);
-                            // Clean up GLPK data structures
-                            glp_delete_prob(lp);
-                        });
-                    });
-                }
-                queue.wait_and_throw();
-                
-                /*Resize to minimise over disturbance - worst case scenario*/
-                secondnew0.reshape(state_space_size,disturb_space_size);
-                secondnew1.reshape(state_space_size,disturb_space_size);
-                vec check0 = conv_to< colvec >::from(min(secondnew0,1));
-                vec check1 = conv_to< colvec >::from(min(secondnew1,1));
-                if((approx_equal(second1, check1, "absdiff", 1e-8)) and ((approx_equal(second0, check0, "absdiff", 1e-8)))){
-                    cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is an absorbing state in the solution, try running the finite Horizon solution using this number of steps." << endl;
-                    break;
-                }
-                second0 = check0;
-                second1 = check1;
-                
-            }
-            max_diff = max(abs(second1-second0));
-            min_diff = min(abs(second1-second0));
-        }
-        cout << endl;
-        
-        if (IMDP_lower){
-            cout << "Upper bound found." << endl;
-        }else{
-            cout << "Lower bound found." << endl;
-        }
-        
-        controller.set_size(state_space_size, dim_x + dim_u + 2);
-        controller.cols(0,dim_x-1) = state_space;
-        controller.col(dim_x+dim_u) = first0;
-        controller.col(dim_x+dim_u + 1) = second1;
         for (size_t i = 0; i < state_space_size; ++i) {
             controller.row(i).cols(dim_x, dim_x + dim_u - 1) = input_space.row(U_pos(i));
         }
     }
-    // Stop the timer
+
     auto end = chrono::steady_clock::now();
     auto duration = chrono::duration_cast<chrono::milliseconds>(end - start);
     cout << "Execution time: " << duration.count()/1000.0 << " seconds" << endl;
 }
 
+/// infinite horizon reachability synthesis
+void IMDP::infiniteHorizonReachController(bool IMDP_lower) {
+    infiniteHorizonControllerImpl(IMDP_lower, true);
+}
 
-/// infinite horizon safeity synthesis
+
+/// infinite horizon safety synthesis - DEPRECATED: Original implementation below replaced by infiniteHorizonSafeController wrapper
+/// The following commented block contains the original infiniteHorizonReachController implementation
+/// that has been replaced by infiniteHorizonControllerImpl(IMDP_lower, true) above.
+/// This is kept for reference during validation, and should be deleted after verification.
+
+
+/// infinite horizon safety synthesis
 void IMDP::infiniteHorizonSafeController(bool IMDP_lower) {
+    infiniteHorizonControllerImpl(IMDP_lower, false);
+}
+
+
+/// infinite horizon safety synthesis - DEPRECATED: Original implementation
+/// that has been replaced by infiniteHorizonControllerImpl(IMDP_lower, false) above.
+/// This is kept for reference during validation, and should be deleted after verification.
+
+/// Internal implementation for finite horizon controller synthesis (reach and safe)
+void IMDP::finiteHorizonControllerImpl(bool IMDP_lower, size_t timeHorizon, bool is_reach) {
     auto start = chrono::steady_clock::now();
-    cout << "Finding control policy for infinite horizon safe controller... " << endl;
-    
-    // Control Synthesis
+    if (is_reach) {
+        cout << "Finding control policy for finite horizon reach controller... " << endl;
+    } else {
+        cout << "Finding control policy for finite horizon safe controller... " << endl;
+        cout << "Approximate memory required if stored (each): " << minTargetM.n_rows*sizeof(double)/1000000.0 << "Mb, " << minTargetM.n_rows*sizeof(double)/1000000000.0 << "Gb" << endl;
+    }
+
+    // Configuration: Reach uses n+2 columns (P + Target + Avoid), Safe uses n+1 (P + Avoid)
+    // Both use same LP direction: GLP_MIN for IMDP_lower=true, GLP_MAX for IMDP_lower=false
+
     if(input_space_size == 0 && disturb_space_size == 0){
-        vec first0(state_space_size, 1, fill::zeros);
-        vec firstnew0(state_space_size, 1, fill::zeros);
-        vec first1(state_space_size, 1, fill::ones);
-        vec firstnew1(state_space_size, 1, fill::zeros);
-        vec temp0(state_space_size, 1, fill::zeros);
-        vec temp1(state_space_size, 1, fill::zeros);
-        
-        double max_diff = 1.0;
-        double min_diff = 1.0;
-        size_t converge = 0;
+        // Initial value: zeros for reach, ones for safe
+        vec first(state_space_size);
+        vec firstnew(state_space_size);
+        if (is_reach) {
+            first.fill(0.0);
+            firstnew.fill(0.0);
+        } else {
+            first.fill(1.0);
+            firstnew.fill(1.0);
+        }
+
+        size_t k = 0;
         cout << "first loop iterations: " << endl;
-        while (max_diff > epsilon) {
-            converge++;
-            cout << "Max: " << max_diff << " Min: " << min_diff << endl;
+        while (k < timeHorizon) {
+            cout << "." << flush;
             if (IMDP_lower == true){ // for IMDP lower bound
                 sycl::queue queue;
                 {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<double> cdfBuffer0(firstnew0.memptr(),firstnew0.n_rows);
-                    sycl::buffer<double> cdfBuffer1(firstnew1.memptr(),firstnew1.n_rows);
-                    
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                    sycl::buffer<double> cdfBuffer(firstnew.memptr(),firstnew.n_rows);
+
                     queue.submit([&](sycl::handler& cgh) {
-                        auto cdfAccessor0 = cdfBuffer0.get_access<sycl::access::mode::discard_write>(cgh);
-                        auto cdfAccessor1 = cdfBuffer1.get_access<sycl::access::mode::discard_write>(cgh);
-                        
+                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+
                         cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size), [=](sycl::item<1> item) {
                             size_t index = item.get_id(0);
-                            
                             glp_term_out(GLP_OFF);
                             glp_prob *lp;
                             lp = glp_create_prob();
                             glp_set_prob_name(lp, "SimpleLP");
-                            glp_set_obj_dir(lp, GLP_MAX);
-                            // Add columns (variables) to the problem for the P vector
-                            size_t n = minTransitionM.row(index).n_cols; // Number of elements in P vector
-                            glp_add_cols(lp, n+1);
+                            glp_set_obj_dir(lp, GLP_MIN);
+
+                            size_t n = minTransitionM.row(index).n_cols;
+                            size_t num_extra_cols = is_reach ? 2 : 1;
+                            glp_add_cols(lp, n + num_extra_cols);
+
                             for (size_t i = 1; i <= n; ++i) {
                                 glp_set_col_name(lp, i, ("P_" + to_string(i)).c_str());
                                 if(minTransitionM.row(index)(i - 1) == maxTransitionM.row(index)(i - 1)){
@@ -4410,270 +9662,89 @@ void IMDP::infiniteHorizonSafeController(bool IMDP_lower) {
                                 }else{
                                     glp_set_col_bnds(lp, i, GLP_DB, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
                                 }
-                                glp_set_obj_coef(lp, i, first1(i-1)); // Set objective coefficients as V
+                                glp_set_obj_coef(lp, i, first(i-1));
                             }
-                            glp_set_col_name(lp, n+1, "A");
-                            if(minAvoidM(index) == maxAvoidM(index)){
-                                glp_set_col_bnds(lp, n+1, GLP_FX, minAvoidM(index), maxAvoidM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+1, GLP_DB, minAvoidM(index), maxAvoidM(index));
+
+                            if (is_reach) {
+                                glp_set_col_name(lp, n+1, "T");
+                                if(minTargetM(index) == maxTargetM(index)){
+                                    glp_set_col_bnds(lp, n+1, GLP_FX, minTargetM(index), maxTargetM(index));
+                                }else{
+                                    glp_set_col_bnds(lp, n+1, GLP_DB, minTargetM(index), maxTargetM(index));
+                                }
+                                glp_set_obj_coef(lp, n+1, 1.0);
+
+                                glp_set_col_name(lp, n+2, "A");
+                                if(minAvoidM(index) == maxAvoidM(index)){
+                                    glp_set_col_bnds(lp, n+2, GLP_FX, minAvoidM(index), maxAvoidM(index));
+                                }else{
+                                    glp_set_col_bnds(lp, n+2, GLP_DB, minAvoidM(index), maxAvoidM(index));
+                                }
+                                glp_set_obj_coef(lp, n+2, 0.0);
+                            } else {
+                                glp_set_col_name(lp, n+1, "A");
+                                if(minAvoidM(index) == maxAvoidM(index)){
+                                    glp_set_col_bnds(lp, n+1, GLP_FX, minAvoidM(index), maxAvoidM(index));
+                                }else{
+                                    glp_set_col_bnds(lp, n+1, GLP_DB, minAvoidM(index), maxAvoidM(index));
+                                }
+                                glp_set_obj_coef(lp, n+1, 0.0);
                             }
-                            glp_set_obj_coef(lp, n+1, 1.0); // Set objective coefficients as 1.0
-                            
-                            // Add a constraint for the sum of elements in P = 1
+
                             glp_add_rows(lp, 1);
                             glp_set_row_name(lp, 1, "Constraint");
-                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0); // Sum of P elements = 1
-                            vector<int> ia = {0}; // GLPK uses 1-based indexing, so 0 is added as a placeholder
-                            vector<int> ja(n + 2); // Indices of the P vector elements
-                            vector<double> ar(n + 2); // Coefficients for the P vector elements in the constraint
+                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0);
+                            vector<int> ia = {0};
+                            vector<int> ja(n + num_extra_cols + 1);
+                            vector<double> ar(n + num_extra_cols + 1);
                             for (size_t i = 1; i <= n; ++i) {
                                 ja[i] = i;
-                                ar[i] = 1.0; // Coefficient 1 for the corresponding P element
+                                ar[i] = 1.0;
                             }
                             ja[n+1] = n+1;
                             ar[n+1] = 1.0;
-                            //glp_set_matrix(lp, n, ia, ja, ar);
-                            glp_set_mat_row(lp, 1, n+1, &ja[0], &ar[0]);
-                            
-                            // Use the simplex method to solve the LP problem
-                            glp_simplex(lp, nullptr);
-                            
-                            // Retrieve the optimal objective value and P vector values
-                            cdfAccessor0[index] = 0;
-                            cdfAccessor1[index] = 0;
-                            
-                            //vector<double> optimal_P(n+1);
-                            for (size_t i = 1; i <= n; ++i) {
-                                cdfAccessor0[index] += glp_get_col_prim(lp, i)*first0(i-1);
-                                cdfAccessor1[index] += glp_get_col_prim(lp, i)*first1(i-1);
+                            if (is_reach) {
+                                ja[n+2] = n+2;
+                                ar[n+2] = 1.0;
                             }
-                            cdfAccessor0[index] += glp_get_col_prim(lp,n+1);
-                            cdfAccessor1[index] += glp_get_col_prim(lp,n+1);
-                            // Clean up GLPK data structures
+                            glp_set_mat_row(lp, 1, n + num_extra_cols, &ja[0], &ar[0]);
+
+                            glp_simplex(lp, nullptr);
+                            cdfAccessor[index] = 0;
+
+                            for (size_t i = 1; i <= n; ++i) {
+                                cdfAccessor[index] += glp_get_col_prim(lp, i)*first(i-1);
+                            }
+                            if (is_reach) {
+                                cdfAccessor[index] += glp_get_col_prim(lp, n+1);
+                            }
                             glp_delete_prob(lp);
                         });
                     });
                 }
                 queue.wait_and_throw();
-                if((approx_equal(firstnew1, first1, "absdiff", 1e-8)) and ((approx_equal(firstnew0, first0, "absdiff", 1e-8)))){
-                    cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is a safe solution, try running the finite Horizon solution using this number of steps." << endl;
-                    break;
-                }
-                first0 = firstnew0;
-                first1 = firstnew1;
+                first = firstnew;
             }else{ // for IMDP upper bound
                 sycl::queue queue;
                 {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<double> cdfBuffer0(firstnew0.memptr(),firstnew0.n_rows);
-                    sycl::buffer<double> cdfBuffer1(firstnew1.memptr(),firstnew1.n_rows);
-                    
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                    sycl::buffer<double> cdfBuffer(firstnew.memptr(),firstnew.n_rows);
+
                     queue.submit([&](sycl::handler& cgh) {
-                        auto cdfAccessor0 = cdfBuffer0.get_access<sycl::access::mode::discard_write>(cgh);
-                        auto cdfAccessor1 = cdfBuffer1.get_access<sycl::access::mode::discard_write>(cgh);
-                        
+                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+
                         cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size), [=](sycl::item<1> item) {
                             size_t index = item.get_id(0);
                             glp_term_out(GLP_OFF);
-                            glp_prob *lp;
-                            lp = glp_create_prob();
-                            glp_set_prob_name(lp, "SimpleLP");
-                            glp_set_obj_dir(lp, GLP_MIN);
-                            // Add columns (variables) to the problem for the P vector
-                            size_t n = minTransitionM.row(index).n_cols; // Number of elements in P vector
-                            glp_add_cols(lp, n+1);
-                            for (size_t i = 1; i <= n; ++i) {
-                                glp_set_col_name(lp, i, ("P_" + to_string(i)).c_str());
-                                if(minTransitionM.row(index)(i - 1) == maxTransitionM.row(index)(i - 1)){
-                                    glp_set_col_bnds(lp, i, GLP_FX, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
-                                }else{
-                                    glp_set_col_bnds(lp, i, GLP_DB, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
-                                }
-                                glp_set_obj_coef(lp, i, first1(i-1)); // Set objective coefficients as V
-                            }
-                            glp_set_col_name(lp, n+1, "A");
-                            if(minAvoidM(index) == maxAvoidM(index)){
-                                glp_set_col_bnds(lp, n+1, GLP_FX, minAvoidM(index), maxAvoidM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+1, GLP_DB, minAvoidM(index), maxAvoidM(index));
-                            }
-                            glp_set_obj_coef(lp, n+1, 1.0);
-                            
-                            // Add a constraint for the sum of elements in P = 1
-                            glp_add_rows(lp, 1);
-                            glp_set_row_name(lp, 1, "Constraint");
-                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0); // Sum of P elements = 1
-                            vector<int> ia = {0}; // GLPK uses 1-based indexing, so 0 is added as a placeholder
-                            vector<int> ja(n + 2); // Indices of the P vector elements
-                            vector<double> ar(n + 2); // Coefficients for the P vector elements in the constraint
-                            for (size_t i = 1; i <= n; ++i) {
-                                ja[i] = i;
-                                ar[i] = 1.0; // Coefficient 1 for the corresponding P element
-                            }
-                            ja[n+1] = n+1;
-                            ar[n+1] = 1.0;
-                            glp_set_mat_row(lp, 1, n+1, &ja[0], &ar[0]);
-                            
-                            // Use the simplex method to solve the LP problem
-                            glp_simplex(lp, nullptr);
-                            
-                            // Retrieve the optimal objective value and P vector values
-                            
-                            cdfAccessor0[index] = 0;
-                            cdfAccessor1[index] = 0;
-                            
-                            //vector<double> optimal_P(n+1);
-                            for (size_t i = 1; i <= n; ++i) {
-                                cdfAccessor0[index] += glp_get_col_prim(lp, i)*first0(i-1);
-                                cdfAccessor1[index] += glp_get_col_prim(lp, i)*first1(i-1);
-                            }
-                            cdfAccessor0[index] += glp_get_col_prim(lp,n+1);
-                            cdfAccessor1[index] += glp_get_col_prim(lp,n+1);
-                            // Clean up GLPK data structures
-                            glp_delete_prob(lp);
-                            
-                        });
-                    });
-                }
-                queue.wait_and_throw();
-                if((approx_equal(firstnew1, first1, "absdiff", 1e-8)) and ((approx_equal(firstnew0, first0, "absdiff", 1e-8)))){
-                    cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is a safe solution, try running the finite Horizon solution using this number of steps." << endl;
-                    break;
-                }
-                first0 = firstnew0;
-                first1 = firstnew1;
-            }
-            max_diff = max(abs(first1-first0));
-            min_diff = min(abs(first1-first0));
-        }
-        cout << endl;
-        
-        if (IMDP_lower){
-            cout << "verification lower bound found, finding upper bound." << endl;
-        }else{
-            cout << "verification upper bound found, finding lower bound." << endl;
-        }
-        
-        vec second0(state_space_size, 1, fill::zeros);
-        mat secondnew0(state_space_size, 1, fill::zeros);
-        vec second1(state_space_size, 1, fill::ones);
-        mat secondnew1(state_space_size, 1, fill::zeros);
-        
-        min_diff = 1.0;
-        max_diff = 1.0;
-        converge = 0;
-        cout << "second loop iterations: " << endl;
-        
-        while (max_diff > epsilon) {
-            converge++;
-            cout << "Max: " << max_diff << " Min: " << min_diff << endl;
-            if (IMDP_lower == true){ // for IMDP upper bound (opposite to before)
-                sycl::queue queue;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<double> cdfBuffer0(secondnew0.memptr(),secondnew0.n_rows);
-                    sycl::buffer<double> cdfBuffer1(secondnew1.memptr(),secondnew1.n_rows);
-                    
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                    queue.submit([&](sycl::handler& cgh) {
-                        auto cdfAccessor0 = cdfBuffer0.get_access<sycl::access::mode::discard_write>(cgh);
-                        auto cdfAccessor1 = cdfBuffer1.get_access<sycl::access::mode::discard_write>(cgh);
-                        
-                        cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size), [=](sycl::item<1> item) {
-                            size_t index = item.get_id(0);
-                            
-                            glp_term_out(GLP_OFF);
-                            
-                            glp_prob *lp;
-                            lp = glp_create_prob();
-                            glp_set_prob_name(lp, "SimpleLP");
-                            glp_set_obj_dir(lp, GLP_MIN);
-                            // Add columns (variables) to the problem for the P vector
-                            size_t n = minTransitionM.row(index).n_cols; // Number of elements in P vector
-                            glp_add_cols(lp, n+1);
-                            for (size_t i = 1; i <= n; ++i) {
-                                glp_set_col_name(lp, i, ("P_" + to_string(i)).c_str());
-                                if(minTransitionM.row(index)(i - 1) == maxTransitionM.row(index)(i - 1)){
-                                    glp_set_col_bnds(lp, i, GLP_FX, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
-                                }else{
-                                    glp_set_col_bnds(lp, i, GLP_DB, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
-                                }
-                                glp_set_obj_coef(lp, i, second1(i-1)); // Set objective coefficients as V
-                            }
-                            glp_set_col_name(lp, n+1, "A");
-                            if(minAvoidM(index) == maxAvoidM(index)){
-                                glp_set_col_bnds(lp, n+1, GLP_FX, minAvoidM(index), maxAvoidM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+1, GLP_DB, minAvoidM(index), maxAvoidM(index));
-                            }
-                            glp_set_obj_coef(lp, n+1, 1.0); // Set objective coefficients from V vector
-                            
-                            // Add a constraint for the sum of elements in P = 1
-                            glp_add_rows(lp, 1);
-                            glp_set_row_name(lp, 1, "Constraint");
-                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0); // Sum of P elements = 1
-                            vector<int> ia = {0}; // GLPK uses 1-based indexing, so 0 is added as a placeholder
-                            vector<int> ja(n + 2); // Indices of the P vector elements
-                            vector<double> ar(n + 2); // Coefficients for the P vector elements in the constraint
-                            for (size_t i = 1; i <= n; ++i) {
-                                ja[i] = i;
-                                ar[i] = 1.0; // Coefficient 1 for the corresponding P element
-                            }
-                            ja[n+1] = n+1;
-                            ar[n+1] = 1.0;
-                            glp_set_mat_row(lp, 1, n+1, &ja[0], &ar[0]);
-                            
-                            // Use the simplex method to solve the LP problem
-                            glp_simplex(lp, nullptr);
-                            
-                            // Retrieve the optimal objective value and P vector values
-                            
-                            cdfAccessor0[index] = 0;
-                            cdfAccessor1[index] = 0;
-                            
-                            for (size_t i = 1; i <= n; ++i) {
-                                cdfAccessor0[index] += glp_get_col_prim(lp, i)*second0(i-1);
-                                cdfAccessor1[index] += glp_get_col_prim(lp, i)*second1(i-1);
-                            }
-                            cdfAccessor0[index] += glp_get_col_prim(lp,n+1);
-                            cdfAccessor1[index] += glp_get_col_prim(lp,n+1);
-                            // Clean up GLPK data structures
-                            glp_delete_prob(lp);
-                        });
-                    });
-                }
-                queue.wait_and_throw();
-                if((approx_equal(secondnew1, second1, "absdiff", 1e-8)) and ((approx_equal(secondnew0, second0, "absdiff", 1e-8)))){
-                    cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is a safe solution, try running the finite Horizon solution using this number of steps." << endl;
-                    break;
-                }
-                second0 = secondnew0;
-                second1 = secondnew1;
-            }else{ // for IMDP lower bound (opposite to first)
-                sycl::queue queue;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<double> cdfBuffer0(secondnew0.memptr(),secondnew0.n_rows);
-                    sycl::buffer<double> cdfBuffer1(secondnew1.memptr(),secondnew1.n_rows);
-                    
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                    queue.submit([&](sycl::handler& cgh) {
-                        auto cdfAccessor0 = cdfBuffer0.get_access<sycl::access::mode::discard_write>(cgh);
-                        auto cdfAccessor1 = cdfBuffer1.get_access<sycl::access::mode::discard_write>(cgh);
-                        
-                        cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size), [=](sycl::item<1> item) {
-                            size_t index = item.get_id(0);
-                            
-                            glp_term_out(GLP_OFF);
+
                             glp_prob *lp;
                             lp = glp_create_prob();
                             glp_set_prob_name(lp, "SimpleLP");
                             glp_set_obj_dir(lp, GLP_MAX);
-                            // Add columns (variables) to the problem for the P vector
-                            size_t n = minTransitionM.row(index).n_cols; // Number of elements in P vector
-                            glp_add_cols(lp, n+1);
+
+                            size_t n = minTransitionM.row(index).n_cols;
+                            size_t num_extra_cols = is_reach ? 2 : 1;
+                            glp_add_cols(lp, n + num_extra_cols);
+
                             for (size_t i = 1; i <= n; ++i) {
                                 glp_set_col_name(lp, i, ("P_" + to_string(i)).c_str());
                                 if(minTransitionM.row(index)(i - 1) == maxTransitionM.row(index)(i - 1)){
@@ -4681,200 +9752,120 @@ void IMDP::infiniteHorizonSafeController(bool IMDP_lower) {
                                 }else{
                                     glp_set_col_bnds(lp, i, GLP_DB, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
                                 }
-                                glp_set_obj_coef(lp, i, second1(i-1)); // Set objective coefficients from V vector
+                                glp_set_obj_coef(lp, i, first(i-1));
                             }
-                            glp_set_col_name(lp, n+1, "A");
-                            if(minAvoidM(index) == maxAvoidM(index)){
-                                glp_set_col_bnds(lp, n+1, GLP_FX, minAvoidM(index), maxAvoidM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+1, GLP_DB, minAvoidM(index), maxAvoidM(index));
+
+                            if (is_reach) {
+                                glp_set_col_name(lp, n+1, "T");
+                                if(minTargetM(index) == maxTargetM(index)){
+                                    glp_set_col_bnds(lp, n+1, GLP_FX, minTargetM(index), maxTargetM(index));
+                                }else{
+                                    glp_set_col_bnds(lp, n+1, GLP_DB, minTargetM(index), maxTargetM(index));
+                                }
+                                glp_set_obj_coef(lp, n+1, 1.0);
+
+                                glp_set_col_name(lp, n+2, "A");
+                                if(minAvoidM(index) == maxAvoidM(index)){
+                                    glp_set_col_bnds(lp, n+2, GLP_FX, minAvoidM(index), maxAvoidM(index));
+                                }else{
+                                    glp_set_col_bnds(lp, n+2, GLP_DB, minAvoidM(index), maxAvoidM(index));
+                                }
+                                glp_set_obj_coef(lp, n+2, 0.0);
+                            } else {
+                                glp_set_col_name(lp, n+1, "A");
+                                if(minAvoidM(index) == maxAvoidM(index)){
+                                    glp_set_col_bnds(lp, n+1, GLP_FX, minAvoidM(index), maxAvoidM(index));
+                                }else{
+                                    glp_set_col_bnds(lp, n+1, GLP_DB, minAvoidM(index), maxAvoidM(index));
+                                }
+                                glp_set_obj_coef(lp, n+1, 0.0);
                             }
-                            glp_set_obj_coef(lp, n+1, 1.0); //
-                            
-                            // Add a constraint for the sum of elements in P = 1
+
                             glp_add_rows(lp, 1);
                             glp_set_row_name(lp, 1, "Constraint");
-                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0); // Sum of P elements = 1
-                            vector<int> ia = {0}; // GLPK uses 1-based indexing, so 0 is added as a placeholder
-                            vector<int> ja(n + 2); // Indices of the P vector elements
-                            vector<double> ar(n + 2); // Coefficients for the P vector elements in the constraint
+                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0);
+                            vector<int> ia = {0};
+                            vector<int> ja(n + num_extra_cols + 1);
+                            vector<double> ar(n + num_extra_cols + 1);
                             for (size_t i = 1; i <= n; ++i) {
                                 ja[i] = i;
-                                ar[i] = 1.0; // Coefficient 1 for the corresponding P element
+                                ar[i] = 1.0;
                             }
                             ja[n+1] = n+1;
                             ar[n+1] = 1.0;
-                            //glp_set_matrix(lp, n, ia, ja, ar);
-                            glp_set_mat_row(lp, 1, n+1, &ja[0], &ar[0]);
-                            
-                            // Use the simplex method to solve the LP problem
-                            glp_simplex(lp, nullptr);
-                            
-                            // Retrieve the optimal objective value and P vector values
-                            
-                            cdfAccessor0[index] = 0;
-                            cdfAccessor1[index] = 0;
-                            
-                            for (size_t i = 1; i <= n; ++i) {
-                                cdfAccessor0[index] += glp_get_col_prim(lp, i)*second0(i-1);
-                                cdfAccessor1[index] += glp_get_col_prim(lp, i)*second1(i-1);
+                            if (is_reach) {
+                                ja[n+2] = n+2;
+                                ar[n+2] = 1.0;
                             }
-                            cdfAccessor0[index] += glp_get_col_prim(lp,n+1);
-                            cdfAccessor1[index] += glp_get_col_prim(lp,n+1);
-                            // Clean up GLPK data structures
+                            glp_set_mat_row(lp, 1, n + num_extra_cols, &ja[0], &ar[0]);
+
+                            glp_simplex(lp, nullptr);
+                            cdfAccessor[index] = 0;
+
+                            for (size_t i = 1; i <= n; ++i) {
+                                cdfAccessor[index] += glp_get_col_prim(lp, i)*first(i-1);
+                            }
+                            if (is_reach) {
+                                cdfAccessor[index] += glp_get_col_prim(lp, n+1);
+                            }
                             glp_delete_prob(lp);
                         });
                     });
                 }
                 queue.wait_and_throw();
-                if((approx_equal(secondnew1, second1, "absdiff", 1e-8)) and ((approx_equal(secondnew0, second0, "absdiff", 1e-8)))){
-                    cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is a safe solution, try running the finite Horizon solution using this number of steps." << endl;
-                    break;
-                }
-                second0 = secondnew0;
-                second1 = secondnew1;
+                first = firstnew;
             }
-            max_diff = max(abs(second1-second0));
-            min_diff = min(abs(second1-second0));
+            k++;
         }
         cout << endl;
-        
+
         if (IMDP_lower){
-            cout << "Upper bound found." << endl;
-        }else{
             cout << "Lower bound found." << endl;
+        }else{
+            cout << "Upper bound found." << endl;
         }
+
         controller.set_size(state_space_size, dim_x + 2);
         controller.cols(0,dim_x-1) = state_space;
-        controller.col(dim_x) = ones(state_space_size)-first0;
-        controller.col(dim_x + 1) = ones(state_space_size)-second0;
-        
+        controller.col(dim_x) = first;
+
     }else if(input_space_size == 0){
-        vec first0(state_space_size, 1, fill::zeros);
-        mat firstnew0(state_space_size*disturb_space_size, 1, fill::zeros);
-        vec first1(state_space_size, 1, fill::ones);
-        mat firstnew1(state_space_size*disturb_space_size, 1, fill::zeros);
-        vec temp0(state_space_size*disturb_space_size, 1, fill::zeros);
-        vec temp1(state_space_size*disturb_space_size, 1, fill::zeros);
-        //reduce matrix by choosing minimal probability from disturbances at each state
-        
-        double min_diff = 1.0;
-        double max_diff = 1.0;
-        size_t converge = 0;
+        // Disturbance only case - verification with disturbance
+        vec first(state_space_size);
+        mat firstnew(state_space_size*disturb_space_size, 1);
+        if (is_reach) {
+            first.fill(0.0);
+            firstnew.fill(0.0);
+        } else {
+            first.fill(1.0);
+            firstnew.fill(1.0);
+        }
+
+        size_t k = 0;
         cout << "first loop iterations: " << endl;
-        while (max_diff > epsilon) {
-            cout << "Max: " << max_diff << " Min: " << min_diff << endl;
-            if (IMDP_lower == true){ // for IMDP lower bound
-                
+        while (k < timeHorizon) {
+            cout << "." << flush;
+            if (IMDP_lower == true){
                 sycl::queue queue;
                 {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<double> cdfBuffer0(firstnew0.memptr(),firstnew0.n_rows);
-                    sycl::buffer<double> cdfBuffer1(firstnew1.memptr(),firstnew1.n_rows);
-                    
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                    sycl::buffer<double> cdfBuffer(firstnew.memptr(),firstnew.n_rows);
+
                     queue.submit([&](sycl::handler& cgh) {
-                        auto cdfAccessor0 = cdfBuffer0.get_access<sycl::access::mode::discard_write>(cgh);
-                        auto cdfAccessor1 = cdfBuffer1.get_access<sycl::access::mode::discard_write>(cgh);
-                        
-                        cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size*disturb_space_size), [=](sycl::item<1> item) {
-                            size_t index = item.get_id(0);
-                            
-                            glp_term_out(GLP_OFF);
-                            glp_prob *lp;
-                            lp = glp_create_prob();
-                            glp_set_prob_name(lp, "SimpleLP");
-                            glp_set_obj_dir(lp, GLP_MAX);
-                            // Add columns (variables) to the problem for the P vector
-                            size_t n = minTransitionM.row(index).n_cols; // Number of elements in P vector
-                            glp_add_cols(lp, n+1);
-                            for (size_t i = 1; i <= n; ++i) {
-                                glp_set_col_name(lp, i, ("P_" + to_string(i)).c_str());
-                                if(minTransitionM.row(index)(i - 1) == maxTransitionM.row(index)(i - 1)){
-                                    glp_set_col_bnds(lp, i, GLP_FX, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
-                                }else{
-                                    glp_set_col_bnds(lp, i, GLP_DB, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
-                                }
-                                glp_set_obj_coef(lp, i, first1(i-1)); // Set objective coefficients from V vector
-                            }
-                            glp_set_col_name(lp, n+1, "A");
-                            if(minAvoidM(index) == maxAvoidM(index)){
-                                glp_set_col_bnds(lp, n+1, GLP_FX, minAvoidM(index), maxAvoidM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+1, GLP_DB, minAvoidM(index), maxAvoidM(index));
-                            }
-                            glp_set_obj_coef(lp, n+1, 1.0);
-                            
-                            // Add a constraint for the sum of elements in P = 1
-                            glp_add_rows(lp, 1);
-                            glp_set_row_name(lp, 1, "Constraint");
-                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0); // Sum of P elements = 1
-                            vector<int> ia = {0}; // GLPK uses 1-based indexing, so 0 is added as a placeholder
-                            vector<int> ja(n + 2); // Indices of the P vector elements
-                            vector<double> ar(n + 2); // Coefficients for the P vector elements in the constraint
-                            for (size_t i = 1; i <= n; ++i) {
-                                ja[i] = i;
-                                ar[i] = 1.0; // Coefficient 1 for the corresponding P element
-                            }
-                            ja[n+1] = n+1;
-                            ar[n+1] = 1.0;
-                            glp_set_mat_row(lp, 1, n+1, &ja[0], &ar[0]);
-                            
-                            // Use the simplex method to solve the LP problem
-                            glp_simplex(lp, nullptr);
-                            
-                            // Retrieve the optimal objective value and P vector values
-                            cdfAccessor0[index] = 0;
-                            cdfAccessor1[index] = 0;
-                            
-                            for (size_t i = 1; i <= n; ++i) {
-                                cdfAccessor0[index] += glp_get_col_prim(lp, i)*first0(i-1);
-                                cdfAccessor1[index] += glp_get_col_prim(lp, i)*first1(i-1);
-                            }
-                            cdfAccessor0[index] += glp_get_col_prim(lp,n+1);
-                            cdfAccessor1[index] += glp_get_col_prim(lp,n+1);
-                            // Clean up GLPK data structures
-                            glp_delete_prob(lp);
-                        });
-                    });
-                }
-                queue.wait_and_throw();
-                
-                /*Resize to minimise over disturbance - worst case scenario*/
-                firstnew0.reshape(state_space_size, disturb_space_size);
-                firstnew1.reshape(state_space_size, disturb_space_size);
-                vec check0 = conv_to< colvec >::from(max(firstnew0,1));
-                vec check1 = conv_to< colvec >::from(max(firstnew1,1));
-                if((approx_equal(first1, check1, "absdiff", 1e-8)) and ((approx_equal(first0, check0, "absdiff", 1e-8)))){
-                    cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is a safe solution, try running the finite Horizon solution using this number of steps." << endl;
-                    break;
-                }
-                first0 = check0;
-                first1 = check1;
-                
-            }else{ // for IMDP upper bound
-                sycl::queue queue;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<double> cdfBuffer0(firstnew0.memptr(),firstnew0.n_rows);
-                    sycl::buffer<double> cdfBuffer1(firstnew1.memptr(),firstnew1.n_rows);
-                    
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                    queue.submit([&](sycl::handler& cgh) {
-                        auto cdfAccessor0 = cdfBuffer0.get_access<sycl::access::mode::discard_write>(cgh);
-                        auto cdfAccessor1 = cdfBuffer1.get_access<sycl::access::mode::discard_write>(cgh);
-                        
+                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+
                         cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size*disturb_space_size), [=](sycl::item<1> item) {
                             size_t index = item.get_id(0);
                             glp_term_out(GLP_OFF);
-                            
+
                             glp_prob *lp;
                             lp = glp_create_prob();
                             glp_set_prob_name(lp, "SimpleLP");
                             glp_set_obj_dir(lp, GLP_MIN);
-                            // Add columns (variables) to the problem for the P vector
-                            size_t n = minTransitionM.row(index).n_cols; // Number of elements in P vector
-                            glp_add_cols(lp, n+1);
+
+                            size_t n = minTransitionM.row(index).n_cols;
+                            size_t num_extra_cols = is_reach ? 2 : 1;
+                            glp_add_cols(lp, n + num_extra_cols);
+
                             for (size_t i = 1; i <= n; ++i) {
                                 glp_set_col_name(lp, i, ("P_" + to_string(i)).c_str());
                                 if(minTransitionM.row(index)(i - 1) == maxTransitionM.row(index)(i - 1)){
@@ -4882,199 +9873,93 @@ void IMDP::infiniteHorizonSafeController(bool IMDP_lower) {
                                 }else{
                                     glp_set_col_bnds(lp, i, GLP_DB, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
                                 }
-                                glp_set_obj_coef(lp, i, first1(i-1)); // Set objective coefficients as 1.0, multiply by V later
+                                glp_set_obj_coef(lp, i, first(i-1));
                             }
-                            glp_set_col_name(lp, n+1, "A");
-                            if(minAvoidM(index) == maxAvoidM(index)){
-                                glp_set_col_bnds(lp, n+1, GLP_FX, minAvoidM(index), maxAvoidM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+1, GLP_DB, minAvoidM(index), maxAvoidM(index));
-                            }
-                            glp_set_obj_coef(lp, n+1, 1.0); // Set objective coefficients from V vector
-                            
-                            // Add a constraint for the sum of elements in P = 1
-                            glp_add_rows(lp, 1);
-                            glp_set_row_name(lp, 1, "Constraint");
-                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0); // Sum of P elements = 1
-                            vector<int> ia = {0}; // GLPK uses 1-based indexing, so 0 is added as a placeholder
-                            vector<int> ja(n + 2); // Indices of the P vector elements
-                            vector<double> ar(n + 2); // Coefficients for the P vector elements in the constraint
-                            for (size_t i = 1; i <= n; ++i) {
-                                ja[i] = i;
-                                ar[i] = 1.0; // Coefficient 1 for the corresponding P element
-                            }
-                            ja[n+1] = n+1;
-                            ar[n+1] = 1.0;
-                            glp_set_mat_row(lp, 1, n+1, &ja[0], &ar[0]);
-                            
-                            // Use the simplex method to solve the LP problem
-                            glp_simplex(lp, nullptr);
-                            
-                            // Retrieve the optimal objective value and P vector values
-                            
-                            cdfAccessor0[index] = 0;
-                            cdfAccessor1[index] = 0;
-                            
-                            for (size_t i = 1; i <= n; ++i) {
-                                cdfAccessor0[index] += glp_get_col_prim(lp, i)*first0(i-1);
-                                cdfAccessor1[index] += glp_get_col_prim(lp, i)*first1(i-1);
-                            }
-                            cdfAccessor0[index] += glp_get_col_prim(lp,n+1);
-                            cdfAccessor1[index] += glp_get_col_prim(lp,n+1);
-                            // Clean up GLPK data structures
-                            glp_delete_prob(lp);
-                        });
-                    });
-                }
-                queue.wait_and_throw();
-                /*Resize to minimise over disturbance - worst case scenario*/
-                firstnew0.reshape(state_space_size, disturb_space_size);
-                firstnew1.reshape(state_space_size, disturb_space_size);
-                vec check0 = conv_to< colvec >::from(max(firstnew0,1));
-                vec check1 = conv_to< colvec >::from(max(firstnew1,1));
-                if((approx_equal(first1, check1, "absdiff", 1e-8)) and ((approx_equal(first0, check0, "absdiff", 1e-8)))){
-                    cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is a safe solution, try running the finite Horizon solution using this number of steps." << endl;
-                    break;
-                }
-                first0 = check0;
-                first1 = check1;
-            }
-            max_diff = max(abs(first1-first0));
-            min_diff = min(abs(first1-first0));
-        }
-        cout << endl;
-        
-        if (IMDP_lower){
-            cout << "verification lower bound found, finding upper bound." << endl;
-        }else{
-            cout << "verification upper bound found, finding lower bound." << endl;
-        }
-        
-        vec second0(state_space_size, 1, fill::zeros);
-        mat secondnew0(state_space_size*disturb_space_size, 1, fill::zeros);
-        vec second1(state_space_size, 1, fill::ones);
-        mat secondnew1(state_space_size*disturb_space_size, 1, fill::zeros);
-        
-        min_diff = 1.0;
-        max_diff = 1.0;
-        converge = 0;
-        cout << "second loop iterations: " << endl;
-        
-        while (max_diff > epsilon) {
-            converge++;
-            //cout << "." << flush;
-            cout << "Max: " << max_diff << " Min: " << min_diff << endl;
-            if (IMDP_lower == true){ // for IMDP upper bound (opposite to before)
-                sycl::queue queue;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<double> cdfBuffer0(secondnew0.memptr(),secondnew0.n_rows);
-                    sycl::buffer<double> cdfBuffer1(secondnew1.memptr(),secondnew1.n_rows);
-                    
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                    queue.submit([&](sycl::handler& cgh) {
-                        auto cdfAccessor0 = cdfBuffer0.get_access<sycl::access::mode::discard_write>(cgh);
-                        auto cdfAccessor1 = cdfBuffer1.get_access<sycl::access::mode::discard_write>(cgh);
-                        
-                        cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size*disturb_space_size), [=](sycl::item<1> item) {
-                            size_t index = item.get_id(0);
-                            
-                            glp_term_out(GLP_OFF);
-                            
-                            glp_prob *lp;
-                            lp = glp_create_prob();
-                            glp_set_prob_name(lp, "SimpleLP");
-                            glp_set_obj_dir(lp, GLP_MIN);
-                            // Add columns (variables) to the problem for the P vector
-                            size_t n = minTransitionM.row(index).n_cols; // Number of elements in P vector
-                            glp_add_cols(lp, n+1);
-                            for (size_t i = 1; i <= n; ++i) {
-                                glp_set_col_name(lp, i, ("P_" + to_string(i)).c_str());
-                                if(minTransitionM.row(index)(i - 1) == maxTransitionM.row(index)(i - 1)){
-                                    glp_set_col_bnds(lp, i, GLP_FX, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
+
+                            if (is_reach) {
+                                glp_set_col_name(lp, n+1, "T");
+                                if(minTargetM(index) == maxTargetM(index)){
+                                    glp_set_col_bnds(lp, n+1, GLP_FX, minTargetM(index), maxTargetM(index));
                                 }else{
-                                    glp_set_col_bnds(lp, i, GLP_DB, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
+                                    glp_set_col_bnds(lp, n+1, GLP_DB, minTargetM(index), maxTargetM(index));
                                 }
-                                glp_set_obj_coef(lp, i, second1(i-1)); // Set objective coefficients from V vector
+                                glp_set_obj_coef(lp, n+1, 1.0);
+
+                                glp_set_col_name(lp, n+2, "A");
+                                if(minAvoidM(index) == maxAvoidM(index)){
+                                    glp_set_col_bnds(lp, n+2, GLP_FX, minAvoidM(index), maxAvoidM(index));
+                                }else{
+                                    glp_set_col_bnds(lp, n+2, GLP_DB, minAvoidM(index), maxAvoidM(index));
+                                }
+                                glp_set_obj_coef(lp, n+2, 0.0);
+                            } else {
+                                glp_set_col_name(lp, n+1, "A");
+                                if(minAvoidM(index) == maxAvoidM(index)){
+                                    glp_set_col_bnds(lp, n+1, GLP_FX, minAvoidM(index), maxAvoidM(index));
+                                }else{
+                                    glp_set_col_bnds(lp, n+1, GLP_DB, minAvoidM(index), maxAvoidM(index));
+                                }
+                                glp_set_obj_coef(lp, n+1, 0.0);
                             }
-                            glp_set_col_name(lp, n+1, "A");
-                            if(minAvoidM(index) == maxAvoidM(index)){
-                                glp_set_col_bnds(lp, n+1, GLP_FX, minAvoidM(index), maxAvoidM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+1, GLP_DB, minAvoidM(index), maxAvoidM(index));
-                            }
-                            glp_set_obj_coef(lp, n+1, 1.0);
-                            
-                            // Add a constraint for the sum of elements in P = 1
+
                             glp_add_rows(lp, 1);
                             glp_set_row_name(lp, 1, "Constraint");
-                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0); // Sum of P elements = 1
-                            vector<int> ia = {0}; // GLPK uses 1-based indexing, so 0 is added as a placeholder
-                            vector<int> ja(n + 2); // Indices of the P vector elements
-                            vector<double> ar(n + 2); // Coefficients for the P vector elements in the constraint
+                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0);
+                            vector<int> ia = {0};
+                            vector<int> ja(n + num_extra_cols + 1);
+                            vector<double> ar(n + num_extra_cols + 1);
                             for (size_t i = 1; i <= n; ++i) {
                                 ja[i] = i;
-                                ar[i] = 1.0; // Coefficient 1 for the corresponding P element
+                                ar[i] = 1.0;
                             }
                             ja[n+1] = n+1;
                             ar[n+1] = 1.0;
-                            glp_set_mat_row(lp, 1, n+1, &ja[0], &ar[0]);
-                            
-                            // Use the simplex method to solve the LP problem
-                            glp_simplex(lp, nullptr);
-                            
-                            // Retrieve the optimal objective value and P vector values
-                            
-                            cdfAccessor0[index] = 0;
-                            cdfAccessor1[index] = 0;
-                            
-                            for (size_t i = 1; i <= n; ++i) {
-                                cdfAccessor0[index] += glp_get_col_prim(lp, i)*second0(i-1);
-                                cdfAccessor1[index] += glp_get_col_prim(lp, i)*second1(i-1);
+                            if (is_reach) {
+                                ja[n+2] = n+2;
+                                ar[n+2] = 1.0;
                             }
-                            cdfAccessor0[index] += glp_get_col_prim(lp,n+1);
-                            cdfAccessor1[index] += glp_get_col_prim(lp,n+1);
-                            // Clean up GLPK data structures
+                            glp_set_mat_row(lp, 1, n + num_extra_cols, &ja[0], &ar[0]);
+
+                            glp_simplex(lp, nullptr);
+                            cdfAccessor[index] = 0;
+
+                            for (size_t i = 1; i <= n; ++i) {
+                                cdfAccessor[index] += glp_get_col_prim(lp, i)*first(i-1);
+                            }
+                            if (is_reach) {
+                                cdfAccessor[index] += glp_get_col_prim(lp, n+1);
+                            }
                             glp_delete_prob(lp);
                         });
                     });
                 }
                 queue.wait_and_throw();
-                /*Resize to minimise over disturbance - worst case scenario*/
-                secondnew0.reshape(state_space_size, disturb_space_size);
-                secondnew1.reshape(state_space_size, disturb_space_size);
-                vec check0 = conv_to< colvec >::from(max(secondnew0,1));
-                vec check1 = conv_to< colvec >::from(max(secondnew1,1));
-                if((approx_equal(second1, check1, "absdiff", 1e-8)) and ((approx_equal(second0, check0, "absdiff", 1e-8)))){
-                    cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is a safe solution, try running the finite Horizon solution using this number of steps." << endl;
-                    break;
-                }
-                second0 = check0;
-                second1 = check1;
-                
-            }else{ // for IMDP lower bound (opposite to first)
+
+                // Resize and reduce over disturbances - worst case
+                firstnew.reshape(state_space_size, disturb_space_size);
+                first = conv_to<colvec>::from(min(firstnew, 1));
+                firstnew.reshape(state_space_size*disturb_space_size, 1);
+            }else{
                 sycl::queue queue;
                 {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<double> cdfBuffer0(secondnew0.memptr(),secondnew0.n_rows);
-                    sycl::buffer<double> cdfBuffer1(secondnew1.memptr(),secondnew1.n_rows);
-                    
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                    sycl::buffer<double> cdfBuffer(firstnew.memptr(),firstnew.n_rows);
+
                     queue.submit([&](sycl::handler& cgh) {
-                        auto cdfAccessor0 = cdfBuffer0.get_access<sycl::access::mode::discard_write>(cgh);
-                        auto cdfAccessor1 = cdfBuffer1.get_access<sycl::access::mode::discard_write>(cgh);
-                        
+                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+
                         cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size*disturb_space_size), [=](sycl::item<1> item) {
                             size_t index = item.get_id(0);
                             glp_term_out(GLP_OFF);
-                            
+
                             glp_prob *lp;
                             lp = glp_create_prob();
                             glp_set_prob_name(lp, "SimpleLP");
                             glp_set_obj_dir(lp, GLP_MAX);
-                            // Add columns (variables) to the problem for the P vector
-                            size_t n = minTransitionM.row(index).n_cols; // Number of elements in P vector
-                            glp_add_cols(lp, n+1);
+
+                            size_t n = minTransitionM.row(index).n_cols;
+                            size_t num_extra_cols = is_reach ? 2 : 1;
+                            glp_add_cols(lp, n + num_extra_cols);
+
                             for (size_t i = 1; i <= n; ++i) {
                                 glp_set_col_name(lp, i, ("P_" + to_string(i)).c_str());
                                 if(minTransitionM.row(index)(i - 1) == maxTransitionM.row(index)(i - 1)){
@@ -5082,225 +9967,131 @@ void IMDP::infiniteHorizonSafeController(bool IMDP_lower) {
                                 }else{
                                     glp_set_col_bnds(lp, i, GLP_DB, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
                                 }
-                                glp_set_obj_coef(lp, i, second1(i-1)); // Set objective coefficients as 1.0, multiply by V later
+                                glp_set_obj_coef(lp, i, first(i-1));
                             }
-                            glp_set_col_name(lp, n+1, "A");
-                            if(minAvoidM(index) == maxAvoidM(index)){
-                                glp_set_col_bnds(lp, n+1, GLP_FX, minAvoidM(index), maxAvoidM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+1, GLP_DB, minAvoidM(index), maxAvoidM(index));
+
+                            if (is_reach) {
+                                glp_set_col_name(lp, n+1, "T");
+                                if(minTargetM(index) == maxTargetM(index)){
+                                    glp_set_col_bnds(lp, n+1, GLP_FX, minTargetM(index), maxTargetM(index));
+                                }else{
+                                    glp_set_col_bnds(lp, n+1, GLP_DB, minTargetM(index), maxTargetM(index));
+                                }
+                                glp_set_obj_coef(lp, n+1, 1.0);
+
+                                glp_set_col_name(lp, n+2, "A");
+                                if(minAvoidM(index) == maxAvoidM(index)){
+                                    glp_set_col_bnds(lp, n+2, GLP_FX, minAvoidM(index), maxAvoidM(index));
+                                }else{
+                                    glp_set_col_bnds(lp, n+2, GLP_DB, minAvoidM(index), maxAvoidM(index));
+                                }
+                                glp_set_obj_coef(lp, n+2, 0.0);
+                            } else {
+                                glp_set_col_name(lp, n+1, "A");
+                                if(minAvoidM(index) == maxAvoidM(index)){
+                                    glp_set_col_bnds(lp, n+1, GLP_FX, minAvoidM(index), maxAvoidM(index));
+                                }else{
+                                    glp_set_col_bnds(lp, n+1, GLP_DB, minAvoidM(index), maxAvoidM(index));
+                                }
+                                glp_set_obj_coef(lp, n+1, 0.0);
                             }
-                            glp_set_obj_coef(lp, n+1, 1.0); // Set objective coefficients from V vector
-                            
-                            // Add a constraint for the sum of elements in P = 1
+
                             glp_add_rows(lp, 1);
                             glp_set_row_name(lp, 1, "Constraint");
-                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0); // Sum of P elements = 1
-                            vector<int> ia = {0}; // GLPK uses 1-based indexing, so 0 is added as a placeholder
-                            vector<int> ja(n + 2); // Indices of the P vector elements
-                            vector<double> ar(n + 2); // Coefficients for the P vector elements in the constraint
+                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0);
+                            vector<int> ia = {0};
+                            vector<int> ja(n + num_extra_cols + 1);
+                            vector<double> ar(n + num_extra_cols + 1);
                             for (size_t i = 1; i <= n; ++i) {
                                 ja[i] = i;
-                                ar[i] = 1.0; // Coefficient 1 for the corresponding P element
+                                ar[i] = 1.0;
                             }
                             ja[n+1] = n+1;
                             ar[n+1] = 1.0;
-                            glp_set_mat_row(lp, 1, n+1, &ja[0], &ar[0]);
-                            
-                            // Use the simplex method to solve the LP problem
-                            glp_simplex(lp, nullptr);
-                            
-                            // Retrieve the optimal objective value and P vector values
-                            
-                            cdfAccessor0[index] = 0;
-                            cdfAccessor1[index] = 0;
-                            
-                            for (size_t i = 1; i <= n; ++i) {
-                                cdfAccessor0[index] += glp_get_col_prim(lp, i)*second0(i-1);
-                                cdfAccessor1[index] += glp_get_col_prim(lp, i)*second1(i-1);
+                            if (is_reach) {
+                                ja[n+2] = n+2;
+                                ar[n+2] = 1.0;
                             }
-                            cdfAccessor0[index] += glp_get_col_prim(lp,n+1);
-                            cdfAccessor1[index] += glp_get_col_prim(lp,n+1);
-                            // Clean up GLPK data structures
+                            glp_set_mat_row(lp, 1, n + num_extra_cols, &ja[0], &ar[0]);
+
+                            glp_simplex(lp, nullptr);
+                            cdfAccessor[index] = 0;
+
+                            for (size_t i = 1; i <= n; ++i) {
+                                cdfAccessor[index] += glp_get_col_prim(lp, i)*first(i-1);
+                            }
+                            if (is_reach) {
+                                cdfAccessor[index] += glp_get_col_prim(lp, n+1);
+                            }
                             glp_delete_prob(lp);
                         });
                     });
                 }
                 queue.wait_and_throw();
-                /*Resize to minimise over disturbance - worst case scenario*/
-                secondnew0.reshape(state_space_size, disturb_space_size);
-                secondnew1.reshape(state_space_size, disturb_space_size);
-                vec check0 = conv_to< colvec >::from(max(secondnew0,1));
-                vec check1 = conv_to< colvec >::from(max(secondnew1,1));
-                if((approx_equal(second1, check1, "absdiff", 1e-8)) and ((approx_equal(second0, check0, "absdiff", 1e-8)))){
-                    cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is a safe solution, try running the finite Horizon solution using this number of steps." << endl;
-                    break;
-                }
-                second0 = check0;
-                second1 = check1;
+
+                firstnew.reshape(state_space_size, disturb_space_size);
+                first = conv_to<colvec>::from(min(firstnew, 1));
+                firstnew.reshape(state_space_size*disturb_space_size, 1);
             }
-            max_diff = max(abs(second1-second0));
-            min_diff = min(abs(second1-second0));
+            k++;
         }
         cout << endl;
-        
+
         if (IMDP_lower){
-            cout << "Upper bound found." << endl;
-        }else{
             cout << "Lower bound found." << endl;
+        }else{
+            cout << "Upper bound found." << endl;
         }
-        
+
         controller.set_size(state_space_size, dim_x + 2);
         controller.cols(0,dim_x-1) = state_space;
-        controller.col(dim_x) = ones(state_space_size) - first0;
-        controller.col(dim_x + 1) = ones(state_space_size) - second0;
-        
-    }else if (disturb_space_size == 0){
-        vec first0(state_space_size, 1, fill::zeros);
-        mat firstnew0(state_space_size*input_space_size, 1, fill::zeros);
-        vec first1(state_space_size, 1, fill::ones);
-        mat firstnew1(state_space_size*input_space_size, 1, fill::zeros);
-        uvec U_pos(state_space_size, 1, fill::zeros);
-        vec temp0(state_space_size*input_space_size, 1, fill::zeros);
-        vec temp1(state_space_size*input_space_size, 1, fill::zeros);
-        
-        double min_diff = 1.0;
-        double max_diff = 1.0;
-        size_t converge = 0;
+        controller.col(dim_x) = first;
+
+    }else{
+        // Input-based synthesis (controller synthesis with inputs)
+        vec first(state_space_size);
+        mat firstnew(state_space_size*input_space_size, 1);
+        uvec U_pos(state_space_size);
+
+        vec second(state_space_size);
+        mat secondnew(state_space_size*input_space_size, 1);
+        if (is_reach) {
+            first.fill(0.0);
+            firstnew.fill(0.0);
+            second.fill(0.0);
+            secondnew.fill(0.0);
+        } else {
+            first.fill(1.0);
+            firstnew.fill(1.0);
+            second.fill(1.0);
+            secondnew.fill(1.0);
+        }
+
+        size_t k = 0;
         cout << "first loop iterations: " << endl;
-        while (max_diff > epsilon) {
-            converge++;
-            cout << "Max: " << max_diff << " Min: " << min_diff << endl;
-            if (IMDP_lower == true){ // for IMDP lower bound
-                
+        while (k < timeHorizon) {
+            cout << "." << flush;
+            if (IMDP_lower == true){
                 sycl::queue queue;
                 {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<double> cdfBuffer0(firstnew0.memptr(),firstnew0.n_rows);
-                    sycl::buffer<double> cdfBuffer1(firstnew1.memptr(),firstnew1.n_rows);
-                    
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                    sycl::buffer<double> cdfBuffer(firstnew.memptr(),firstnew.n_rows);
+
                     queue.submit([&](sycl::handler& cgh) {
-                        auto cdfAccessor0 = cdfBuffer0.get_access<sycl::access::mode::discard_write>(cgh);
-                        auto cdfAccessor1 = cdfBuffer1.get_access<sycl::access::mode::discard_write>(cgh);
-                        
+                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+
                         cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size*input_space_size), [=](sycl::item<1> item) {
                             size_t index = item.get_id(0);
                             glp_term_out(GLP_OFF);
-                            glp_prob *lp;
-                            lp = glp_create_prob();
-                            glp_set_prob_name(lp, "SimpleLP");
-                            glp_set_obj_dir(lp, GLP_MAX);
-                            // Add columns (variables) to the problem for the P vector
-                            size_t n = minTransitionM.row(index).n_cols; // Number of elements in P vector
-                            glp_add_cols(lp, n+1);
-                            for (size_t i = 1; i <= n; ++i) {
-                                glp_set_col_name(lp, i, ("P_" + to_string(i)).c_str());
-                                if(minTransitionM.row(index)(i - 1) == maxTransitionM.row(index)(i - 1)){
-                                    glp_set_col_bnds(lp, i, GLP_FX, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
-                                }else{
-                                    glp_set_col_bnds(lp, i, GLP_DB, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
-                                }
-                                glp_set_obj_coef(lp, i, first1(i-1)); // Set objective coefficients from V vector
-                            }
-                            glp_set_col_name(lp, n+1, "A");
-                            if(minAvoidM(index) == maxAvoidM(index)){
-                                glp_set_col_bnds(lp, n+1, GLP_FX, minAvoidM(index), maxAvoidM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+1, GLP_DB, minAvoidM(index), maxAvoidM(index));
-                            }
-                            glp_set_obj_coef(lp, n+1, 1.0);
-                            
-                            // Add a constraint for the sum of elements in P = 1
-                            glp_add_rows(lp, 1);
-                            glp_set_row_name(lp, 1, "Constraint");
-                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0); // Sum of P elements = 1
-                            vector<int> ia = {0}; // GLPK uses 1-based indexing, so 0 is added as a placeholder
-                            vector<int> ja(n + 2); // Indices of the P vector elements
-                            vector<double> ar(n + 2); // Coefficients for the P vector elements in the constraint
-                            for (size_t i = 1; i <= n; ++i) {
-                                ja[i] = i;
-                                ar[i] = 1.0; // Coefficient 1 for the corresponding P element
-                            }
-                            ja[n+1] = n+1;
-                            ar[n+1] = 1.0;
-                            glp_set_mat_row(lp, 1, n+1, &ja[0], &ar[0]);
-                            
-                            // Use the simplex method to solve the LP problem
-                            glp_simplex(lp, nullptr);
-                            
-                            // Retrieve the optimal objective value and P vector values
-                            
-                            cdfAccessor0[index] = 0;
-                            cdfAccessor1[index] = 0;
-                            
-                            //vector<double> optimal_P(n+1);
-                            for (size_t i = 1; i <= n; ++i) {
-                                cdfAccessor0[index] += glp_get_col_prim(lp, i)*first0(i-1);
-                                cdfAccessor1[index] += glp_get_col_prim(lp, i)*first1(i-1);
-                            }
-                            cdfAccessor0[index] += glp_get_col_prim(lp,n+1);
-                            cdfAccessor1[index] += glp_get_col_prim(lp,n+1);
-                            // Clean up GLPK data structures
-                            glp_delete_prob(lp);
-                        });
-                    });
-                }
-                queue.wait_and_throw();
-                
-                /*Resize to maximise over input*/
-                firstnew0.reshape(state_space_size, input_space_size);
-                firstnew1.reshape(state_space_size, input_space_size);
-                vec check0 = conv_to< colvec >::from(min(firstnew0,1));
-                vec check1 = conv_to< colvec >::from(min(firstnew1,1));
-                if((approx_equal(first1, check1, "absdiff", 1e-8)) and ((approx_equal(first0, check0, "absdiff", 1e-8)))){
-                    cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is a safe solution, try running the finite Horizon solution using this number of steps." << endl;
-                    break;
-                }
-                first0 = check0;
-                first1 = check1;
-                
-                //Choose input to store for controller
-                sycl::queue Q;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<uword> cdfBuffer0(U_pos.memptr(),U_pos.n_rows);
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                    Q.submit([&](sycl::handler& cgh) {
-                        auto cdfAccessor0 = cdfBuffer0.get_access<sycl::access::mode::discard_write>(cgh);
-                        cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size), [=](sycl::item<1> item) {
-                            size_t index = item.get_id(0);
-                            firstnew0.row(index).min(cdfAccessor0[index]);
-                        });
-                    });
-                }
-                Q.wait_and_throw();
-                
-            }else{ // for IMDP upper bound
-                
-                sycl::queue queue;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<double> cdfBuffer0(firstnew0.memptr(),firstnew0.n_rows);
-                    sycl::buffer<double> cdfBuffer1(firstnew1.memptr(),firstnew1.n_rows);
-                    
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                    queue.submit([&](sycl::handler& cgh) {
-                        auto cdfAccessor0 = cdfBuffer0.get_access<sycl::access::mode::discard_write>(cgh);
-                        auto cdfAccessor1 = cdfBuffer1.get_access<sycl::access::mode::discard_write>(cgh);
-                        
-                        cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size*input_space_size), [=](sycl::item<1> item) {
-                            size_t index = item.get_id(0);
-                            
-                            glp_term_out(GLP_OFF);
-                            
+
                             glp_prob *lp;
                             lp = glp_create_prob();
                             glp_set_prob_name(lp, "SimpleLP");
                             glp_set_obj_dir(lp, GLP_MIN);
-                            // Add columns (variables) to the problem for the P vector
-                            size_t n = minTransitionM.row(index).n_cols; // Number of elements in P vector
-                            glp_add_cols(lp, n+1);
+
+                            size_t n = minTransitionM.row(index).n_cols;
+                            size_t num_extra_cols = is_reach ? 2 : 1;
+                            glp_add_cols(lp, n + num_extra_cols);
+
                             for (size_t i = 1; i <= n; ++i) {
                                 glp_set_col_name(lp, i, ("P_" + to_string(i)).c_str());
                                 if(minTransitionM.row(index)(i - 1) == maxTransitionM.row(index)(i - 1)){
@@ -5308,143 +10099,230 @@ void IMDP::infiniteHorizonSafeController(bool IMDP_lower) {
                                 }else{
                                     glp_set_col_bnds(lp, i, GLP_DB, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
                                 }
-                                glp_set_obj_coef(lp, i, first1(i-1)); // Set objective coefficients from V vector
+                                glp_set_obj_coef(lp, i, first(i-1));
                             }
-                            glp_set_col_name(lp, n+1, "A");
-                            if(minAvoidM(index) == maxAvoidM(index)){
-                                glp_set_col_bnds(lp, n+1, GLP_FX, minAvoidM(index), maxAvoidM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+1, GLP_DB, minAvoidM(index), maxAvoidM(index));
+
+                            if (is_reach) {
+                                glp_set_col_name(lp, n+1, "T");
+                                if(minTargetM(index) == maxTargetM(index)){
+                                    glp_set_col_bnds(lp, n+1, GLP_FX, minTargetM(index), maxTargetM(index));
+                                }else{
+                                    glp_set_col_bnds(lp, n+1, GLP_DB, minTargetM(index), maxTargetM(index));
+                                }
+                                glp_set_obj_coef(lp, n+1, 1.0);
+
+                                glp_set_col_name(lp, n+2, "A");
+                                if(minAvoidM(index) == maxAvoidM(index)){
+                                    glp_set_col_bnds(lp, n+2, GLP_FX, minAvoidM(index), maxAvoidM(index));
+                                }else{
+                                    glp_set_col_bnds(lp, n+2, GLP_DB, minAvoidM(index), maxAvoidM(index));
+                                }
+                                glp_set_obj_coef(lp, n+2, 0.0);
+                            } else {
+                                glp_set_col_name(lp, n+1, "A");
+                                if(minAvoidM(index) == maxAvoidM(index)){
+                                    glp_set_col_bnds(lp, n+1, GLP_FX, minAvoidM(index), maxAvoidM(index));
+                                }else{
+                                    glp_set_col_bnds(lp, n+1, GLP_DB, minAvoidM(index), maxAvoidM(index));
+                                }
+                                glp_set_obj_coef(lp, n+1, 0.0);
                             }
-                            glp_set_obj_coef(lp, n+1, 1.0);
-                            
-                            // Add a constraint for the sum of elements in P = 1
+
                             glp_add_rows(lp, 1);
                             glp_set_row_name(lp, 1, "Constraint");
-                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0); // Sum of P elements = 1
-                            vector<int> ia = {0}; // GLPK uses 1-based indexing, so 0 is added as a placeholder
-                            vector<int> ja(n + 2); // Indices of the P vector elements
-                            vector<double> ar(n + 2); // Coefficients for the P vector elements in the constraint
-                            for (int i = 1; i <= n; ++i) {
+                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0);
+                            vector<int> ia = {0};
+                            vector<int> ja(n + num_extra_cols + 1);
+                            vector<double> ar(n + num_extra_cols + 1);
+                            for (size_t i = 1; i <= n; ++i) {
                                 ja[i] = i;
-                                ar[i] = 1.0; // Coefficient 1 for the corresponding P element
+                                ar[i] = 1.0;
                             }
                             ja[n+1] = n+1;
                             ar[n+1] = 1.0;
-                            glp_set_mat_row(lp, 1, n+1, &ja[0], &ar[0]);
-                            
-                            // Use the simplex method to solve the LP problem
-                            glp_simplex(lp, nullptr);
-                            
-                            // Retrieve the optimal objective value and P vector values
-                            
-                            cdfAccessor0[index] = 0;
-                            cdfAccessor1[index] = 0;
-                            
-                            for (size_t i = 1; i <= n; ++i) {
-                                cdfAccessor0[index] += glp_get_col_prim(lp, i)*first0(i-1);
-                                cdfAccessor1[index] += glp_get_col_prim(lp, i)*first1(i-1);
+                            if (is_reach) {
+                                ja[n+2] = n+2;
+                                ar[n+2] = 1.0;
                             }
-                            cdfAccessor0[index] += glp_get_col_prim(lp,n+1);
-                            cdfAccessor1[index] += glp_get_col_prim(lp,n+1);
-                            // Clean up GLPK data structures
+                            glp_set_mat_row(lp, 1, n + num_extra_cols, &ja[0], &ar[0]);
+
+                            glp_simplex(lp, nullptr);
+                            cdfAccessor[index] = 0;
+
+                            for (size_t i = 1; i <= n; ++i) {
+                                cdfAccessor[index] += glp_get_col_prim(lp, i)*first(i-1);
+                            }
+                            if (is_reach) {
+                                cdfAccessor[index] += glp_get_col_prim(lp, n+1);
+                            }
                             glp_delete_prob(lp);
-                            
                         });
                     });
                 }
                 queue.wait_and_throw();
-                
-                /*Resize to maximise over input*/
-                firstnew0.reshape(state_space_size, input_space_size);
-                firstnew1.reshape(state_space_size, input_space_size);
-                vec check0 = conv_to< colvec >::from(min(firstnew0,1));
-                vec check1 = conv_to< colvec >::from(min(firstnew1,1));
-                if((approx_equal(first1, check1, "absdiff", 1e-8)) and ((approx_equal(first0, check0, "absdiff", 1e-8)))){
-                    cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is a safe solution, try running the finite Horizon solution using this number of steps." << endl;
-                    break;
+
+                // Resize and reduce over inputs
+                firstnew.reshape(state_space_size, input_space_size);
+                if (is_reach) {
+                    first = conv_to<colvec>::from(max(firstnew, 1));
+                    U_pos = index_max(firstnew, 1);
+                } else {
+                    first = conv_to<colvec>::from(min(firstnew, 1));
+                    U_pos = index_min(firstnew, 1);
                 }
-                first0 = check0;
-                first1 = check1;
-                
-                
-                /*Choose input to store for controller*/
-                sycl::queue Q;
+                firstnew.reshape(state_space_size*input_space_size, 1);
+            }else{
+                sycl::queue queue;
                 {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<uword> cdfBuffer0(U_pos.memptr(),U_pos.n_rows);
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                    Q.submit([&](sycl::handler& cgh) {
-                        auto cdfAccessor0 = cdfBuffer0.get_access<sycl::access::mode::discard_write>(cgh);
-                        cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size), [=](sycl::item<1> item) {
+                    sycl::buffer<double> cdfBuffer(firstnew.memptr(),firstnew.n_rows);
+
+                    queue.submit([&](sycl::handler& cgh) {
+                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+
+                        cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size*input_space_size), [=](sycl::item<1> item) {
                             size_t index = item.get_id(0);
-                            firstnew0.row(index).min(cdfAccessor0[index]);
+                            glp_term_out(GLP_OFF);
+
+                            glp_prob *lp;
+                            lp = glp_create_prob();
+                            glp_set_prob_name(lp, "SimpleLP");
+                            glp_set_obj_dir(lp, GLP_MAX);
+
+                            size_t n = minTransitionM.row(index).n_cols;
+                            size_t num_extra_cols = is_reach ? 2 : 1;
+                            glp_add_cols(lp, n + num_extra_cols);
+
+                            for (size_t i = 1; i <= n; ++i) {
+                                glp_set_col_name(lp, i, ("P_" + to_string(i)).c_str());
+                                if(minTransitionM.row(index)(i - 1) == maxTransitionM.row(index)(i - 1)){
+                                    glp_set_col_bnds(lp, i, GLP_FX, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
+                                }else{
+                                    glp_set_col_bnds(lp, i, GLP_DB, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
+                                }
+                                glp_set_obj_coef(lp, i, first(i-1));
+                            }
+
+                            if (is_reach) {
+                                glp_set_col_name(lp, n+1, "T");
+                                if(minTargetM(index) == maxTargetM(index)){
+                                    glp_set_col_bnds(lp, n+1, GLP_FX, minTargetM(index), maxTargetM(index));
+                                }else{
+                                    glp_set_col_bnds(lp, n+1, GLP_DB, minTargetM(index), maxTargetM(index));
+                                }
+                                glp_set_obj_coef(lp, n+1, 1.0);
+
+                                glp_set_col_name(lp, n+2, "A");
+                                if(minAvoidM(index) == maxAvoidM(index)){
+                                    glp_set_col_bnds(lp, n+2, GLP_FX, minAvoidM(index), maxAvoidM(index));
+                                }else{
+                                    glp_set_col_bnds(lp, n+2, GLP_DB, minAvoidM(index), maxAvoidM(index));
+                                }
+                                glp_set_obj_coef(lp, n+2, 0.0);
+                            } else {
+                                glp_set_col_name(lp, n+1, "A");
+                                if(minAvoidM(index) == maxAvoidM(index)){
+                                    glp_set_col_bnds(lp, n+1, GLP_FX, minAvoidM(index), maxAvoidM(index));
+                                }else{
+                                    glp_set_col_bnds(lp, n+1, GLP_DB, minAvoidM(index), maxAvoidM(index));
+                                }
+                                glp_set_obj_coef(lp, n+1, 0.0);
+                            }
+
+                            glp_add_rows(lp, 1);
+                            glp_set_row_name(lp, 1, "Constraint");
+                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0);
+                            vector<int> ia = {0};
+                            vector<int> ja(n + num_extra_cols + 1);
+                            vector<double> ar(n + num_extra_cols + 1);
+                            for (size_t i = 1; i <= n; ++i) {
+                                ja[i] = i;
+                                ar[i] = 1.0;
+                            }
+                            ja[n+1] = n+1;
+                            ar[n+1] = 1.0;
+                            if (is_reach) {
+                                ja[n+2] = n+2;
+                                ar[n+2] = 1.0;
+                            }
+                            glp_set_mat_row(lp, 1, n + num_extra_cols, &ja[0], &ar[0]);
+
+                            glp_simplex(lp, nullptr);
+                            cdfAccessor[index] = 0;
+
+                            for (size_t i = 1; i <= n; ++i) {
+                                cdfAccessor[index] += glp_get_col_prim(lp, i)*first(i-1);
+                            }
+                            if (is_reach) {
+                                cdfAccessor[index] += glp_get_col_prim(lp, n+1);
+                            }
+                            glp_delete_prob(lp);
                         });
                     });
                 }
-                Q.wait_and_throw();
-                
+                queue.wait_and_throw();
+
+                firstnew.reshape(state_space_size, input_space_size);
+                if (is_reach) {
+                    first = conv_to<colvec>::from(max(firstnew, 1));
+                    U_pos = index_max(firstnew, 1);
+                } else {
+                    first = conv_to<colvec>::from(min(firstnew, 1));
+                    U_pos = index_min(firstnew, 1);
+                }
+                firstnew.reshape(state_space_size*input_space_size, 1);
             }
-            max_diff = max(abs(first1-first0));
-            min_diff = min(abs(first1-first0));
+            k++;
         }
-        //cout << endl;
+        cout << endl;
+
         if (IMDP_lower){
             cout << "control policy for lower bound found, finding upper bound." << endl;
         }else{
             cout << "control policy for upper bound found, finding lower bound." << endl;
         }
-        
-        vec second0(state_space_size, 1, fill::zeros);
-        mat secondnew0(state_space_size, 1, fill::zeros);
-        vec second1(state_space_size, 1, fill::ones);
-        mat secondnew1(state_space_size, 1, fill::zeros);
-        min_diff = 1.0;
-        max_diff = 1.0;
-        converge = 0;
-        cout << "second loop iterations: " << endl;
+
+        // Second phase with fixed controller from U_pos
         mat tempTmin(state_space_size, state_space_size, fill::zeros);
         mat tempTmax(state_space_size, state_space_size, fill::zeros);
         vec tempTTmin(state_space_size, 1, fill::zeros);
         vec tempTTmax(state_space_size, 1, fill::zeros);
-        
+        vec tempATmax(state_space_size, 1, fill::zeros);
+        vec tempATmin(state_space_size, 1, fill::zeros);
+
         cout << "Create reduced matrix where input is fixed." << endl;
         for (size_t i = 0; i < state_space_size; i++){
             tempTmin.row(i) = minTransitionM.row(U_pos(i)*state_space_size+i);
             tempTmax.row(i) = maxTransitionM.row(U_pos(i)*state_space_size+i);
-            tempTTmin(i)= minAvoidM(U_pos(i)*state_space_size+i);
-            tempTTmax(i)= maxAvoidM(U_pos(i)*state_space_size+i);
+            tempTTmin(i)= minTargetM(U_pos(i)*state_space_size+i);
+            tempTTmax(i)= maxTargetM(U_pos(i)*state_space_size+i);
+            tempATmin(i) = minAvoidM(U_pos(i)*state_space_size+i);
+            tempATmax(i) = maxAvoidM(U_pos(i)*state_space_size+i);
         }
-        
+
         cout << "Matrix Fixed" << endl;
-        while (max_diff > epsilon) {
-            converge++;
-            cout << "Max: " << max_diff << " Min: " << min_diff << endl;
-            if (IMDP_lower == true){ // for IMDP upper bound (opposite to before)
-                
+        k = 0;
+        while (k < timeHorizon) {
+            cout << "." << flush;
+            if (!IMDP_lower){
                 sycl::queue queue;
                 {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<double> cdfBuffer0(secondnew0.memptr(),secondnew0.n_rows);
-                    sycl::buffer<double> cdfBuffer1(secondnew1.memptr(),secondnew1.n_rows);
-                    
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                    sycl::buffer<double> cdfBuffer(secondnew.memptr(),secondnew.n_rows);
+
                     queue.submit([&](sycl::handler& cgh) {
-                        auto cdfAccessor0 = cdfBuffer0.get_access<sycl::access::mode::discard_write>(cgh);
-                        auto cdfAccessor1 = cdfBuffer1.get_access<sycl::access::mode::discard_write>(cgh);
-                        
+                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+
                         cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size), [=](sycl::item<1> item) {
                             size_t index = item.get_id(0);
-                            
                             glp_term_out(GLP_OFF);
-                            
                             glp_prob *lp;
                             lp = glp_create_prob();
                             glp_set_prob_name(lp, "SimpleLP");
                             glp_set_obj_dir(lp, GLP_MIN);
-                            // Add columns (variables) to the problem for the P vector
-                            size_t n = tempTmin.row(index).n_cols; // Number of elements in P vector
-                            glp_add_cols(lp, n+1);
+
+                            size_t n = tempTmin.row(index).n_cols;
+                            size_t num_extra_cols = is_reach ? 2 : 1;
+                            glp_add_cols(lp, n + num_extra_cols);
+
                             for (size_t i = 1; i <= n; ++i) {
                                 glp_set_col_name(lp, i, ("P_" + to_string(i)).c_str());
                                 if(tempTmin.row(index)(i - 1) == tempTmax.row(index)(i - 1)){
@@ -5452,80 +10330,94 @@ void IMDP::infiniteHorizonSafeController(bool IMDP_lower) {
                                 }else{
                                     glp_set_col_bnds(lp, i, GLP_DB, tempTmin.row(index)(i - 1), tempTmax.row(index)(i - 1));
                                 }
-                                glp_set_obj_coef(lp, i, second1(i-1)); // Set objective coefficients from V vector
+                                glp_set_obj_coef(lp, i, second(i-1));
                             }
-                            glp_set_col_name(lp, n+1, "A");
-                            if(tempTTmin(index) == tempTTmax(index)){
-                                glp_set_col_bnds(lp, n+1, GLP_FX, tempTTmin(index), tempTTmax(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+1, GLP_DB,tempTTmin(index), tempTTmax(index));
+
+                            if (is_reach) {
+                                glp_set_col_name(lp, n+1, "T");
+                                if(tempTTmin(index) == tempTTmax(index)){
+                                    glp_set_col_bnds(lp, n+1, GLP_FX, tempTTmin(index), tempTTmax(index));
+                                }else{
+                                    glp_set_col_bnds(lp, n+1, GLP_DB, tempTTmin(index), tempTTmax(index));
+                                }
+                                glp_set_obj_coef(lp, n+1, 1.0);
+                                glp_set_col_name(lp, n+2, "A");
+                                if(tempATmin(index) == tempATmax(index)){
+                                    glp_set_col_bnds(lp, n+2, GLP_FX, tempATmin(index), tempATmax(index));
+                                }else{
+                                    glp_set_col_bnds(lp, n+2, GLP_DB, tempATmin(index), tempATmax(index));
+                                }
+                                glp_set_obj_coef(lp, n+2, 0.0);
+                            } else {
+                                glp_set_col_name(lp, n+1, "A");
+                                if(tempATmin(index) == tempATmax(index)){
+                                    glp_set_col_bnds(lp, n+1, GLP_FX, tempATmin(index), tempATmax(index));
+                                }else{
+                                    glp_set_col_bnds(lp, n+1, GLP_DB, tempATmin(index), tempATmax(index));
+                                }
+                                glp_set_obj_coef(lp, n+1, 0.0);
                             }
-                            glp_set_obj_coef(lp, n+1, 1.0);
-                            
-                            // Add a constraint for the sum of elements in P = 1
+
                             glp_add_rows(lp, 1);
                             glp_set_row_name(lp, 1, "Constraint");
-                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0); // Sum of P elements = 1
-                            vector<int> ia = {0}; // GLPK uses 1-based indexing, so 0 is added as a placeholder
-                            vector<int> ja(n + 2); // Indices of the P vector elements
-                            vector<double> ar(n + 2); // Coefficients for the P vector elements in the constraint
-                            for (int i = 1; i <= n; ++i) {
+                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0);
+                            vector<int> ia = {0};
+                            vector<int> ja(n + num_extra_cols + 1);
+                            vector<double> ar(n + num_extra_cols + 1);
+                            for (size_t i = 1; i <= n; ++i) {
                                 ja[i] = i;
-                                ar[i] = 1.0; // Coefficient 1 for the corresponding P element
+                                ar[i] = 1.0;
                             }
                             ja[n+1] = n+1;
                             ar[n+1] = 1.0;
-                            glp_set_mat_row(lp, 1, n+1, &ja[0], &ar[0]);
-                            
-                            // Use the simplex method to solve the LP problem
-                            glp_simplex(lp, nullptr);
-                            
-                            // Retrieve the optimal objective value and P vector values
-                            cdfAccessor0[index] = 0;
-                            cdfAccessor1[index] = 0;
-                            for (size_t i = 1; i <= n; ++i) {
-                                cdfAccessor0[index] += glp_get_col_prim(lp, i)*second0(i-1);
-                                cdfAccessor1[index] += glp_get_col_prim(lp, i)*second1(i-1);
+                            if (is_reach) {
+                                ja[n+2] = n+2;
+                                ar[n+2] = 1.0;
                             }
-                            cdfAccessor0[index] += glp_get_col_prim(lp,n+1);
-                            cdfAccessor1[index] += glp_get_col_prim(lp,n+1);
-                            // Clean up GLPK data structures
+                            glp_set_mat_row(lp, 1, n + num_extra_cols, &ja[0], &ar[0]);
+
+                            glp_simplex(lp, nullptr);
+                            cdfAccessor[index] = 0;
+                            for (size_t i = 1; i <= n; ++i) {
+                                cdfAccessor[index] += glp_get_col_prim(lp, i)*second(i-1);
+                            }
+                            if (is_reach) {
+                                cdfAccessor[index] += glp_get_col_prim(lp, n+1);
+                            }
                             glp_delete_prob(lp);
                         });
                     });
                 }
                 queue.wait_and_throw();
-                if((approx_equal(second1, secondnew1, "absdiff", 1e-8)) and ((approx_equal(second0, secondnew0, "absdiff", 1e-8)))){
-                    cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is a safe solution, try running the finite Horizon solution using this number of steps." << endl;
-                    break;
+
+                secondnew.reshape(state_space_size, input_space_size);
+                if (is_reach) {
+                    second = conv_to<colvec>::from(max(secondnew, 1));
+                } else {
+                    second = conv_to<colvec>::from(min(secondnew, 1));
                 }
-                second0 = secondnew0;
-                second1 = secondnew1;
-                
-            }else{ // for IMDP lower bound (opposite to first)
-                
+                secondnew.reshape(state_space_size*input_space_size, 1);
+            }else{
                 sycl::queue queue;
                 {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<double> cdfBuffer0(secondnew0.memptr(),secondnew0.n_rows);
-                    sycl::buffer<double> cdfBuffer1(secondnew1.memptr(),secondnew1.n_rows);
-                    
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                    sycl::buffer<double> cdfBuffer(secondnew.memptr(),secondnew.n_rows);
+
                     queue.submit([&](sycl::handler& cgh) {
-                        auto cdfAccessor0 = cdfBuffer0.get_access<sycl::access::mode::discard_write>(cgh);
-                        auto cdfAccessor1 = cdfBuffer1.get_access<sycl::access::mode::discard_write>(cgh);
-                        
+                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+
                         cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size), [=](sycl::item<1> item) {
                             size_t index = item.get_id(0);
+
                             glp_term_out(GLP_OFF);
-                            
                             glp_prob *lp;
                             lp = glp_create_prob();
                             glp_set_prob_name(lp, "SimpleLP");
                             glp_set_obj_dir(lp, GLP_MAX);
-                            // Add columns (variables) to the problem for the P vector
-                            size_t n = tempTmin.row(index).n_cols; // Number of elements in P vector
-                            glp_add_cols(lp, n+1);
+
+                            size_t n = tempTmin.row(index).n_cols;
+                            size_t num_extra_cols = is_reach ? 2 : 1;
+                            glp_add_cols(lp, n + num_extra_cols);
+
                             for (size_t i = 1; i <= n; ++i) {
                                 glp_set_col_name(lp, i, ("P_" + to_string(i)).c_str());
                                 if(tempTmin.row(index)(i - 1) == tempTmax.row(index)(i - 1)){
@@ -5533,540 +10425,93 @@ void IMDP::infiniteHorizonSafeController(bool IMDP_lower) {
                                 }else{
                                     glp_set_col_bnds(lp, i, GLP_DB, tempTmin.row(index)(i - 1), tempTmax.row(index)(i - 1));
                                 }
-                                glp_set_obj_coef(lp, i, second1(i-1)); // Set objective coefficients from V vector
+                                glp_set_obj_coef(lp, i, second(i-1));
                             }
-                            glp_set_col_name(lp, n+1, "A");
-                            if(tempTTmin(index) == tempTTmax(index)){
-                                glp_set_col_bnds(lp, n+1, GLP_FX, tempTTmin(index), tempTTmax(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+1, GLP_DB,tempTTmin(index), tempTTmax(index));
+
+                            if (is_reach) {
+                                glp_set_col_name(lp, n+1, "T");
+                                if(tempTTmin(index) == tempTTmax(index)){
+                                    glp_set_col_bnds(lp, n+1, GLP_FX, tempTTmin(index), tempTTmax(index));
+                                }else{
+                                    glp_set_col_bnds(lp, n+1, GLP_DB, tempTTmin(index), tempTTmax(index));
+                                }
+                                glp_set_obj_coef(lp, n+1, 1.0);
+                                glp_set_col_name(lp, n+2, "A");
+                                if(tempATmin(index) == tempATmax(index)){
+                                    glp_set_col_bnds(lp, n+2, GLP_FX, tempATmin(index), tempATmax(index));
+                                }else{
+                                    glp_set_col_bnds(lp, n+2, GLP_DB, tempATmin(index), tempATmax(index));
+                                }
+                                glp_set_obj_coef(lp, n+2, 0.0);
+                            } else {
+                                glp_set_col_name(lp, n+1, "A");
+                                if(tempATmin(index) == tempATmax(index)){
+                                    glp_set_col_bnds(lp, n+1, GLP_FX, tempATmin(index), tempATmax(index));
+                                }else{
+                                    glp_set_col_bnds(lp, n+1, GLP_DB, tempATmin(index), tempATmax(index));
+                                }
+                                glp_set_obj_coef(lp, n+1, 0.0);
                             }
-                            glp_set_obj_coef(lp, n+1, 1.0);
-                            
-                            // Add a constraint for the sum of elements in P = 1
+
                             glp_add_rows(lp, 1);
                             glp_set_row_name(lp, 1, "Constraint");
-                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0); // Sum of P elements = 1
-                            vector<int> ia = {0}; // GLPK uses 1-based indexing, so 0 is added as a placeholder
-                            vector<int> ja(n + 2); // Indices of the P vector elements
-                            vector<double> ar(n + 2); // Coefficients for the P vector elements in the constraint
-                            for (int i = 1; i <= n; ++i) {
+                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0);
+                            vector<int> ia = {0};
+                            vector<int> ja(n + num_extra_cols + 1);
+                            vector<double> ar(n + num_extra_cols + 1);
+                            for (size_t i = 1; i <= n; ++i) {
                                 ja[i] = i;
-                                ar[i] = 1.0; // Coefficient 1 for the corresponding P element
+                                ar[i] = 1.0;
                             }
                             ja[n+1] = n+1;
                             ar[n+1] = 1.0;
-                            glp_set_mat_row(lp, 1, n+1, &ja[0], &ar[0]);
-                            
-                            // Use the simplex method to solve the LP problem
-                            glp_simplex(lp, nullptr);
-                            
-                            // Retrieve the optimal objective value and P vector values
-                            cdfAccessor0[index] = 0;
-                            cdfAccessor1[index] = 0;
-                            for (size_t i = 1; i <= n; ++i) {
-                                cdfAccessor0[index] += glp_get_col_prim(lp, i)*second0(i-1);
-                                cdfAccessor1[index] += glp_get_col_prim(lp, i)*second1(i-1);
+                            if (is_reach) {
+                                ja[n+2] = n+2;
+                                ar[n+2] = 1.0;
                             }
-                            cdfAccessor0[index] += glp_get_col_prim(lp,n+1);
-                            cdfAccessor1[index] += glp_get_col_prim(lp,n+1);
-                            // Clean up GLPK data structures
+                            glp_set_mat_row(lp, 1, n + num_extra_cols, &ja[0], &ar[0]);
+
+                            glp_simplex(lp, nullptr);
+                            cdfAccessor[index] = 0;
+                            for (size_t i = 1; i <= n; ++i) {
+                                cdfAccessor[index] += glp_get_col_prim(lp, i)*second(i-1);
+                            }
+                            if (is_reach) {
+                                cdfAccessor[index] += glp_get_col_prim(lp, n+1);
+                            }
                             glp_delete_prob(lp);
                         });
                     });
                 }
                 queue.wait_and_throw();
-                if((approx_equal(second1, secondnew1, "absdiff", 1e-8)) and ((approx_equal(second0, secondnew0, "absdiff", 1e-8)))){
-                    cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is a safe solution, try running the finite Horizon solution using this number of steps." << endl;
-                    break;
+
+                secondnew.reshape(state_space_size, input_space_size);
+                if (is_reach) {
+                    second = conv_to<colvec>::from(max(secondnew, 1));
+                } else {
+                    second = conv_to<colvec>::from(min(secondnew, 1));
                 }
-                second0 = secondnew0;
-                second1 = secondnew1;
+                secondnew.reshape(state_space_size*input_space_size, 1);
             }
-            max_diff = max(abs(second1-second0));
-            min_diff = min(abs(second1-second0));
+            k++;
         }
         cout << endl;
-        
+
         if (IMDP_lower){
             cout << "Upper bound found." << endl;
         }else{
             cout << "Lower bound found." << endl;
         }
-        
+
         controller.set_size(state_space_size, dim_x + dim_u + 2);
         controller.cols(0,dim_x-1) = state_space;
-        controller.col(dim_x+dim_u) = ones(state_space_size) - first1;
-        controller.col(dim_x+dim_u + 1) = ones(state_space_size) - second1;
-        for (size_t i = 0; i < state_space_size; ++i) {
-            controller.row(i).cols(dim_x, dim_x + dim_u - 1) = input_space.row(U_pos(i));
-        }
-    }else{
-        vec first0(state_space_size, 1, fill::zeros);
-        mat firstnew0(state_space_size*input_space_size*disturb_space_size, 1, fill::zeros);
-        vec first1(state_space_size, 1, fill::ones);
-        mat firstnew1(state_space_size*input_space_size*disturb_space_size, 1, fill::zeros);
-        uvec U_pos(state_space_size, 1, fill::zeros);
-        vec temp0(state_space_size*input_space_size*disturb_space_size, 1, fill::zeros);
-        vec temp1(state_space_size*input_space_size*disturb_space_size, 1, fill::zeros);
-        //reduce matrix by choosing minimal probability from disturbances at each state
-        mat input_and_state0(input_space_size*state_space_size, 1, fill::zeros);
-        mat input_and_state1(input_space_size*state_space_size, 1, fill::zeros);
-        
-        double min_diff = 1.0;
-        double max_diff = 1.0;
-        size_t converge = 0;
-        cout << "first loop iterations: " << endl;
-        while (max_diff > epsilon) {
-            converge++;
-            cout << "Max: " << max_diff << " Min: " << min_diff << endl;
-            if (IMDP_lower == true){ // for IMDP lower bound
-                sycl::queue queue;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<double> cdfBuffer0(firstnew0.memptr(),firstnew0.n_rows);
-                    sycl::buffer<double> cdfBuffer1(firstnew1.memptr(),firstnew1.n_rows);
-                    
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                    queue.submit([&](sycl::handler& cgh) {
-                        auto cdfAccessor0 = cdfBuffer0.get_access<sycl::access::mode::discard_write>(cgh);
-                        auto cdfAccessor1 = cdfBuffer1.get_access<sycl::access::mode::discard_write>(cgh);
-                        
-                        cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size*input_space_size), [=](sycl::item<1> item) {
-                            size_t index = item.get_id(0);
-                            
-                            glp_term_out(GLP_OFF);
-                            glp_prob *lp;
-                            lp = glp_create_prob();
-                            glp_set_prob_name(lp, "SimpleLP");
-                            glp_set_obj_dir(lp, GLP_MAX);
-                            // Add columns (variables) to the problem for the P vector
-                            size_t n = minTransitionM.row(index).n_cols; // Number of elements in P vector
-                            glp_add_cols(lp, n+1);
-                            for (size_t i = 1; i <= n; ++i) {
-                                glp_set_col_name(lp, i, ("P_" + to_string(i)).c_str());
-                                if(minTransitionM.row(index)(i - 1) == maxTransitionM.row(index)(i - 1)){
-                                    glp_set_col_bnds(lp, i, GLP_FX, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
-                                }else{
-                                    glp_set_col_bnds(lp, i, GLP_DB, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
-                                }
-                                glp_set_obj_coef(lp, i, first1(i-1)); // Set objective coefficients from V vector
-                            }
-                            glp_set_col_name(lp, n+1, "A");
-                            if(minAvoidM(index) == maxAvoidM(index)){
-                                glp_set_col_bnds(lp, n+1, GLP_FX, minAvoidM(index), maxAvoidM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+1, GLP_DB, minAvoidM(index), maxAvoidM(index));
-                            }
-                            glp_set_obj_coef(lp, n+1, 1.0);
-                            
-                            // Add a constraint for the sum of elements in P = 1
-                            glp_add_rows(lp, 1);
-                            glp_set_row_name(lp, 1, "Constraint");
-                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0); // Sum of P elements = 1
-                            vector<int> ia = {0}; // GLPK uses 1-based indexing, so 0 is added as a placeholder
-                            vector<int> ja(n + 2); // Indices of the P vector elements
-                            vector<double> ar(n + 2); // Coefficients for the P vector elements in the constraint
-                            for (size_t i = 1; i <= n; ++i) {
-                                ja[i] = i;
-                                ar[i] = 1.0; // Coefficient 1 for the corresponding P element
-                            }
-                            ja[n+1] = n+1;
-                            ar[n+1] = 1.0;
-                            glp_set_mat_row(lp, 1, n+1, &ja[0], &ar[0]);
-                            
-                            // Use the simplex method to solve the LP problem
-                            glp_simplex(lp, nullptr);
-                            
-                            // Retrieve the optimal objective value and P vector values
-                            
-                            cdfAccessor0[index] = 0;
-                            cdfAccessor1[index] = 0;
-                            
-                            for (size_t i = 1; i <= n; ++i) {
-                                cdfAccessor0[index] += glp_get_col_prim(lp, i)*first0(i-1);
-                                cdfAccessor1[index] += glp_get_col_prim(lp, i)*first1(i-1);
-                            }
-                            cdfAccessor0[index] += glp_get_col_prim(lp,n+1);
-                            cdfAccessor1[index] += glp_get_col_prim(lp,n+1);
-                            // Clean up GLPK data structures
-                            glp_delete_prob(lp);
-                        });
-                    });
-                }
-                queue.wait_and_throw();
-                /*Resize to minimise over disturbance - worst case scenario*/
-                firstnew0.reshape(state_space_size*input_space_size, disturb_space_size);
-                firstnew1.reshape(state_space_size*input_space_size, disturb_space_size);
-                input_and_state0 = max(firstnew0,1);
-                input_and_state1 = max(firstnew1,1);
-                
-                /*Resize to maximise over input*/
-                input_and_state0.reshape(state_space_size, input_space_size);
-                input_and_state1.reshape(state_space_size, input_space_size);
-                vec check0 = conv_to< colvec >::from(min(input_and_state0,1));
-                vec check1 = conv_to< colvec >::from(min(input_and_state1,1));
-                if((approx_equal(first1, check1, "absdiff", 1e-8)) and ((approx_equal(first0, check0, "absdiff", 1e-8)))){
-                    cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is a safe solution, try running the finite Horizon solution using this number of steps." << endl;
-                    break;
-                }
-                first0 = check0;
-                first1 = check1;
-                /*Choose input to store for controller*/
-                sycl::queue Q;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<uword> cdfBuffer0(U_pos.memptr(),U_pos.n_rows);
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                    Q.submit([&](sycl::handler& cgh) {
-                        auto cdfAccessor0 = cdfBuffer0.get_access<sycl::access::mode::discard_write>(cgh);
-                        cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size), [=](sycl::item<1> item) {
-                            size_t index = item.get_id(0);
-                            input_and_state0.row(index).min(cdfAccessor0[index]);
-                        });
-                    });
-                }
-                Q.wait_and_throw();
-            }else{ // for IMDP upper bound
-                sycl::queue queue;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<double> cdfBuffer0(firstnew0.memptr(),firstnew0.n_rows);
-                    sycl::buffer<double> cdfBuffer1(firstnew1.memptr(),firstnew1.n_rows);
-                    
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                    queue.submit([&](sycl::handler& cgh) {
-                        auto cdfAccessor0 = cdfBuffer0.get_access<sycl::access::mode::discard_write>(cgh);
-                        auto cdfAccessor1 = cdfBuffer1.get_access<sycl::access::mode::discard_write>(cgh);
-                        
-                        cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size*input_space_size), [=](sycl::item<1> item) {
-                            size_t index = item.get_id(0);
-                            glp_term_out(GLP_OFF);
-                            
-                            glp_prob *lp;
-                            lp = glp_create_prob();
-                            glp_set_prob_name(lp, "SimpleLP");
-                            glp_set_obj_dir(lp, GLP_MIN);
-                            // Add columns (variables) to the problem for the P vector
-                            size_t n = minTransitionM.row(index).n_cols; // Number of elements in P vector
-                            glp_add_cols(lp, n+1);
-                            for (size_t i = 1; i <= n; ++i) {
-                                glp_set_col_name(lp, i, ("P_" + to_string(i)).c_str());
-                                if(minTransitionM.row(index)(i - 1) == maxTransitionM.row(index)(i - 1)){
-                                    glp_set_col_bnds(lp, i, GLP_FX, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
-                                }else{
-                                    glp_set_col_bnds(lp, i, GLP_DB, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
-                                }
-                                glp_set_obj_coef(lp, i, first1(i-1)); // Set objective coefficients from V vector
-                            }
-                            glp_set_col_name(lp, n+1, "A");
-                            if(minAvoidM(index) == maxAvoidM(index)){
-                                glp_set_col_bnds(lp, n+1, GLP_FX, minAvoidM(index), maxAvoidM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+1, GLP_DB, minAvoidM(index), maxAvoidM(index));
-                            }
-                            glp_set_obj_coef(lp, n+1, 1.0);
-                            
-                            // Add a constraint for the sum of elements in P = 1
-                            glp_add_rows(lp, 1);
-                            glp_set_row_name(lp, 1, "Constraint");
-                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0); // Sum of P elements = 1
-                            vector<int> ia = {0}; // GLPK uses 1-based indexing, so 0 is added as a placeholder
-                            vector<int> ja(n + 2); // Indices of the P vector elements
-                            vector<double> ar(n + 2); // Coefficients for the P vector elements in the constraint
-                            for (int i = 1; i <= n; ++i) {
-                                ja[i] = i;
-                                ar[i] = 1.0; // Coefficient 1 for the corresponding P element
-                            }
-                            ja[n+1] = n+1;
-                            ar[n+1] = 1.0;
-                            glp_set_mat_row(lp, 1, n+1, &ja[0], &ar[0]);
-                            
-                            // Use the simplex method to solve the LP problem
-                            glp_simplex(lp, nullptr);
-                            
-                            // Retrieve the optimal objective value and P vector values
-                            
-                            cdfAccessor0[index] = 0;
-                            cdfAccessor1[index] = 0;
-                            
-                            for (size_t i = 1; i <= n; ++i) {
-                                cdfAccessor0[index] += glp_get_col_prim(lp, i)*first0(i-1);
-                                cdfAccessor1[index] += glp_get_col_prim(lp, i)*first1(i-1);
-                            }
-                            cdfAccessor0[index] += glp_get_col_prim(lp,n+1);
-                            cdfAccessor1[index] += glp_get_col_prim(lp,n+1);
-                            // Clean up GLPK data structures
-                            glp_delete_prob(lp);
-                        });
-                    });
-                }
-                queue.wait_and_throw();
-                /*Resize to maximise over disturbance - best case scenario*/
-                firstnew0.reshape(state_space_size*input_space_size, disturb_space_size);
-                firstnew1.reshape(state_space_size*input_space_size, disturb_space_size);
-                input_and_state0 = max(firstnew0,1);
-                input_and_state1 = max(firstnew1,1);
-                
-                /*Resize to maximise over input*/
-                input_and_state0.reshape(state_space_size, input_space_size);
-                input_and_state1.reshape(state_space_size, input_space_size);
-                vec check0 = conv_to< colvec >::from(min(input_and_state0,1));
-                vec check1 = conv_to< colvec >::from(min(input_and_state1,1));
-                if((approx_equal(first1, check1, "absdiff", 1e-8)) and ((approx_equal(first0, check0, "absdiff", 1e-8)))){
-                    cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is a safe solution, try running the finite Horizon solution using this number of steps." << endl;
-                    break;
-                }
-                first0 = check0;
-                first1 = check1;
-                sycl::queue Q;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<uword> cdfBuffer0(U_pos.memptr(),U_pos.n_rows);
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                    Q.submit([&](sycl::handler& cgh) {
-                        auto cdfAccessor0 = cdfBuffer0.get_access<sycl::access::mode::discard_write>(cgh);
-                        cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size), [=](sycl::item<1> item) {
-                            size_t index = item.get_id(0);
-                            input_and_state0.row(index).min(cdfAccessor0[index]);
-                        });
-                    });
-                }
-                Q.wait_and_throw();
-            }
-            max_diff = max(abs(first1-first0));
-            min_diff = min(abs(first1-first0));
-        }
-        cout << endl;
-        
-        if (IMDP_lower){
-            cout << "control policy for lower bound found, finding upper bound." << endl;
-        }else{
-            cout << "control policy for upper bound found, finding lower bound." << endl;
-        }
-        vec second0(state_space_size, 1, fill::zeros);
-        mat secondnew0(state_space_size*disturb_space_size, 1, fill::zeros);
-        vec second1(state_space_size, 1, fill::ones);
-        mat secondnew1(state_space_size*disturb_space_size, 1, fill::zeros);
-        
-        mat tempTmin(state_space_size*disturb_space_size, state_space_size, fill::zeros);
-        mat tempTmax(state_space_size*disturb_space_size, state_space_size, fill::zeros);
-        vec tempATmin(state_space_size*disturb_space_size, 1, fill::zeros);
-        vec tempATmax(state_space_size*disturb_space_size, 1, fill::zeros);
-        
-        cout << "Create reduced matrix where input is fixed." << endl;
-        for (size_t j = 0; j < disturb_space_size; j++){
-            for (size_t i = 0; i < state_space_size; i++){
-                tempTmin.row(j*state_space_size+ i) = minTransitionM.row(j*input_space_size*state_space_size+U_pos(i)*state_space_size+i);
-                tempTmax.row(j*state_space_size+i) = maxTransitionM.row(j*input_space_size*state_space_size+U_pos(i)*state_space_size+i);
-                tempATmin(j*state_space_size+i)= minAvoidM(j*input_space_size*state_space_size+U_pos(i)*state_space_size+i);
-                tempATmax(j*state_space_size+i)= maxAvoidM(j*input_space_size*state_space_size+U_pos(i)*state_space_size+i);
-            }
-        }
-        
-        min_diff = 1.0;
-        max_diff = 1.0;
-        converge = 0;
-        cout << "second loop iterations: " << endl;
-        
-        while (max_diff > epsilon) {
-            converge++;
-            cout << "Max: " << max_diff << " Min: " << min_diff << endl;
-            if (IMDP_lower == true){ // for IMDP upper bound (opposite to before)
-                sycl::queue queue;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<double> cdfBuffer0(secondnew0.memptr(),secondnew0.n_rows);
-                    sycl::buffer<double> cdfBuffer1(secondnew1.memptr(),secondnew1.n_rows);
-                    
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                    queue.submit([&](sycl::handler& cgh) {
-                        auto cdfAccessor0 = cdfBuffer0.get_access<sycl::access::mode::discard_write>(cgh);
-                        auto cdfAccessor1 = cdfBuffer1.get_access<sycl::access::mode::discard_write>(cgh);
-                        
-                        cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size*disturb_space_size), [=](sycl::item<1> item) {
-                            size_t index = item.get_id(0);
-                            glp_term_out(GLP_OFF);
-                            
-                            glp_prob *lp;
-                            lp = glp_create_prob();
-                            glp_set_prob_name(lp, "SimpleLP");
-                            glp_set_obj_dir(lp, GLP_MAX);
-                            // Add columns (variables) to the problem for the P vector
-                            size_t n = tempTmin.row(index).n_cols; // Number of elements in P vector
-                            glp_add_cols(lp, n+1);
-                            for (size_t i = 1; i <= n; ++i) {
-                                glp_set_col_name(lp, i, ("P_" + to_string(i)).c_str());
-                                if(tempTmin.row(index)(i - 1) == tempTmax.row(index)(i - 1)){
-                                    glp_set_col_bnds(lp, i, GLP_FX, tempTmin.row(index)(i - 1), tempTmax.row(index)(i - 1));
-                                }else{
-                                    glp_set_col_bnds(lp, i, GLP_DB, tempTmin.row(index)(i - 1), tempTmax.row(index)(i - 1));
-                                }
-                                glp_set_obj_coef(lp, i, second1(i-1)); // Set objective coefficients as 1.0, multiply by V later
-                            }
-                            glp_set_col_name(lp, n+1, "A");
-                            if(tempATmin(index) == tempATmax(index)){
-                                glp_set_col_bnds(lp, n+1, GLP_FX, tempATmin(index), tempATmax(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+1, GLP_DB,tempATmin(index), tempATmax(index));
-                            }
-                            glp_set_obj_coef(lp, n+1, 1.0); // Set objective coefficients from V vector
-                            
-                            // Add a constraint for the sum of elements in P = 1
-                            glp_add_rows(lp, 1);
-                            glp_set_row_name(lp, 1, "Constraint");
-                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0); // Sum of P elements = 1
-                            vector<int> ia = {0}; // GLPK uses 1-based indexing, so 0 is added as a placeholder
-                            vector<int> ja(n + 2); // Indices of the P vector elements
-                            vector<double> ar(n + 2); // Coefficients for the P vector elements in the constraint
-                            for (int i = 1; i <= n; ++i) {
-                                ja[i] = i;
-                                ar[i] = 1.0; // Coefficient 1 for the corresponding P element
-                            }
-                            ja[n+1] = n+1;
-                            ar[n+1] = 1.0;
-                            glp_set_mat_row(lp, 1, n+1, &ja[0], &ar[0]);
-                            
-                            // Use the simplex method to solve the LP problem
-                            glp_simplex(lp, nullptr);
-                            
-                            // Retrieve the optimal objective value and P vector values
-                            cdfAccessor0[index] = 0;
-                            cdfAccessor1[index] = 0;
-                            for (size_t i = 1; i <= n; ++i) {
-                                cdfAccessor0[index] += glp_get_col_prim(lp, i)*second0(i-1);
-                                cdfAccessor1[index] += glp_get_col_prim(lp, i)*second1(i-1);
-                            }
-                            cdfAccessor0[index] += glp_get_col_prim(lp,n+1);
-                            cdfAccessor1[index] += glp_get_col_prim(lp,n+1);
-                            // Clean up GLPK data structures
-                            glp_delete_prob(lp);
-                        });
-                    });
-                }
-                queue.wait_and_throw();
-                
-                /*Resize to maximise over disturbance - best case scenario*/
-                secondnew0.reshape(state_space_size,disturb_space_size);
-                secondnew1.reshape(state_space_size,disturb_space_size);
-                vec check0 = conv_to< colvec >::from(max(secondnew0,1));
-                vec check1 = conv_to< colvec >::from(max(secondnew1,1));
-                if((approx_equal(second1, check1, "absdiff", 1e-8)) and ((approx_equal(second0, check0, "absdiff", 1e-8)))){
-                    cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is a safe solution, try running the finite Horizon solution using this number of steps." << endl;
-                    break;
-                }
-                second0 = check0;
-                second1 = check1;
-                
-                
-            }else{ // for IMDP lower bound (opposite to first)
-                sycl::queue queue;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<double> cdfBuffer0(secondnew0.memptr(),secondnew0.n_rows);
-                    sycl::buffer<double> cdfBuffer1(secondnew1.memptr(),secondnew1.n_rows);
-                    
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                    queue.submit([&](sycl::handler& cgh) {
-                        auto cdfAccessor0 = cdfBuffer0.get_access<sycl::access::mode::discard_write>(cgh);
-                        auto cdfAccessor1 = cdfBuffer1.get_access<sycl::access::mode::discard_write>(cgh);
-                        
-                        cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size*disturb_space_size), [=](sycl::item<1> item) {
-                            size_t index = item.get_id(0);
-                            
-                            glp_term_out(GLP_OFF);
-                            
-                            glp_prob *lp;
-                            lp = glp_create_prob();
-                            glp_set_prob_name(lp, "SimpleLP");
-                            glp_set_obj_dir(lp, GLP_MIN);
-                            // Add columns (variables) to the problem for the P vector
-                            size_t n = tempTmin.row(index).n_cols; // Number of elements in P vector
-                            glp_add_cols(lp, n+1);
-                            for (size_t i = 1; i <= n; ++i) {
-                                glp_set_col_name(lp, i, ("P_" + to_string(i)).c_str());
-                                if(tempTmin.row(index)(i - 1) == tempTmax.row(index)(i - 1)){
-                                    glp_set_col_bnds(lp, i, GLP_FX, tempTmin.row(index)(i - 1), tempTmax.row(index)(i - 1));
-                                }else{
-                                    glp_set_col_bnds(lp, i, GLP_DB, tempTmin.row(index)(i - 1), tempTmax.row(index)(i - 1));
-                                }
-                                glp_set_obj_coef(lp, i, second1(i-1)); // Set objective coefficients as 1.0, multiply by V later
-                            }
-                            glp_set_col_name(lp, n+1, "A");
-                            if(tempATmin(index) == tempATmax(index)){
-                                glp_set_col_bnds(lp, n+1, GLP_FX, tempATmin(index), tempATmax(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+1, GLP_DB,tempATmin(index), tempATmax(index));
-                            }
-                            glp_set_obj_coef(lp, n+1, 1.0); // Set objective coefficients from V vector
-                            
-                            // Add a constraint for the sum of elements in P = 1
-                            glp_add_rows(lp, 1);
-                            glp_set_row_name(lp, 1, "Constraint");
-                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0); // Sum of P elements = 1
-                            vector<int> ia = {0}; // GLPK uses 1-based indexing, so 0 is added as a placeholder
-                            vector<int> ja(n + 2); // Indices of the P vector elements
-                            vector<double> ar(n + 2); // Coefficients for the P vector elements in the constraint
-                            for (size_t i = 1; i <= n; ++i) {
-                                ja[i] = i;
-                                ar[i] = 1.0; // Coefficient 1 for the corresponding P element
-                            }
-                            ja[n+1] = n+1;
-                            ar[n+1] = 1.0;
-                            glp_set_mat_row(lp, 1, n+1, &ja[0], &ar[0]);
-                            
-                            // Use the simplex method to solve the LP problem
-                            glp_simplex(lp, nullptr);
-                            
-                            // Retrieve the optimal objective value and P vector values
-                            cdfAccessor0[index] = 0;
-                            cdfAccessor1[index] = 0;
-                            for (size_t i = 1; i <= n; ++i) {
-                                cdfAccessor0[index] += glp_get_col_prim(lp, i)*second0(i-1);
-                                cdfAccessor1[index] += glp_get_col_prim(lp, i)*second1(i-1);
-                            }
-                            cdfAccessor0[index] += glp_get_col_prim(lp,n+1);
-                            cdfAccessor1[index] += glp_get_col_prim(lp,n+1);
-                            // Clean up GLPK data structures
-                            glp_delete_prob(lp);
-                        });
-                    });
-                }
-                queue.wait_and_throw();
-                
-                /*Resize to minimise over disturbance - worst case scenario*/
-                secondnew0.reshape(state_space_size,disturb_space_size);
-                secondnew1.reshape(state_space_size,disturb_space_size);
-                vec check0 = conv_to< colvec >::from(max(secondnew0,1));
-                vec check1 = conv_to< colvec >::from(max(secondnew1,1));
-                if((approx_equal(second1, check1, "absdiff", 1e-8)) and ((approx_equal(second0, check0, "absdiff", 1e-8)))){
-                    cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is a safe solution, try running the finite Horizon solution using this number of steps." << endl;
-                    break;
-                }
-                second0 = check0;
-                second1 = check1;
-                
-            }
-            max_diff = max(abs(second1-second0));
-            min_diff = min(abs(second1-second0));
-        }
-        cout << endl;
-        
-        if (IMDP_lower){
-            cout << "Upper bound found." << endl;
-        }else{
-            cout << "Lower bound found." << endl;
-        }
-        
-        controller.set_size(state_space_size, dim_x + dim_u + 2);
-        controller.cols(0,dim_x-1) = state_space;
-        controller.col(dim_x+dim_u) = ones(state_space_size) - first1;
-        controller.col(dim_x+dim_u + 1) = ones(state_space_size) - second1;
+        controller.col(dim_x+dim_u) = first;
+        controller.col(dim_x+dim_u + 1) = second;
         for (size_t i = 0; i < state_space_size; ++i) {
             controller.row(i).cols(dim_x, dim_x + dim_u - 1) = input_space.row(U_pos(i));
         }
     }
-    // Stop the timer
+
     auto end = chrono::steady_clock::now();
     auto duration = chrono::duration_cast<chrono::milliseconds>(end - start);
     cout << "Execution time: " << duration.count()/1000.0 << " seconds" << endl;
@@ -6074,3047 +10519,18 @@ void IMDP::infiniteHorizonSafeController(bool IMDP_lower) {
 
 /// finite horizon reachability synthesis
 void IMDP::finiteHorizonReachController(bool IMDP_lower, size_t timeHorizon) {
-    auto start = chrono::steady_clock::now();
-    cout << "Finding control policy for infinite horizon reach controller... " << endl;
-    
-    if(input_space_size == 0 && disturb_space_size == 0){
-        vec first(state_space_size, 1, fill::zeros);
-        vec firstnew(state_space_size, 1, fill::zeros);
-        
-        double max_diff = 1.0;
-        double min_diff = 1.0;
-        size_t k = 0;
-        cout << "first loop iterations: " << endl;
-        while (k < timeHorizon) {
-            cout << "." << flush;
-            if (IMDP_lower == true){ // for IMDP lower bound
-                sycl::queue queue;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<double> cdfBuffer(firstnew.memptr(),firstnew.n_rows);
-                    
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                    queue.submit([&](sycl::handler& cgh) {
-                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                        
-                        cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size), [=](sycl::item<1> item) {
-                            size_t index = item.get_id(0);
-                            glp_term_out(GLP_OFF);
-                            glp_prob *lp;
-                            lp = glp_create_prob();
-                            glp_set_prob_name(lp, "SimpleLP");
-                            glp_set_obj_dir(lp, GLP_MIN);
-                            // Add columns (variables) to the problem for the P vector
-                            size_t n = minTransitionM.row(index).n_cols; // Number of elements in P vector
-                            glp_add_cols(lp, n+2);
-                            for (size_t i = 1; i <= n; ++i) {
-                                glp_set_col_name(lp, i, ("P_" + to_string(i)).c_str());
-                                if(minTransitionM.row(index)(i - 1) == maxTransitionM.row(index)(i - 1)){
-                                    glp_set_col_bnds(lp, i, GLP_FX, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
-                                }else{
-                                    glp_set_col_bnds(lp, i, GLP_DB, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
-                                }
-                                glp_set_obj_coef(lp, i, first(i-1)); // Set objective coefficients from V vector
-                            }
-                            glp_set_col_name(lp, n+1, "T");
-                            if(minTargetM(index) == maxTargetM(index)){
-                                glp_set_col_bnds(lp, n+1, GLP_FX, minTargetM(index), maxTargetM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+1, GLP_DB, minTargetM(index), maxTargetM(index));
-                            }
-                            glp_set_obj_coef(lp, n+1, 1.0);
-                            
-                            glp_set_col_name(lp, n+2, "A");
-                            if(minAvoidM(index) == maxAvoidM(index)){
-                                glp_set_col_bnds(lp, n+2, GLP_FX, minAvoidM(index), maxAvoidM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+2, GLP_DB, minAvoidM(index), maxAvoidM(index));
-                            }
-                            glp_set_obj_coef(lp, n+2, 0.0);
-                            
-                            // Add a constraint for the sum of elements in P = 1
-                            glp_add_rows(lp, 1);
-                            glp_set_row_name(lp, 1, "Constraint");
-                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0); // Sum of P elements = 1
-                            vector<int> ia = {0}; // GLPK uses 1-based indexing, so 0 is added as a placeholder
-                            vector<int> ja(n + 3); // Indices of the P vector elements
-                            vector<double> ar(n + 3); // Coefficients for the P vector elements in the constraint
-                            for (size_t i = 1; i <= n; ++i) {
-                                ja[i] = i;
-                                ar[i] = 1.0; // Coefficient 1 for the corresponding P element
-                            }
-                            ja[n+1] = n+1;
-                            ar[n+1] = 1.0;
-                            ja[n+2] = n+2;
-                            ar[n+2] = 1.0;
-                            glp_set_mat_row(lp, 1, n+2, &ja[0], &ar[0]);
-                            
-                            // Use the simplex method to solve the LP problem
-                            glp_simplex(lp, nullptr);
-                            cdfAccessor[index] = 0;
-                            
-                            for (size_t i = 1; i <= n; ++i) {
-                                cdfAccessor[index] += glp_get_col_prim(lp, i)*first(i-1);
-                            }
-                            cdfAccessor[index] += glp_get_col_prim(lp,n+1);
-                            // Clean up GLPK data structures
-                            glp_delete_prob(lp);
-                        });
-                    });
-                }
-                queue.wait_and_throw();
-                first = firstnew;
-            }else{ // for IMDP upper bound
-                sycl::queue queue;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<double> cdfBuffer(firstnew.memptr(),firstnew.n_rows);
-                    
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                    queue.submit([&](sycl::handler& cgh) {
-                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                        
-                        cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size), [=](sycl::item<1> item) {
-                            size_t index = item.get_id(0);
-                            glp_term_out(GLP_OFF);
-                            
-                            glp_prob *lp;
-                            lp = glp_create_prob();
-                            glp_set_prob_name(lp, "SimpleLP");
-                            glp_set_obj_dir(lp, GLP_MAX);
-                            // Add columns (variables) to the problem for the P vector
-                            size_t n = minTransitionM.row(index).n_cols; // Number of elements in P vector
-                            glp_add_cols(lp, n+2);
-                            for (size_t i = 1; i <= n; ++i) {
-                                glp_set_col_name(lp, i, ("P_" + to_string(i)).c_str());
-                                if(minTransitionM.row(index)(i - 1) == maxTransitionM.row(index)(i - 1)){
-                                    glp_set_col_bnds(lp, i, GLP_FX, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
-                                }else{
-                                    glp_set_col_bnds(lp, i, GLP_DB, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
-                                }
-                                glp_set_obj_coef(lp, i, first(i-1)); // Set objective coefficients from V vector
-                            }
-                            glp_set_col_name(lp, n+1, "T");
-                            if(minTargetM(index) == maxTargetM(index)){
-                                glp_set_col_bnds(lp, n+1, GLP_FX, minTargetM(index), maxTargetM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+1, GLP_DB, minTargetM(index), maxTargetM(index));
-                            }
-                            glp_set_obj_coef(lp, n+1, 1.0);
-                            
-                            glp_set_col_name(lp, n+2, "A");
-                            if(minAvoidM(index) == maxAvoidM(index)){
-                                glp_set_col_bnds(lp, n+2, GLP_FX, minAvoidM(index), maxAvoidM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+2, GLP_DB, minAvoidM(index), maxAvoidM(index));
-                            }
-                            glp_set_obj_coef(lp, n+2, 0.0);
-                            
-                            // Add a constraint for the sum of elements in P = 1
-                            glp_add_rows(lp, 1);
-                            glp_set_row_name(lp, 1, "Constraint");
-                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0); // Sum of P elements = 1
-                            vector<int> ia = {0}; // GLPK uses 1-based indexing, so 0 is added as a placeholder
-                            vector<int> ja(n + 3); // Indices of the P vector elements
-                            vector<double> ar(n + 3); // Coefficients for the P vector elements in the constraint
-                            for (size_t i = 1; i <= n; ++i) {
-                                ja[i] = i;
-                                ar[i] = 1.0; // Coefficient 1 for the corresponding P element
-                            }
-                            ja[n+1] = n+1;
-                            ar[n+1] = 1.0;
-                            ja[n+2] = n+2;
-                            ar[n+2] = 1.0;
-                            glp_set_mat_row(lp, 1, n+2, &ja[0], &ar[0]);
-                            
-                            // Use the simplex method to solve the LP problem
-                            glp_simplex(lp, nullptr);
-                            
-                            // Retrieve the optimal objective value and P vector values
-                            
-                            cdfAccessor[index] = 0;
-                            
-                            for (size_t i = 1; i <= n; ++i) {
-                                cdfAccessor[index] += glp_get_col_prim(lp, i)*first(i-1);
-                            }
-                            cdfAccessor[index] += glp_get_col_prim(lp,n+1);
-                            // Clean up GLPK data structures
-                            glp_delete_prob(lp);
-                        });
-                    });
-                }
-                queue.wait_and_throw();
-                first = firstnew;
-            }
-            k++;
-        }
-        cout << endl;
-        
-        if (IMDP_lower){
-            cout << "verification lower bound found, finding upper bound." << endl;
-        }else{
-            cout << "verification upper bound found, finding lower bound." << endl;
-        }
-        
-        vec second(state_space_size, 1, fill::zeros);
-        mat secondnew(state_space_size, 1, fill::zeros);
-        
-        max_diff = 1.0;
-        min_diff = 1.0;
-        k=0;
-        cout << "second loop iterations: " << endl;
-        
-        while (k < timeHorizon) {
-            cout << "." << flush;
-            if (IMDP_lower == true){ // for IMDP upper bound (opposite to before)
-                sycl::queue queue;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<double> cdfBuffer(secondnew.memptr(),secondnew.n_rows);
-                    
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                    queue.submit([&](sycl::handler& cgh) {
-                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                        
-                        cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size), [=](sycl::item<1> item) {
-                            size_t index = item.get_id(0);
-                            glp_term_out(GLP_OFF);
-                            
-                            glp_prob *lp;
-                            lp = glp_create_prob();
-                            glp_set_prob_name(lp, "SimpleLP");
-                            glp_set_obj_dir(lp, GLP_MAX);
-                            // Add columns (variables) to the problem for the P vector
-                            size_t n = minTransitionM.row(index).n_cols; // Number of elements in P vector
-                            glp_add_cols(lp, n+2);
-                            for (size_t i = 1; i <= n; ++i) {
-                                glp_set_col_name(lp, i, ("P_" + to_string(i)).c_str());
-                                if(minTransitionM.row(index)(i - 1) == maxTransitionM.row(index)(i - 1)){
-                                    glp_set_col_bnds(lp, i, GLP_FX, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
-                                }else{
-                                    glp_set_col_bnds(lp, i, GLP_DB, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
-                                }
-                                glp_set_obj_coef(lp, i, second(i-1)); // Set objective coefficients from V vector
-                            }
-                            glp_set_col_name(lp, n+1, "T");
-                            if(minTargetM(index) == maxTargetM(index)){
-                                glp_set_col_bnds(lp, n+1, GLP_FX, minTargetM(index), maxTargetM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+1, GLP_DB, minTargetM(index), maxTargetM(index));
-                            }
-                            glp_set_obj_coef(lp, n+1, 1.0);
-                            
-                            glp_set_col_name(lp, n+2, "A");
-                            if(minAvoidM(index) == maxAvoidM(index)){
-                                glp_set_col_bnds(lp, n+2, GLP_FX, minAvoidM(index), maxAvoidM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+2, GLP_DB, minAvoidM(index), maxAvoidM(index));
-                            }
-                            glp_set_obj_coef(lp, n+2, 0.0);
-                            
-                            // Add a constraint for the sum of elements in P = 1
-                            glp_add_rows(lp, 1);
-                            glp_set_row_name(lp, 1, "Constraint");
-                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0); // Sum of P elements = 1
-                            vector<int> ia = {0}; // GLPK uses 1-based indexing, so 0 is added as a placeholder
-                            vector<int> ja(n + 3); // Indices of the P vector elements
-                            vector<double> ar(n + 3); // Coefficients for the P vector elements in the constraint
-                            for (size_t i = 1; i <= n; ++i) {
-                                ja[i] = i;
-                                ar[i] = 1.0; // Coefficient 1 for the corresponding P element
-                            }
-                            ja[n+1] = n+1;
-                            ar[n+1] = 1.0;
-                            ja[n+2] = n+2;
-                            ar[n+2] = 1.0;
-                            glp_set_mat_row(lp, 1, n+2, &ja[0], &ar[0]);
-                            
-                            // Use the simplex method to solve the LP problem
-                            glp_simplex(lp, nullptr);
-                            
-                            // Retrieve the optimal objective value and P vector values
-                            
-                            cdfAccessor[index] = 0;
-                            
-                            for (size_t i = 1; i <= n; ++i) {
-                                cdfAccessor[index] += glp_get_col_prim(lp, i)*second(i-1);
-                            }
-                            cdfAccessor[index] += glp_get_col_prim(lp,n+1);
-                            // Clean up GLPK data structures
-                            glp_delete_prob(lp);
-                        });
-                    });
-                }
-                queue.wait_and_throw();
-                second = secondnew;
-            }else{ // for IMDP lower bound (opposite to first)
-                sycl::queue queue;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<double> cdfBuffer(secondnew.memptr(),secondnew.n_rows);
-                    
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                    queue.submit([&](sycl::handler& cgh) {
-                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                        
-                        cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size), [=](sycl::item<1> item) {
-                            size_t index = item.get_id(0);
-                            
-                            glp_term_out(GLP_OFF);
-                            
-                            glp_prob *lp;
-                            lp = glp_create_prob();
-                            glp_set_prob_name(lp, "SimpleLP");
-                            glp_set_obj_dir(lp, GLP_MIN);
-                            // Add columns (variables) to the problem for the P vector
-                            size_t n = minTransitionM.row(index).n_cols; // Number of elements in P vector
-                            glp_add_cols(lp, n+2);
-                            for (size_t i = 1; i <= n; ++i) {
-                                glp_set_col_name(lp, i, ("P_" + to_string(i)).c_str());
-                                if(minTransitionM.row(index)(i - 1) == maxTransitionM.row(index)(i - 1)){
-                                    glp_set_col_bnds(lp, i, GLP_FX, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
-                                }else{
-                                    glp_set_col_bnds(lp, i, GLP_DB, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
-                                }
-                                glp_set_obj_coef(lp, i, second(i-1)); // Set objective coefficients from V vector
-                            }
-                            glp_set_col_name(lp, n+1, "T");
-                            if(minTargetM(index) == maxTargetM(index)){
-                                glp_set_col_bnds(lp, n+1, GLP_FX, minTargetM(index), maxTargetM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+1, GLP_DB, minTargetM(index), maxTargetM(index));
-                            }
-                            glp_set_obj_coef(lp, n+1, 1.0);
-                            glp_set_col_name(lp, n+2, "A");
-                            if(minAvoidM(index) == maxAvoidM(index)){
-                                glp_set_col_bnds(lp, n+2, GLP_FX, minAvoidM(index), maxAvoidM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+2, GLP_DB, minAvoidM(index), maxAvoidM(index));
-                            }
-                            glp_set_obj_coef(lp, n+2, 0.0);
-                            // Add a constraint for the sum of elements in P = 1
-                            glp_add_rows(lp, 1);
-                            glp_set_row_name(lp, 1, "Constraint");
-                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0); // Sum of P elements = 1
-                            vector<int> ia = {0}; // GLPK uses 1-based indexing, so 0 is added as a placeholder
-                            vector<int> ja(n + 3); // Indices of the P vector elements
-                            vector<double> ar(n + 3); // Coefficients for the P vector elements in the constraint
-                            for (size_t i = 1; i <= n; ++i) {
-                                ja[i] = i;
-                                ar[i] = 1.0; // Coefficient 1 for the corresponding P element
-                            }
-                            ja[n+1] = n+1;
-                            ar[n+1] = 1.0;
-                            ja[n+2] = n+2;
-                            ar[n+2] = 1.0;
-                            glp_set_mat_row(lp, 1, n+2, &ja[0], &ar[0]);
-                            
-                            // Use the simplex method to solve the LP problem
-                            glp_simplex(lp, nullptr);
-                            
-                            // Retrieve the optimal objective value and P vector values
-                            
-                            cdfAccessor[index] = 0;
-                            
-                            for (size_t i = 1; i <= n; ++i) {
-                                cdfAccessor[index] += glp_get_col_prim(lp, i)*second(i-1);
-                            }
-                            cdfAccessor[index] += glp_get_col_prim(lp,n+1);
-                            // Clean up GLPK data structures
-                            glp_delete_prob(lp);
-                        });
-                    });
-                }
-                queue.wait_and_throw();
-                second = secondnew;
-            }
-            k++;
-        }
-        cout << endl;
-        
-        if (IMDP_lower){
-            cout << "Upper bound found." << endl;
-        }else{
-            cout << "Lower bound found." << endl;
-        }
-        
-        controller.set_size(state_space_size, dim_x + 2);
-        controller.cols(0,dim_x-1) = state_space;
-        controller.col(dim_x) = first;
-        controller.col(dim_x + 1) = second;
-        
-    }else if(input_space_size == 0){
-        vec first(state_space_size, 1, fill::zeros);
-        mat firstnew(state_space_size*disturb_space_size, 1, fill::zeros);
-        //reduce matrix by choosing minimal probability from disturbances at each state
-        double min_diff = 1.0;
-        double max_diff = 1.0;
-        size_t k = 0;
-        cout << "first loop iterations: " << endl;
-        while (k < timeHorizon) {
-            cout << "." << flush;
-            if (IMDP_lower == true){ // for IMDP lower bound
-                
-                sycl::queue queue;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<double> cdfBuffer(firstnew.memptr(),firstnew.n_rows);
-                    
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                    queue.submit([&](sycl::handler& cgh) {
-                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                        
-                        cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size*disturb_space_size), [=](sycl::item<1> item) {
-                            size_t index = item.get_id(0);
-                            glp_term_out(GLP_OFF);
-                            
-                            glp_prob *lp;
-                            lp = glp_create_prob();
-                            glp_set_prob_name(lp, "SimpleLP");
-                            glp_set_obj_dir(lp, GLP_MIN);
-                            // Add columns (variables) to the problem for the P vector
-                            size_t n = minTransitionM.row(index).n_cols; // Number of elements in P vector
-                            glp_add_cols(lp, n+2);
-                            for (size_t i = 1; i <= n; ++i) {
-                                glp_set_col_name(lp, i, ("P_" + to_string(i)).c_str());
-                                if(minTransitionM.row(index)(i - 1) == maxTransitionM.row(index)(i - 1)){
-                                    glp_set_col_bnds(lp, i, GLP_FX, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
-                                }else{
-                                    glp_set_col_bnds(lp, i, GLP_DB, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
-                                }
-                                glp_set_obj_coef(lp, i, first(i-1)); // Set objective coefficients from V vector
-                            }
-                            glp_set_col_name(lp, n+1, "T");
-                            if(minTargetM(index) == maxTargetM(index)){
-                                glp_set_col_bnds(lp, n+1, GLP_FX, minTargetM(index), maxTargetM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+1, GLP_DB, minTargetM(index), maxTargetM(index));
-                            }
-                            glp_set_obj_coef(lp, n+1, 1.0);
-                            
-                            glp_set_col_name(lp, n+2, "A");
-                            if(minAvoidM(index) == maxAvoidM(index)){
-                                glp_set_col_bnds(lp, n+2, GLP_FX, minAvoidM(index), maxAvoidM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+2, GLP_DB, minAvoidM(index), maxAvoidM(index));
-                            }
-                            glp_set_obj_coef(lp, n+2, 0.0);
-                            
-                            // Add a constraint for the sum of elements in P = 1
-                            glp_add_rows(lp, 1);
-                            glp_set_row_name(lp, 1, "Constraint");
-                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0); // Sum of P elements = 1
-                            vector<int> ia = {0}; // GLPK uses 1-based indexing, so 0 is added as a placeholder
-                            vector<int> ja(n + 3); // Indices of the P vector elements
-                            vector<double> ar(n + 3); // Coefficients for the P vector elements in the constraint
-                            for (size_t i = 1; i <= n; ++i) {
-                                ja[i] = i;
-                                ar[i] = 1.0; // Coefficient 1 for the corresponding P element
-                            }
-                            ja[n+1] = n+1;
-                            ar[n+1] = 1.0;
-                            ja[n+2] = n+2;
-                            ar[n+2] = 1.0;
-                            glp_set_mat_row(lp, 1, n+2, &ja[0], &ar[0]);
-                            
-                            // Use the simplex method to solve the LP problem
-                            glp_simplex(lp, nullptr);
-                            
-                            // Retrieve the optimal objective value and P vector values
-                            
-                            cdfAccessor[index] = 0;
-                            
-                            for (size_t i = 1; i <= n; ++i) {
-                                cdfAccessor[index] += glp_get_col_prim(lp, i)*first(i-1);
-                            }
-                            cdfAccessor[index] += glp_get_col_prim(lp,n+1);
-                            // Clean up GLPK data structures
-                            glp_delete_prob(lp);
-                        });
-                    });
-                }
-                queue.wait_and_throw();
-                
-                /*Resize to minimise over disturbance - worst case scenario*/
-                firstnew.reshape(state_space_size, disturb_space_size);
-                first = conv_to< colvec >::from(min(firstnew,1));
-                
-            }else{ // for IMDP upper bound
-                sycl::queue queue;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<double> cdfBuffer(firstnew.memptr(),firstnew.n_rows);
-                    
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                    queue.submit([&](sycl::handler& cgh) {
-                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                        
-                        cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size*disturb_space_size), [=](sycl::item<1> item) {
-                            size_t index = item.get_id(0);
-                            glp_term_out(GLP_OFF);
-                            glp_prob *lp;
-                            lp = glp_create_prob();
-                            glp_set_prob_name(lp, "SimpleLP");
-                            glp_set_obj_dir(lp, GLP_MAX);
-                            // Add columns (variables) to the problem for the P vector
-                            size_t n = minTransitionM.row(index).n_cols; // Number of elements in P vector
-                            glp_add_cols(lp, n+2);
-                            for (size_t i = 1; i <= n; ++i) {
-                                glp_set_col_name(lp, i, ("P_" + to_string(i)).c_str());
-                                if(minTransitionM.row(index)(i - 1) == maxTransitionM.row(index)(i - 1)){
-                                    glp_set_col_bnds(lp, i, GLP_FX, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
-                                }else{
-                                    glp_set_col_bnds(lp, i, GLP_DB, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
-                                }
-                                glp_set_obj_coef(lp, i, first(i-1)); // Set objective coefficients from V vector
-                            }
-                            glp_set_col_name(lp, n+1, "T");
-                            if(minTargetM(index) == maxTargetM(index)){
-                                glp_set_col_bnds(lp, n+1, GLP_FX, minTargetM(index), maxTargetM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+1, GLP_DB, minTargetM(index), maxTargetM(index));
-                            }
-                            glp_set_obj_coef(lp, n+1, 1.0);
-                            
-                            glp_set_col_name(lp, n+2, "A");
-                            if(minAvoidM(index) == maxAvoidM(index)){
-                                glp_set_col_bnds(lp, n+2, GLP_FX, minAvoidM(index), maxAvoidM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+2, GLP_DB, minAvoidM(index), maxAvoidM(index));
-                            }
-                            glp_set_obj_coef(lp, n+2, 0.0);
-                            
-                            // Add a constraint for the sum of elements in P = 1
-                            glp_add_rows(lp, 1);
-                            glp_set_row_name(lp, 1, "Constraint");
-                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0); // Sum of P elements = 1
-                            vector<int> ia = {0}; // GLPK uses 1-based indexing, so 0 is added as a placeholder
-                            vector<int> ja(n + 3); // Indices of the P vector elements
-                            vector<double> ar(n + 3); // Coefficients for the P vector elements in the constraint
-                            for (size_t i = 1; i <= n; ++i) {
-                                ja[i] = i;
-                                ar[i] = 1.0; // Coefficient 1 for the corresponding P element
-                            }
-                            ja[n+1] = n+1;
-                            ar[n+1] = 1.0;
-                            ja[n+2] = n+2;
-                            ar[n+2] = 1.0;
-                            glp_set_mat_row(lp, 1, n+2, &ja[0], &ar[0]);
-                            
-                            // Use the simplex method to solve the LP problem
-                            glp_simplex(lp, nullptr);
-                            
-                            // Retrieve the optimal objective value and P vector values
-                            cdfAccessor[index] = 0;
-                            
-                            for (size_t i = 1; i <= n; ++i) {
-                                cdfAccessor[index] += glp_get_col_prim(lp, i)*first(i-1);
-                            }
-                            cdfAccessor[index] += glp_get_col_prim(lp,n+1);
-                            // Clean up GLPK data structures
-                            glp_delete_prob(lp);
-                        });
-                    });
-                }
-                queue.wait_and_throw();
-                /*Resize to minimise over disturbance - worst case scenario*/
-                firstnew.reshape(state_space_size, disturb_space_size);
-                first = conv_to< colvec >::from(min(firstnew,1));
-            }
-            k++;
-        }
-        cout << endl;
-        
-        if (IMDP_lower){
-            cout << "verification lower bound found, finding upper bound." << endl;
-        }else{
-            cout << "verification upper bound found, finding lower bound." << endl;
-        }
-        
-        vec second(state_space_size, 1, fill::zeros);
-        mat secondnew(state_space_size*disturb_space_size, 1, fill::zeros);
-        
-        k=0;
-        cout << "second loop iterations: " << endl;
-        
-        while (k < timeHorizon) {
-            cout << "." << flush;
-            if (IMDP_lower == true){ // for IMDP upper bound (opposite to before)
-                sycl::queue queue;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<double> cdfBuffer(secondnew.memptr(),secondnew.n_rows);
-                    
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                    queue.submit([&](sycl::handler& cgh) {
-                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                        
-                        cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size*disturb_space_size), [=](sycl::item<1> item) {
-                            size_t index = item.get_id(0);
-                            glp_term_out(GLP_OFF);
-                            glp_prob *lp;
-                            lp = glp_create_prob();
-                            glp_set_prob_name(lp, "SimpleLP");
-                            glp_set_obj_dir(lp, GLP_MAX);
-                            // Add columns (variables) to the problem for the P vector
-                            size_t n = minTransitionM.row(index).n_cols; // Number of elements in P vector
-                            glp_add_cols(lp, n+2);
-                            for (size_t i = 1; i <= n; ++i) {
-                                glp_set_col_name(lp, i, ("P_" + to_string(i)).c_str());
-                                if(minTransitionM.row(index)(i - 1) == maxTransitionM.row(index)(i - 1)){
-                                    glp_set_col_bnds(lp, i, GLP_FX, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
-                                }else{
-                                    glp_set_col_bnds(lp, i, GLP_DB, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
-                                }
-                                glp_set_obj_coef(lp, i, second(i-1)); // Set objective coefficients as 1.0, multiply by V later
-                            }
-                            glp_set_col_name(lp, n+1, "T");
-                            if(minTargetM(index) == maxTargetM(index)){
-                                glp_set_col_bnds(lp, n+1, GLP_FX, minTargetM(index), maxTargetM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+1, GLP_DB, minTargetM(index), maxTargetM(index));
-                            }
-                            glp_set_obj_coef(lp, n+1, 1.0); // Set objective coefficients from V vector
-                            
-                            glp_set_col_name(lp, n+2, "A");
-                            if(minAvoidM(index) == maxAvoidM(index)){
-                                glp_set_col_bnds(lp, n+2, GLP_FX, minAvoidM(index), maxAvoidM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+2, GLP_DB, minAvoidM(index), maxAvoidM(index));
-                            }
-                            glp_set_obj_coef(lp, n+2, 0.0); // Set objective coefficients from V vector
-                            
-                            // Add a constraint for the sum of elements in P = 1
-                            glp_add_rows(lp, 1);
-                            glp_set_row_name(lp, 1, "Constraint");
-                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0); // Sum of P elements = 1
-                            vector<int> ia = {0}; // GLPK uses 1-based indexing, so 0 is added as a placeholder
-                            vector<int> ja(n + 3); // Indices of the P vector elements
-                            vector<double> ar(n + 3); // Coefficients for the P vector elements in the constraint
-                            for (size_t i = 1; i <= n; ++i) {
-                                ja[i] = i;
-                                ar[i] = 1.0; // Coefficient 1 for the corresponding P element
-                            }
-                            ja[n+1] = n+1;
-                            ar[n+1] = 1.0;
-                            ja[n+2] = n+2;
-                            ar[n+2] = 1.0;
-                            glp_set_mat_row(lp, 1, n+2, &ja[0], &ar[0]);
-                            
-                            // Use the simplex method to solve the LP problem
-                            glp_simplex(lp, nullptr);
-                            
-                            // Retrieve the optimal objective value and P vector values
-                            
-                            cdfAccessor[index] = 0;
-                            for (size_t i = 1; i <= n; ++i) {
-                                cdfAccessor[index] += glp_get_col_prim(lp, i)*second(i-1);
-                            }
-                            cdfAccessor[index] += glp_get_col_prim(lp,n+1);
-                            // Clean up GLPK data structures
-                            glp_delete_prob(lp);
-                        });
-                    });
-                }
-                queue.wait_and_throw();
-                /*Resize to minimise over disturbance - worst case scenario*/
-                secondnew.reshape(state_space_size, disturb_space_size);
-                second = conv_to< colvec >::from(min(secondnew,1));
-            }else{ // for IMDP lower bound (opposite to first)
-                sycl::queue queue;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<double> cdfBuffer(secondnew.memptr(),secondnew.n_rows);
-                    
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                    queue.submit([&](sycl::handler& cgh) {
-                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                        
-                        cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size*disturb_space_size), [=](sycl::item<1> item) {
-                            size_t index = item.get_id(0);
-                            glp_term_out(GLP_OFF);
-                            
-                            glp_prob *lp;
-                            lp = glp_create_prob();
-                            glp_set_prob_name(lp, "SimpleLP");
-                            glp_set_obj_dir(lp, GLP_MIN);
-                            // Add columns (variables) to the problem for the P vector
-                            size_t n = minTransitionM.row(index).n_cols; // Number of elements in P vector
-                            glp_add_cols(lp, n+2);
-                            for (size_t i = 1; i <= n; ++i) {
-                                glp_set_col_name(lp, i, ("P_" + to_string(i)).c_str());
-                                if(minTransitionM.row(index)(i - 1) == maxTransitionM.row(index)(i - 1)){
-                                    glp_set_col_bnds(lp, i, GLP_FX, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
-                                }else{
-                                    glp_set_col_bnds(lp, i, GLP_DB, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
-                                }
-                                glp_set_obj_coef(lp, i, second(i-1)); // Set objective coefficients from V vector
-                            }
-                            glp_set_col_name(lp, n+1, "T");
-                            if(minTargetM(index) == maxTargetM(index)){
-                                glp_set_col_bnds(lp, n+1, GLP_FX, minTargetM(index), maxTargetM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+1, GLP_DB, minTargetM(index), maxTargetM(index));
-                            }
-                            glp_set_obj_coef(lp, n+1, 1.0);
-                            
-                            glp_set_col_name(lp, n+2, "A");
-                            if(minAvoidM(index) == maxAvoidM(index)){
-                                glp_set_col_bnds(lp, n+2, GLP_FX, minAvoidM(index), maxAvoidM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+2, GLP_DB, minAvoidM(index), maxAvoidM(index));
-                            }
-                            glp_set_obj_coef(lp, n+2, 0.0);
-                            
-                            // Add a constraint for the sum of elements in P = 1
-                            glp_add_rows(lp, 1);
-                            glp_set_row_name(lp, 1, "Constraint");
-                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0); // Sum of P elements = 1
-                            vector<int> ia = {0}; // GLPK uses 1-based indexing, so 0 is added as a placeholder
-                            vector<int> ja(n + 3); // Indices of the P vector elements
-                            vector<double> ar(n + 3); // Coefficients for the P vector elements in the constraint
-                            for (size_t i = 1; i <= n; ++i) {
-                                ja[i] = i;
-                                ar[i] = 1.0; // Coefficient 1 for the corresponding P element
-                            }
-                            ja[n+1] = n+1;
-                            ar[n+1] = 1.0;
-                            ja[n+2] = n+2;
-                            ar[n+2] = 1.0;
-                            glp_set_mat_row(lp, 1, n+2, &ja[0], &ar[0]);
-                            
-                            // Use the simplex method to solve the LP problem
-                            glp_simplex(lp, nullptr);
-                            
-                            // Retrieve the optimal objective value and P vector values
-                            cdfAccessor[index] = 0;
-                            
-                            for (size_t i = 1; i <= n; ++i) {
-                                cdfAccessor[index] += glp_get_col_prim(lp, i)*second(i-1);
-                            }
-                            cdfAccessor[index] += glp_get_col_prim(lp,n+1);
-                            // Clean up GLPK data structures
-                            glp_delete_prob(lp);
-                            
-                        });
-                    });
-                }
-                queue.wait_and_throw();
-                /*Resize to minimise over disturbance - worst case scenario*/
-                secondnew.reshape(state_space_size, disturb_space_size);
-                second = conv_to< colvec >::from(min(secondnew,1));
-            }
-            k++;
-        }
-        cout << endl;
-        
-        if (IMDP_lower){
-            cout << "Upper bound found." << endl;
-        }else{
-            cout << "Lower bound found." << endl;
-        }
-        
-        controller.set_size(state_space_size, dim_x + 2);
-        controller.cols(0,dim_x-1) = state_space;
-        controller.col(dim_x) = first;
-        controller.col(dim_x + 1) = second;
-        
-    }else if (disturb_space_size == 0){
-        vec first(state_space_size, 1, fill::zeros);
-        mat firstnew(state_space_size*input_space_size, 1, fill::zeros);
-        uvec U_pos(state_space_size, 1, fill::zeros);
-        
-        size_t k = 0;
-        cout << "first loop iterations: " << endl;
-        while (k < timeHorizon) {
-            cout << "." << flush;
-            if (IMDP_lower == true){ // for IMDP lower bound
-                
-                sycl::queue queue;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<double> cdfBuffer(firstnew.memptr(),firstnew.n_rows);
-                    
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                    queue.submit([&](sycl::handler& cgh) {
-                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                        
-                        cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size*input_space_size), [=](sycl::item<1> item) {
-                            size_t index = item.get_id(0);
-                            glp_term_out(GLP_OFF);
-                            glp_prob *lp;
-                            lp = glp_create_prob();
-                            glp_set_prob_name(lp, "SimpleLP");
-                            glp_set_obj_dir(lp, GLP_MIN);
-                            // Add columns (variables) to the problem for the P vector
-                            size_t n = minTransitionM.row(index).n_cols; // Number of elements in P vector
-                            glp_add_cols(lp, n+2);
-                            for (size_t i = 1; i <= n; ++i) {
-                                glp_set_col_name(lp, i, ("P_" + to_string(i)).c_str());
-                                if(minTransitionM.row(index)(i - 1) == maxTransitionM.row(index)(i - 1)){
-                                    glp_set_col_bnds(lp, i, GLP_FX, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
-                                }else{
-                                    glp_set_col_bnds(lp, i, GLP_DB, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
-                                }
-                                glp_set_obj_coef(lp, i, first(i-1)); // Set objective coefficients from V vector
-                            }
-                            glp_set_col_name(lp, n+1, "T");
-                            if(minTargetM(index) == maxTargetM(index)){
-                                glp_set_col_bnds(lp, n+1, GLP_FX, minTargetM(index), maxTargetM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+1, GLP_DB, minTargetM(index), maxTargetM(index));
-                            }
-                            glp_set_obj_coef(lp, n+1, 1.0);
-                            glp_set_col_name(lp, n+2, "A");
-                            if(minAvoidM(index) == maxAvoidM(index)){
-                                glp_set_col_bnds(lp, n+2, GLP_FX, minAvoidM(index), maxAvoidM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+2, GLP_DB, minAvoidM(index), maxAvoidM(index));
-                            }
-                            glp_set_obj_coef(lp, n+2, 0.0);
-                            // Add a constraint for the sum of elements in P = 1
-                            glp_add_rows(lp, 1);
-                            glp_set_row_name(lp, 1, "Constraint");
-                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0); // Sum of P elements = 1
-                            vector<int> ia = {0}; // GLPK uses 1-based indexing, so 0 is added as a placeholder
-                            vector<int> ja(n + 3); // Indices of the P vector elements
-                            vector<double> ar(n + 3); // Coefficients for the P vector elements in the constraint
-                            for (size_t i = 1; i <= n; ++i) {
-                                ja[i] = i;
-                                ar[i] = 1.0; // Coefficient 1 for the corresponding P element
-                            }
-                            ja[n+1] = n+1;
-                            ar[n+1] = 1.0;
-                            ja[n+2] = n+2;
-                            ar[n+2] = 1.0;
-                            glp_set_mat_row(lp, 1, n+2, &ja[0], &ar[0]);
-                            
-                            // Use the simplex method to solve the LP problem
-                            glp_simplex(lp, nullptr);
-                            
-                            // Retrieve the optimal objective value and P vector values
-                            cdfAccessor[index] = 0;
-                            
-                            for (size_t i = 1; i <= n; ++i) {
-                                cdfAccessor[index] += glp_get_col_prim(lp, i)*first(i-1);
-                            }
-                            cdfAccessor[index] += glp_get_col_prim(lp,n+1);
-                            // Clean up GLPK data structures
-                            glp_delete_prob(lp);
-                        });
-                    });
-                }
-                queue.wait_and_throw();
-                
-                /*Resize to maximise over input*/
-                firstnew.reshape(state_space_size, input_space_size);
-                first = conv_to< colvec >::from(max(firstnew,1));
-                
-                sycl::queue Q;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<uword> cdfBuffer(U_pos.memptr(),U_pos.n_rows);
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                    Q.submit([&](sycl::handler& cgh) {
-                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                        cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size), [=](sycl::item<1> item) {
-                            size_t index = item.get_id(0);
-                            firstnew.row(index).max(cdfAccessor[index]);
-                        });
-                    });
-                }
-                Q.wait_and_throw();
-                
-            }else{ // for IMDP upper bound
-                
-                sycl::queue queue;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<double> cdfBuffer(firstnew.memptr(),firstnew.n_rows);
-                    
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                    queue.submit([&](sycl::handler& cgh) {
-                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                        
-                        cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size*input_space_size), [=](sycl::item<1> item) {
-                            size_t index = item.get_id(0);
-                            
-                            glp_term_out(GLP_OFF);
-                            glp_prob *lp;
-                            lp = glp_create_prob();
-                            glp_set_prob_name(lp, "SimpleLP");
-                            glp_set_obj_dir(lp, GLP_MAX);
-                            // Add columns (variables) to the problem for the P vector
-                            size_t n = minTransitionM.row(index).n_cols; // Number of elements in P vector
-                            glp_add_cols(lp, n+2);
-                            for (size_t i = 1; i <= n; ++i) {
-                                glp_set_col_name(lp, i, ("P_" + to_string(i)).c_str());
-                                if(minTransitionM.row(index)(i - 1) == maxTransitionM.row(index)(i - 1)){
-                                    glp_set_col_bnds(lp, i, GLP_FX, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
-                                }else{
-                                    glp_set_col_bnds(lp, i, GLP_DB, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
-                                }
-                                glp_set_obj_coef(lp, i, first(i-1)); // Set objective coefficients from V vector
-                            }
-                            glp_set_col_name(lp, n+1, "T");
-                            if(minTargetM(index) == maxTargetM(index)){
-                                glp_set_col_bnds(lp, n+1, GLP_FX, minTargetM(index), maxTargetM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+1, GLP_DB, minTargetM(index), maxTargetM(index));
-                            }
-                            glp_set_obj_coef(lp, n+1, 1.0);
-                            glp_set_col_name(lp, n+2, "A");
-                            if(minAvoidM(index) == maxAvoidM(index)){
-                                glp_set_col_bnds(lp, n+2, GLP_FX, minAvoidM(index), maxAvoidM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+2, GLP_DB, minAvoidM(index), maxAvoidM(index));
-                            }
-                            glp_set_obj_coef(lp, n+2, 0.0);
-                            
-                            // Add a constraint for the sum of elements in P = 1
-                            glp_add_rows(lp, 1);
-                            glp_set_row_name(lp, 1, "Constraint");
-                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0); // Sum of P elements = 1
-                            vector<int> ia = {0}; // GLPK uses 1-based indexing, so 0 is added as a placeholder
-                            vector<int> ja(n + 3); // Indices of the P vector elements
-                            vector<double> ar(n + 3); // Coefficients for the P vector elements in the constraint
-                            for (size_t i = 1; i <= n; ++i) {
-                                ja[i] = i;
-                                ar[i] = 1.0; // Coefficient 1 for the corresponding P element
-                            }
-                            ja[n+1] = n+1;
-                            ar[n+1] = 1.0;
-                            ja[n+2] = n+2;
-                            ar[n+2] = 1.0;
-                            glp_set_mat_row(lp, 1, n+2, &ja[0], &ar[0]);
-                            
-                            // Use the simplex method to solve the LP problem
-                            glp_simplex(lp, nullptr);
-                            
-                            // Retrieve the optimal objective value and P vector values
-                            
-                            cdfAccessor[index] = 0;
-                            
-                            for (size_t i = 1; i <= n; ++i) {
-                                cdfAccessor[index] += glp_get_col_prim(lp, i)*first(i-1);
-                            }
-                            cdfAccessor[index] += glp_get_col_prim(lp,n+1);
-                            // Clean up GLPK data structures
-                            glp_delete_prob(lp);
-                        });
-                    });
-                }
-                queue.wait_and_throw();
-                
-                /*Resize to maximise over input*/
-                firstnew.reshape(state_space_size, input_space_size);
-                first = conv_to< colvec >::from(max(firstnew,1));
-                
-                /*Choose input to store for controller*/
-                sycl::queue Q;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<uword> cdfBuffer(U_pos.memptr(),U_pos.n_rows);
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                    Q.submit([&](sycl::handler& cgh) {
-                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                        cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size), [=](sycl::item<1> item) {
-                            size_t index = item.get_id(0);
-                            firstnew.row(index).max(cdfAccessor[index]);
-                        });
-                    });
-                }
-                Q.wait_and_throw();
-                
-            }
-            k++;
-        }
-        cout << endl;
-        if (IMDP_lower){
-            cout << "control policy for lower bound found, finding upper bound." << endl;
-        }else{
-            cout << "control policy for upper bound found, finding lower bound." << endl;
-        }
-        
-        vec second(state_space_size, 1, fill::zeros);
-        mat secondnew(state_space_size, 1, fill::zeros);
-        k = 0;
-        cout << "second loop iterations: " << endl;
-        mat tempTmin(state_space_size, state_space_size, fill::zeros);
-        mat tempTmax(state_space_size, state_space_size, fill::zeros);
-        vec tempTTmin(state_space_size, 1, fill::zeros);
-        vec tempTTmax(state_space_size, 1, fill::zeros);
-        vec tempATmax(state_space_size, 1, fill::zeros);
-        vec tempATmin(state_space_size, 1, fill::zeros);
-        
-        cout << "Create reduced matrix where input is fixed." << endl;
-        for (size_t i = 0; i < state_space_size; i++){
-            tempTmin.row(i) = minTransitionM.row(U_pos(i)*state_space_size+i);
-            tempTmax.row(i) = maxTransitionM.row(U_pos(i)*state_space_size+i);
-            tempTTmin(i)= minTargetM(U_pos(i)*state_space_size+i);
-            tempTTmax(i)= maxTargetM(U_pos(i)*state_space_size+i);
-            tempATmin(i) = minAvoidM(U_pos(i)*state_space_size+i);
-            tempATmax(i) = maxAvoidM(U_pos(i)*state_space_size+i);
-        }
-        
-        cout << "Matrix Fixed" << endl;
-        while (k < timeHorizon) {
-            cout << "." << flush;
-            if (IMDP_lower == true){ // for IMDP upper bound (opposite to before)
-                
-                sycl::queue queue;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<double> cdfBuffer(secondnew.memptr(),secondnew.n_rows);
-                    
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                    queue.submit([&](sycl::handler& cgh) {
-                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                        
-                        cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size), [=](sycl::item<1> item) {
-                            size_t index = item.get_id(0);
-                            glp_term_out(GLP_OFF);
-                            glp_prob *lp;
-                            lp = glp_create_prob();
-                            glp_set_prob_name(lp, "SimpleLP");
-                            glp_set_obj_dir(lp, GLP_MAX);
-                            // Add columns (variables) to the problem for the P vector
-                            size_t n = tempTmin.row(index).n_cols; // Number of elements in P vector
-                            glp_add_cols(lp, n+2);
-                            for (size_t i = 1; i <= n; ++i) {
-                                glp_set_col_name(lp, i, ("P_" + to_string(i)).c_str());
-                                if(tempTmin.row(index)(i - 1) == tempTmax.row(index)(i - 1)){
-                                    glp_set_col_bnds(lp, i, GLP_FX, tempTmin.row(index)(i - 1), tempTmax.row(index)(i - 1));
-                                }else{
-                                    glp_set_col_bnds(lp, i, GLP_DB, tempTmin.row(index)(i - 1), tempTmax.row(index)(i - 1));
-                                }
-                                glp_set_obj_coef(lp, i, second(i-1)); // Set objective coefficients from V vector
-                            }
-                            glp_set_col_name(lp, n+1, "T");
-                            if(tempTTmin(index) == tempTTmax(index)){
-                                glp_set_col_bnds(lp, n+1, GLP_FX, tempTTmin(index), tempTTmax(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+1, GLP_DB,tempTTmin(index), tempTTmax(index));
-                            }
-                            glp_set_obj_coef(lp, n+1, 1.0);
-                            glp_set_col_name(lp, n+2, "A");
-                            if(tempATmin(index) == tempATmax(index)){
-                                glp_set_col_bnds(lp, n+2, GLP_FX, tempATmin(index), tempATmax(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+2, GLP_DB, tempATmin(index), tempATmax(index));
-                            }
-                            glp_set_obj_coef(lp, n+2, 0.0);
-                            
-                            // Add a constraint for the sum of elements in P = 1
-                            glp_add_rows(lp, 1);
-                            glp_set_row_name(lp, 1, "Constraint");
-                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0); // Sum of P elements = 1
-                            vector<int> ia = {0}; // GLPK uses 1-based indexing, so 0 is added as a placeholder
-                            vector<int> ja(n + 3); // Indices of the P vector elements
-                            vector<double> ar(n + 3); // Coefficients for the P vector elements in the constraint
-                            for (size_t i = 1; i <= n; ++i) {
-                                ja[i] = i;
-                                ar[i] = 1.0; // Coefficient 1 for the corresponding P element
-                            }
-                            ja[n+1] = n+1;
-                            ar[n+1] = 1.0;
-                            ja[n+2] = n+2;
-                            ar[n+2] = 1.0;
-                            glp_set_mat_row(lp, 1, n+2, &ja[0], &ar[0]);
-                            
-                            // Use the simplex method to solve the LP problem
-                            glp_simplex(lp, nullptr);
-                            
-                            // Retrieve the optimal objective value and P vector values
-                            cdfAccessor[index] = 0;
-                            for (size_t i = 1; i <= n; ++i) {
-                                cdfAccessor[index] += glp_get_col_prim(lp, i)*second(i-1);
-                            }
-                            cdfAccessor[index] += glp_get_col_prim(lp,n+1);
-                            // Clean up GLPK data structures
-                            glp_delete_prob(lp);
-                            
-                        });
-                    });
-                }
-                queue.wait_and_throw();
-                second = secondnew;
-                
-            }else{ // for IMDP lower bound (opposite to first)
-                
-                sycl::queue queue;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<double> cdfBuffer(secondnew.memptr(),secondnew.n_rows);
-                    
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                    queue.submit([&](sycl::handler& cgh) {
-                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                        
-                        cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size), [=](sycl::item<1> item) {
-                            size_t index = item.get_id(0);
-                            
-                            glp_term_out(GLP_OFF);
-                            glp_prob *lp;
-                            lp = glp_create_prob();
-                            glp_set_prob_name(lp, "SimpleLP");
-                            glp_set_obj_dir(lp, GLP_MIN);
-                            // Add columns (variables) to the problem for the P vector
-                            size_t n = tempTmin.row(index).n_cols; // Number of elements in P vector
-                            glp_add_cols(lp, n+2);
-                            for (size_t i = 1; i <= n; ++i) {
-                                glp_set_col_name(lp, i, ("P_" + to_string(i)).c_str());
-                                if(tempTmin.row(index)(i - 1) == tempTmax.row(index)(i - 1)){
-                                    glp_set_col_bnds(lp, i, GLP_FX, tempTmin.row(index)(i - 1), tempTmax.row(index)(i - 1));
-                                }else{
-                                    glp_set_col_bnds(lp, i, GLP_DB, tempTmin.row(index)(i - 1), tempTmax.row(index)(i - 1));
-                                }
-                                glp_set_obj_coef(lp, i, second(i-1)); // Set objective coefficients as 1.0, multiply by V later
-                            }
-                            glp_set_col_name(lp, n+1, "T");
-                            if(tempTTmin(index) == tempTTmax(index)){
-                                glp_set_col_bnds(lp, n+1, GLP_FX, tempTTmin(index), tempTTmax(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+1, GLP_DB,tempTTmin(index), tempTTmax(index));
-                            }
-                            glp_set_obj_coef(lp, n+1, 1.0); // Set objective coefficients from V vector
-                            glp_set_col_name(lp, n+2, "A");
-                            if(tempATmin(index) == tempATmax(index)){
-                                glp_set_col_bnds(lp, n+2, GLP_FX, tempATmin(index), tempATmax(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+2, GLP_DB, tempATmin(index), tempATmax(index));
-                            }
-                            glp_set_obj_coef(lp, n+2, 0.0); // Set objective coefficients from V vector
-                            
-                            // Add a constraint for the sum of elements in P = 1
-                            glp_add_rows(lp, 1);
-                            glp_set_row_name(lp, 1, "Constraint");
-                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0); // Sum of P elements = 1
-                            vector<int> ia = {0}; // GLPK uses 1-based indexing, so 0 is added as a placeholder
-                            vector<int> ja(n + 3); // Indices of the P vector elements
-                            vector<double> ar(n + 3); // Coefficients for the P vector elements in the constraint
-                            for (size_t i = 1; i <= n; ++i) {
-                                ja[i] = i;
-                                ar[i] = 1.0; // Coefficient 1 for the corresponding P element
-                            }
-                            ja[n+1] = n+1;
-                            ar[n+1] = 1.0;
-                            ja[n+2] = n+2;
-                            ar[n+1] = 1.0;
-                            glp_set_mat_row(lp, 1, n+2, &ja[0], &ar[0]);
-                            
-                            // Use the simplex method to solve the LP problem
-                            glp_simplex(lp, nullptr);
-                            
-                            // Retrieve the optimal objective value and P vector values
-                            cdfAccessor[index] = 0;
-                            for (size_t i = 1; i <= n; ++i) {
-                                cdfAccessor[index] += glp_get_col_prim(lp, i)*second(i-1);
-                            }
-                            cdfAccessor[index] += glp_get_col_prim(lp,n+1);
-                            // Clean up GLPK data structures
-                            glp_delete_prob(lp);
-                        });
-                    });
-                }
-                queue.wait_and_throw();
-                second = secondnew;
-            }
-            k++;
-        }
-        cout << endl;
-        
-        if (IMDP_lower){
-            cout << "Upper bound found." << endl;
-        }else{
-            cout << "Lower bound found." << endl;
-        }
-        
-        controller.set_size(state_space_size, dim_x + dim_u + 2);
-        controller.cols(0,dim_x-1) = state_space;
-        controller.col(dim_x+dim_u) = first;
-        controller.col(dim_x+dim_u + 1) = second;
-        for (size_t i = 0; i < state_space_size; ++i) {
-            controller.row(i).cols(dim_x, dim_x + dim_u - 1) = input_space.row(U_pos(i));
-        }
-    }else{
-        vec first(state_space_size, 1, fill::zeros);
-        mat firstnew(state_space_size*input_space_size*disturb_space_size, 1, fill::zeros);
-        uvec U_pos(state_space_size, 1, fill::zeros);
-        mat input_and_state(input_space_size*state_space_size, 1, fill::zeros);
-        
-        size_t k = 0;
-        cout << "first loop iterations: " << endl;
-        //for (int t = 0; t < 4; t++){
-        while (k < timeHorizon) {
-            cout << "." << flush;
-            if (IMDP_lower == true){ // for IMDP lower bound
-                sycl::queue queue;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<double> cdfBuffer(firstnew.memptr(),firstnew.n_rows);
-                    
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                    queue.submit([&](sycl::handler& cgh) {
-                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                        
-                        cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size*input_space_size*disturb_space_size), [=](sycl::item<1> item) {
-                            size_t index = item.get_id(0);
-                            glp_term_out(GLP_OFF);
-                            glp_prob *lp;
-                            lp = glp_create_prob();
-                            glp_set_prob_name(lp, "SimpleLP");
-                            glp_set_obj_dir(lp, GLP_MIN);
-                            // Add columns (variables) to the problem for the P vector
-                            size_t n = minTransitionM.row(index).n_cols; // Number of elements in P vector
-                            glp_add_cols(lp, n+2);
-                            for (size_t i = 1; i <= n; ++i) {
-                                glp_set_col_name(lp, i, ("P_" + to_string(i)).c_str());
-                                if(minTransitionM.row(index)(i - 1) == maxTransitionM.row(index)(i - 1)){
-                                    glp_set_col_bnds(lp, i, GLP_FX, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
-                                }else{
-                                    glp_set_col_bnds(lp, i, GLP_DB, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
-                                }
-                                glp_set_obj_coef(lp, i, first(i-1)); // Set objective coefficients from V vector
-                            }
-                            glp_set_col_name(lp, n+1, "T");
-                            if(minTargetM(index) == maxTargetM(index)){
-                                glp_set_col_bnds(lp, n+1, GLP_FX, minTargetM(index), maxTargetM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+1, GLP_DB, minTargetM(index), maxTargetM(index));
-                            }
-                            glp_set_obj_coef(lp, n+1, 1.0);
-                            
-                            glp_set_col_name(lp, n+2, "A");
-                            if(minAvoidM(index) == maxAvoidM(index)){
-                                glp_set_col_bnds(lp, n+2, GLP_FX, minAvoidM(index), maxAvoidM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+2, GLP_DB, minAvoidM(index), maxAvoidM(index));
-                            }
-                            glp_set_obj_coef(lp, n+2, 0.0);
-                            
-                            // Add a constraint for the sum of elements in P = 1
-                            glp_add_rows(lp, 1);
-                            glp_set_row_name(lp, 1, "Constraint");
-                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0); // Sum of P elements = 1
-                            vector<int> ia = {0}; // GLPK uses 1-based indexing, so 0 is added as a placeholder
-                            vector<int> ja(n + 3); // Indices of the P vector elements
-                            vector<double> ar(n + 3); // Coefficients for the P vector elements in the constraint
-                            for (size_t i = 1; i <= n; ++i) {
-                                ja[i] = i;
-                                ar[i] = 1.0; // Coefficient 1 for the corresponding P element
-                            }
-                            ja[n+1] = n+1;
-                            ar[n+1] = 1.0;
-                            ja[n+2] = n+2;
-                            ar[n+1] = 1.0;
-                            glp_set_mat_row(lp, 1, n+2, &ja[0], &ar[0]);
-                            
-                            // Use the simplex method to solve the LP problem
-                            glp_simplex(lp, nullptr);
-                            
-                            // Retrieve the optimal objective value and P vector values
-                            
-                            cdfAccessor[index] = 0;
-                            
-                            for (size_t i = 1; i <= n; ++i) {
-                                cdfAccessor[index] += glp_get_col_prim(lp, i)*first(i-1);
-                            }
-                            cdfAccessor[index] += glp_get_col_prim(lp,n+1);
-                            // Clean up GLPK data structures
-                            glp_delete_prob(lp);
-                            
-                        });
-                    });
-                }
-                queue.wait_and_throw();
-                /*Resize to minimise over disturbance - worst case scenario*/
-                firstnew.reshape(state_space_size*input_space_size,disturb_space_size);
-                input_and_state = min(firstnew,1);
-                
-                /*Resize to maximise over input*/
-                input_and_state.reshape(state_space_size, input_space_size);
-                first = conv_to< colvec >::from(max(input_and_state,1));
-                /*Choose input to store for controller*/
-                sycl::queue Q;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<uword> cdfBuffer(U_pos.memptr(),U_pos.n_rows);
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                    Q.submit([&](sycl::handler& cgh) {
-                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                        cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size), [=](sycl::item<1> item) {
-                            size_t index = item.get_id(0);
-                            input_and_state.row(index).max(cdfAccessor[index]);
-                        });
-                    });
-                }
-                Q.wait_and_throw();
-            }else{ // for IMDP upper bound
-                sycl::queue queue;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<double> cdfBuffer(firstnew.memptr(),firstnew.n_rows);
-                    
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                    queue.submit([&](sycl::handler& cgh) {
-                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                        
-                        cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size*input_space_size*disturb_space_size), [=](sycl::item<1> item) {
-                            size_t index = item.get_id(0);
-                            glp_term_out(GLP_OFF);
-                            glp_prob *lp;
-                            lp = glp_create_prob();
-                            glp_set_prob_name(lp, "SimpleLP");
-                            glp_set_obj_dir(lp, GLP_MAX);
-                            // Add columns (variables) to the problem for the P vector
-                            size_t n = minTransitionM.row(index).n_cols; // Number of elements in P vector
-                            glp_add_cols(lp, n+2);
-                            for (size_t i = 1; i <= n; ++i) {
-                                glp_set_col_name(lp, i, ("P_" + to_string(i)).c_str());
-                                if(minTransitionM.row(index)(i - 1) == maxTransitionM.row(index)(i - 1)){
-                                    glp_set_col_bnds(lp, i, GLP_FX, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
-                                }else{
-                                    glp_set_col_bnds(lp, i, GLP_DB, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
-                                }
-                                glp_set_obj_coef(lp, i, first(i-1)); // Set objective coefficients from V vector
-                            }
-                            glp_set_col_name(lp, n+1, "T");
-                            if(minTargetM(index) == maxTargetM(index)){
-                                glp_set_col_bnds(lp, n+1, GLP_FX, minTargetM(index), maxTargetM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+1, GLP_DB, minTargetM(index), maxTargetM(index));
-                            }
-                            glp_set_obj_coef(lp, n+1, 1.0);
-                            
-                            glp_set_col_name(lp, n+2, "A");
-                            if(minAvoidM(index) == maxAvoidM(index)){
-                                glp_set_col_bnds(lp, n+2, GLP_FX, minAvoidM(index), maxAvoidM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+2, GLP_DB, minAvoidM(index), maxAvoidM(index));
-                            }
-                            glp_set_obj_coef(lp, n+2, 0.0);
-                            
-                            // Add a constraint for the sum of elements in P = 1
-                            glp_add_rows(lp, 1);
-                            glp_set_row_name(lp, 1, "Constraint");
-                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0); // Sum of P elements = 1
-                            vector<int> ia = {0}; // GLPK uses 1-based indexing, so 0 is added as a placeholder
-                            vector<int> ja(n + 3); // Indices of the P vector elements
-                            vector<double> ar(n + 3); // Coefficients for the P vector elements in the constraint
-                            for (size_t i = 1; i <= n; ++i) {
-                                ja[i] = i;
-                                ar[i] = 1.0; // Coefficient 1 for the corresponding P element
-                            }
-                            ja[n+1] = n+1;
-                            ar[n+1] = 1.0;
-                            ja[n+2] = n+2;
-                            ar[n+2] = 1.0;
-                            glp_set_mat_row(lp, 1, n+2, &ja[0], &ar[0]);
-                            
-                            // Use the simplex method to solve the LP problem
-                            glp_simplex(lp, nullptr);
-                            
-                            // Retrieve the optimal objective value and P vector values
-                            
-                            cdfAccessor[index] = 0;
-                            
-                            for (size_t i = 1; i <= n; ++i) {
-                                cdfAccessor[index] += glp_get_col_prim(lp, i)*first(i-1);
-                            }
-                            cdfAccessor[index] += glp_get_col_prim(lp,n+1);
-                            // Clean up GLPK data structures
-                            glp_delete_prob(lp);
-                            
-                        });
-                    });
-                }
-                queue.wait_and_throw();
-                /*Resize to maximise over disturbance - best case scenario*/
-                firstnew.reshape(state_space_size*input_space_size,disturb_space_size);
-                input_and_state = min(firstnew,1);
-                
-                /*Resize to maximise over input*/
-                input_and_state.reshape(state_space_size, input_space_size);
-                first = conv_to< colvec >::from(max(input_and_state,1));
-                
-                sycl::queue Q;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<uword> cdfBuffer(U_pos.memptr(),U_pos.n_rows);
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                    Q.submit([&](sycl::handler& cgh) {
-                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                        cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size), [=](sycl::item<1> item) {
-                            size_t index = item.get_id(0);
-                            input_and_state.row(index).max(cdfAccessor[index]);
-                        });
-                    });
-                }
-                Q.wait_and_throw();
-            }
-            k++;
-        }
-        cout << endl;
-        
-        if (IMDP_lower){
-            cout << "control policy for lower bound found, finding upper bound." << endl;
-        }else{
-            cout << "control policy for upper bound found, finding lower bound." << endl;
-        }
-        vec second(state_space_size, 1, fill::zeros);
-        mat secondnew(state_space_size*disturb_space_size, 1, fill::zeros);
-        
-        mat tempTmin(state_space_size*disturb_space_size, state_space_size, fill::zeros);
-        mat tempTmax(state_space_size*disturb_space_size, state_space_size, fill::zeros);
-        vec tempTTmin(state_space_size*disturb_space_size, 1, fill::zeros);
-        vec tempTTmax(state_space_size*disturb_space_size, 1, fill::zeros);
-        vec tempATmin(state_space_size*disturb_space_size, 1, fill::zeros);
-        vec tempATmax(state_space_size*disturb_space_size, 1, fill::zeros);
-        
-        cout << "Create reduced matrix where input is fixed." << endl;
-        for (size_t j = 0; j < disturb_space_size; j++){
-            for (size_t i = 0; i < state_space_size; i++){
-                tempTmin.row(j*state_space_size+ i) = minTransitionM.row(j*input_space_size*state_space_size+U_pos(i)*state_space_size+i);
-                tempTmax.row(j*state_space_size+i) = maxTransitionM.row(j*input_space_size*state_space_size+U_pos(i)*state_space_size+i);
-                tempTTmin(j*state_space_size+i)= minTargetM(j*input_space_size*state_space_size+U_pos(i)*state_space_size+i);
-                tempTTmax(j*state_space_size+i)= maxTargetM(j*input_space_size*state_space_size+U_pos(i)*state_space_size+i);
-                tempATmin(j*state_space_size+i)= minAvoidM(j*input_space_size*state_space_size+U_pos(i)*state_space_size+i);
-                tempATmax(j*state_space_size+i)= maxAvoidM(j*input_space_size*state_space_size+U_pos(i)*state_space_size+i);
-            }
-        }
-        
-        k=0;
-        cout << "second loop iterations: " << endl;
-        
-        while (k < timeHorizon) {
-            cout << "." << flush;
-            if (IMDP_lower == true){ // for IMDP upper bound (opposite to before)
-                sycl::queue queue;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<double> cdfBuffer(secondnew.memptr(),secondnew.n_rows);
-                    
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                    queue.submit([&](sycl::handler& cgh) {
-                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                        
-                        cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size*disturb_space_size), [=](sycl::item<1> item) {
-                            size_t index = item.get_id(0);
-                            
-                            glp_term_out(GLP_OFF);
-                            glp_prob *lp;
-                            lp = glp_create_prob();
-                            glp_set_prob_name(lp, "SimpleLP");
-                            glp_set_obj_dir(lp, GLP_MAX);
-                            // Add columns (variables) to the problem for the P vector
-                            size_t n = tempTmin.row(index).n_cols; // Number of elements in P vector
-                            glp_add_cols(lp, n+2);
-                            for (size_t i = 1; i <= n; ++i) {
-                                glp_set_col_name(lp, i, ("P_" + to_string(i)).c_str());
-                                if(tempTmin.row(index)(i - 1) == tempTmax.row(index)(i - 1)){
-                                    glp_set_col_bnds(lp, i, GLP_FX, tempTmin.row(index)(i - 1), tempTmax.row(index)(i - 1));
-                                }else{
-                                    glp_set_col_bnds(lp, i, GLP_DB, tempTmin.row(index)(i - 1), tempTmax.row(index)(i - 1));
-                                }
-                                glp_set_obj_coef(lp, i, second(i-1)); // Set objective coefficients from V vector
-                            }
-                            glp_set_col_name(lp, n+1, "T");
-                            if(tempTTmin(index) == tempTTmax(index)){
-                                glp_set_col_bnds(lp, n+1, GLP_FX, tempTTmin(index), tempTTmax(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+1, GLP_DB,tempTTmin(index), tempTTmax(index));
-                            }
-                            glp_set_obj_coef(lp, n+1, 1.0);
-                            
-                            glp_set_col_name(lp, n+2, "A");
-                            if(tempATmin(index) == tempATmax(index)){
-                                glp_set_col_bnds(lp, n+1, GLP_FX, tempATmin(index), tempATmax(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+1, GLP_DB,tempATmin(index), tempATmax(index));
-                            }
-                            glp_set_obj_coef(lp, n+2, 0.0);
-                            
-                            // Add a constraint for the sum of elements in P = 1
-                            glp_add_rows(lp, 1);
-                            glp_set_row_name(lp, 1, "Constraint");
-                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0); // Sum of P elements = 1
-                            vector<int> ia = {0}; // GLPK uses 1-based indexing, so 0 is added as a placeholder
-                            vector<int> ja(n + 3); // Indices of the P vector elements
-                            vector<double> ar(n + 3); // Coefficients for the P vector elements in the constraint
-                            for (size_t i = 1; i <= n; ++i) {
-                                ja[i] = i;
-                                ar[i] = 1.0; // Coefficient 1 for the corresponding P element
-                            }
-                            ja[n+1] = n+1;
-                            ar[n+1] = 1.0;
-                            ja[n+2] = n+2;
-                            ar[n+2] = 1.0;
-                            glp_set_mat_row(lp, 1, n+2, &ja[0], &ar[0]);
-                            
-                            // Use the simplex method to solve the LP problem
-                            glp_simplex(lp, nullptr);
-                            
-                            // Retrieve the optimal objective value and P vector values
-                            cdfAccessor[index] = 0;
-                            for (size_t i = 1; i <= n; ++i) {
-                                cdfAccessor[index] += glp_get_col_prim(lp, i)*second(i-1);
-                            }
-                            cdfAccessor[index] += glp_get_col_prim(lp,n+1);
-                            // Clean up GLPK data structures
-                            glp_delete_prob(lp);
-                        });
-                    });
-                }
-                queue.wait_and_throw();
-                
-                /*Resize to maximise over disturbance - best case scenario*/
-                secondnew.reshape(state_space_size,disturb_space_size);
-                second = conv_to< colvec >::from(min(secondnew,1));
-                
-                
-            }else{ // for IMDP lower bound (opposite to first)
-                sycl::queue queue;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<double> cdfBuffer(secondnew.memptr(),secondnew.n_rows);
-                    
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                    queue.submit([&](sycl::handler& cgh) {
-                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                        
-                        cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size*disturb_space_size), [=](sycl::item<1> item) {
-                            size_t index = item.get_id(0);
-                            glp_term_out(GLP_OFF);
-                            
-                            glp_prob *lp;
-                            lp = glp_create_prob();
-                            glp_set_prob_name(lp, "SimpleLP");
-                            glp_set_obj_dir(lp, GLP_MIN);
-                            // Add columns (variables) to the problem for the P vector
-                            size_t n = tempTmin.row(index).n_cols; // Number of elements in P vector
-                            glp_add_cols(lp, n+2);
-                            for (size_t i = 1; i <= n; ++i) {
-                                glp_set_col_name(lp, i, ("P_" + to_string(i)).c_str());
-                                if(tempTmin.row(index)(i - 1) == tempTmax.row(index)(i - 1)){
-                                    glp_set_col_bnds(lp, i, GLP_FX, tempTmin.row(index)(i - 1), tempTmax.row(index)(i - 1));
-                                }else{
-                                    glp_set_col_bnds(lp, i, GLP_DB, tempTmin.row(index)(i - 1), tempTmax.row(index)(i - 1));
-                                }
-                                glp_set_obj_coef(lp, i, second(i-1)); // Set objective coefficients from V vector
-                            }
-                            glp_set_col_name(lp, n+1, "T");
-                            if(tempTTmin(index) == tempTTmax(index)){
-                                glp_set_col_bnds(lp, n+1, GLP_FX, tempTTmin(index), tempTTmax(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+1, GLP_DB,tempTTmin(index), tempTTmax(index));
-                            }
-                            glp_set_obj_coef(lp, n+1, 1.0);
-                            
-                            glp_set_col_name(lp, n+2, "A");
-                            if(tempATmin(index) == tempATmax(index)){
-                                glp_set_col_bnds(lp, n+1, GLP_FX, tempATmin(index), tempATmax(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+1, GLP_DB,tempATmin(index), tempATmax(index));
-                            }
-                            glp_set_obj_coef(lp, n+2, 0.0);
-                            
-                            // Add a constraint for the sum of elements in P = 1
-                            glp_add_rows(lp, 1);
-                            glp_set_row_name(lp, 1, "Constraint");
-                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0); // Sum of P elements = 1
-                            vector<int> ia = {0}; // GLPK uses 1-based indexing, so 0 is added as a placeholder
-                            vector<int> ja(n + 3); // Indices of the P vector elements
-                            vector<double> ar(n + 3); // Coefficients for the P vector elements in the constraint
-                            for (size_t i = 1; i <= n; ++i) {
-                                ja[i] = i;
-                                ar[i] = 1.0; // Coefficient 1 for the corresponding P element
-                            }
-                            ja[n+1] = n+1;
-                            ar[n+1] = 1.0;
-                            ja[n+2] = n+2;
-                            ar[n+2] = 1.0;
-                            //glp_set_matrix(lp, n, ia, ja, ar);
-                            glp_set_mat_row(lp, 1, n+2, &ja[0], &ar[0]);
-                            
-                            // Use the simplex method to solve the LP problem
-                            glp_simplex(lp, nullptr);
-                            
-                            // Retrieve the optimal objective value and P vector values
-                            cdfAccessor[index] = 0;
-                            for (size_t i = 1; i <= n; ++i) {
-                                cdfAccessor[index] += glp_get_col_prim(lp, i)*second(i-1);
-                            }
-                            cdfAccessor[index] += glp_get_col_prim(lp,n+1);
-                            // Clean up GLPK data structures
-                            glp_delete_prob(lp);
-                        });
-                    });
-                }
-                queue.wait_and_throw();
-                
-                /*Resize to minimise over disturbance - worst case scenario*/
-                secondnew.reshape(state_space_size,disturb_space_size);
-                second = conv_to< colvec >::from(min(secondnew,1));
-                
-            }
-            k++;
-        }
-        cout << endl;
-        
-        if (IMDP_lower){
-            cout << "Upper bound found." << endl;
-        }else{
-            cout << "Lower bound found." << endl;
-        }
-        
-        controller.set_size(state_space_size, dim_x + dim_u + 2);
-        controller.cols(0,dim_x-1) = state_space;
-        controller.col(dim_x+dim_u) = first;
-        controller.col(dim_x+dim_u + 1) = second;
-        for (size_t i = 0; i < state_space_size; ++i) {
-            controller.row(i).cols(dim_x, dim_x + dim_u - 1) = input_space.row(U_pos(i));
-        }
-    }
-    // Stop the timer
-    auto end = chrono::steady_clock::now();
-    auto duration = chrono::duration_cast<chrono::milliseconds>(end - start);
-    cout << "Execution time: " << duration.count()/1000.0 << " seconds" << endl;
+    finiteHorizonControllerImpl(IMDP_lower, timeHorizon, true);
 }
+
+/// finite horizon reachability synthesis - DEPRECATED: Original implementation
+/// that has been replaced by finiteHorizonControllerImpl(IMDP_lower, timeHorizon, true) above.
+/// This is kept for reference during validation, and should be deleted after verification.
 
 /// finite horizon safety synthesis
 void IMDP::finiteHorizonSafeController(bool IMDP_lower, size_t timeHorizon) {
-    auto start = chrono::steady_clock::now();
-    cout << "Finding control policy for infinite horizon safe controller... " << endl;
-    
-    cout << "Approximate memory required if stored (each): " << minTargetM.n_rows*sizeof(double)/1000000.0 << "Mb, " << minTargetM.n_rows*sizeof(double)/1000000000.0 << "Gb" << endl;
-    
-    if(input_space_size == 0 && disturb_space_size == 0){
-        vec first(state_space_size, 1, fill::ones);
-        vec firstnew(state_space_size, 1, fill::ones);
-        
-        size_t k = 0;
-        cout << "first loop iterations: " << endl;
-        //for (int t = 0; t < 4; t++){
-        while (k != timeHorizon) {
-            cout << "." << flush;
-            if (IMDP_lower == true){ // for IMDP lower bound
-                sycl::queue queue;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<double> cdfBuffer(firstnew.memptr(),firstnew.n_rows);
-                    
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                    queue.submit([&](sycl::handler& cgh) {
-                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                        
-                        cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size), [=](sycl::item<1> item) {
-                            size_t index = item.get_id(0);
-                            
-                            glp_term_out(GLP_OFF);
-                            glp_prob *lp;
-                            lp = glp_create_prob();
-                            glp_set_prob_name(lp, "SimpleLP");
-                            glp_set_obj_dir(lp, GLP_MIN);
-                            // Add columns (variables) to the problem for the P vector
-                            size_t n = minTransitionM.row(index).n_cols; // Number of elements in P vector
-                            glp_add_cols(lp, n+1);
-                            for (size_t i = 1; i <= n; ++i) {
-                                glp_set_col_name(lp, i, ("P_" + to_string(i)).c_str());
-                                if(minTransitionM.row(index)(i - 1) == maxTransitionM.row(index)(i - 1)){
-                                    glp_set_col_bnds(lp, i, GLP_FX, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
-                                }else{
-                                    glp_set_col_bnds(lp, i, GLP_DB, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
-                                }
-                                glp_set_obj_coef(lp, i, first(i-1)); // Set objective coefficients from V vector
-                            }
-                            glp_set_col_name(lp, n+1, "A");
-                            if(minAvoidM(index) == maxAvoidM(index)){
-                                glp_set_col_bnds(lp, n+1, GLP_FX, minAvoidM(index), maxAvoidM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+1, GLP_DB, minAvoidM(index), maxAvoidM(index));
-                            }
-                            glp_set_obj_coef(lp, n+1, 0.0);
-                            
-                            // Add a constraint for the sum of elements in P = 1
-                            glp_add_rows(lp, 1);
-                            glp_set_row_name(lp, 1, "Constraint");
-                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0); // Sum of P elements = 1
-                            vector<int> ia = {0}; // GLPK uses 1-based indexing, so 0 is added as a placeholder
-                            vector<int> ja(n + 2); // Indices of the P vector elements
-                            vector<double> ar(n + 2); // Coefficients for the P vector elements in the constraint
-                            for (size_t i = 1; i <= n; ++i) {
-                                ja[i] = i;
-                                ar[i] = 1.0; // Coefficient 1 for the corresponding P element
-                            }
-                            ja[n+1] = n+1;
-                            ar[n+1] = 1.0;
-                            glp_set_mat_row(lp, 1, n+1, &ja[0], &ar[0]);
-                            
-                            // Use the simplex method to solve the LP problem
-                            glp_simplex(lp, nullptr);
-                            
-                            // Retrieve the optimal objective value and P vector values
-                            
-                            cdfAccessor[index] = 0;
-                            
-                            for (size_t i = 1; i <= n; ++i) {
-                                cdfAccessor[index] += glp_get_col_prim(lp, i)*first(i-1);
-                            }
-                            // Clean up GLPK data structures
-                            glp_delete_prob(lp);
-                        });
-                    });
-                }
-                queue.wait_and_throw();
-                first = firstnew;
-            }else{ // for IMDP upper bound
-                sycl::queue queue;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<double> cdfBuffer(firstnew.memptr(),firstnew.n_rows);
-                    
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                    queue.submit([&](sycl::handler& cgh) {
-                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                        
-                        cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size), [=](sycl::item<1> item) {
-                            size_t index = item.get_id(0);
-                            
-                            glp_term_out(GLP_OFF);
-                            glp_prob *lp;
-                            lp = glp_create_prob();
-                            glp_set_prob_name(lp, "SimpleLP");
-                            glp_set_obj_dir(lp, GLP_MAX);
-                            // Add columns (variables) to the problem for the P vector
-                            size_t n = minTransitionM.row(index).n_cols; // Number of elements in P vector
-                            glp_add_cols(lp, n+1);
-                            for (size_t i = 1; i <= n; ++i) {
-                                glp_set_col_name(lp, i, ("P_" + to_string(i)).c_str());
-                                if(minTransitionM.row(index)(i - 1) == maxTransitionM.row(index)(i - 1)){
-                                    glp_set_col_bnds(lp, i, GLP_FX, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
-                                }else{
-                                    glp_set_col_bnds(lp, i, GLP_DB, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
-                                }
-                                glp_set_obj_coef(lp, i, first(i-1)); // Set objective coefficients from V vector
-                            }
-                            glp_set_col_name(lp, n+1, "A");
-                            if(minAvoidM(index) == maxAvoidM(index)){
-                                glp_set_col_bnds(lp, n+1, GLP_FX, minAvoidM(index), maxAvoidM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+1, GLP_DB, minAvoidM(index), maxAvoidM(index));
-                            }
-                            glp_set_obj_coef(lp, n+1, 0.0);
-                            
-                            // Add a constraint for the sum of elements in P = 1
-                            glp_add_rows(lp, 1);
-                            glp_set_row_name(lp, 1, "Constraint");
-                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0); // Sum of P elements = 1
-                            vector<int> ia = {0}; // GLPK uses 1-based indexing, so 0 is added as a placeholder
-                            vector<int> ja(n + 2); // Indices of the P vector elements
-                            vector<double> ar(n + 2); // Coefficients for the P vector elements in the constraint
-                            for (size_t i = 1; i <= n; ++i) {
-                                ja[i] = i;
-                                ar[i] = 1.0; // Coefficient 1 for the corresponding P element
-                            }
-                            ja[n+1] = n+1;
-                            ar[n+1] = 1.0;
-                            glp_set_mat_row(lp, 1, n+1, &ja[0], &ar[0]);
-                            
-                            // Use the simplex method to solve the LP problem
-                            glp_simplex(lp, nullptr);
-                            
-                            // Retrieve the optimal objective value and P vector values
-                            
-                            cdfAccessor[index] = 0;
-                            for (size_t i = 1; i <= n; ++i) {
-                                cdfAccessor[index] += glp_get_col_prim(lp, i)*first(i-1);
-                            }
-                            // Clean up GLPK data structures
-                            glp_delete_prob(lp);
-                            
-                        });
-                    });
-                }
-                queue.wait_and_throw();
-                first = firstnew;
-            }
-            k = k+1;
-        }
-        cout << endl;
-        
-        if (IMDP_lower){
-            cout << "verification lower bound found, finding upper bound." << endl;
-        }else{
-            cout << "verification upper bound found, finding lower bound." << endl;
-        }
-        
-        vec second(state_space_size, 1, fill::ones);
-        mat secondnew(state_space_size, 1, fill::ones);
-        
-        k = 0;
-        cout << "second loop iterations: " << endl;
-        
-        while (k != timeHorizon) {
-            cout << "." << flush;
-            if (IMDP_lower == true){ // for IMDP upper bound (opposite to before)
-                sycl::queue queue;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<double> cdfBuffer(secondnew.memptr(),secondnew.n_rows);
-                    
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                    queue.submit([&](sycl::handler& cgh) {
-                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                        
-                        cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size), [=](sycl::item<1> item) {
-                            size_t index = item.get_id(0);
-                            
-                            glp_term_out(GLP_OFF);
-                            
-                            glp_prob *lp;
-                            lp = glp_create_prob();
-                            glp_set_prob_name(lp, "SimpleLP");
-                            glp_set_obj_dir(lp, GLP_MAX);
-                            // Add columns (variables) to the problem for the P vector
-                            size_t n = minTransitionM.row(index).n_cols; // Number of elements in P vector
-                            glp_add_cols(lp, n+1);
-                            for (size_t i = 1; i <= n; ++i) {
-                                glp_set_col_name(lp, i, ("P_" + to_string(i)).c_str());
-                                if(minTransitionM.row(index)(i - 1) == maxTransitionM.row(index)(i - 1)){
-                                    glp_set_col_bnds(lp, i, GLP_FX, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
-                                }else{
-                                    glp_set_col_bnds(lp, i, GLP_DB, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
-                                }
-                                glp_set_obj_coef(lp, i, second(i-1)); // Set objective coefficients from V vector
-                            }
-                            glp_set_col_name(lp, n+1, "A");
-                            if(minAvoidM(index) == maxAvoidM(index)){
-                                glp_set_col_bnds(lp, n+1, GLP_FX, minAvoidM(index), maxAvoidM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+1, GLP_DB, minAvoidM(index), maxAvoidM(index));
-                            }
-                            glp_set_obj_coef(lp, n+1, 0.0);
-                            
-                            // Add a constraint for the sum of elements in P = 1
-                            glp_add_rows(lp, 1);
-                            glp_set_row_name(lp, 1, "Constraint");
-                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0); // Sum of P elements = 1
-                            vector<int> ia = {0}; // GLPK uses 1-based indexing, so 0 is added as a placeholder
-                            vector<int> ja(n + 2); // Indices of the P vector elements
-                            vector<double> ar(n + 2); // Coefficients for the P vector elements in the constraint
-                            for (size_t i = 1; i <= n; ++i) {
-                                ja[i] = i;
-                                ar[i] = 1.0; // Coefficient 1 for the corresponding P element
-                            }
-                            ja[n+1] = n+1;
-                            ar[n+1] = 1.0;
-                            glp_set_mat_row(lp, 1, n+1, &ja[0], &ar[0]);
-                            
-                            
-                            // Use the simplex method to solve the LP problem
-                            glp_simplex(lp, nullptr);
-                            
-                            // Retrieve the optimal objective value and P vector values
-                            
-                            cdfAccessor[index] = 0;
-                            
-                            for (size_t i = 1; i <= n; ++i) {
-                                cdfAccessor[index] += glp_get_col_prim(lp, i)*second(i-1);
-                            }
-                            // Clean up GLPK data structures
-                            glp_delete_prob(lp);
-                        });
-                    });
-                }
-                queue.wait_and_throw();
-                second = secondnew;
-            }else{ // for IMDP lower bound (opposite to first)
-                sycl::queue queue;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<double> cdfBuffer(secondnew.memptr(),secondnew.n_rows);
-                    
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                    queue.submit([&](sycl::handler& cgh) {
-                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                        
-                        cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size), [=](sycl::item<1> item) {
-                            size_t index = item.get_id(0);
-                            
-                            glp_term_out(GLP_OFF);
-                            glp_prob *lp;
-                            lp = glp_create_prob();
-                            glp_set_prob_name(lp, "SimpleLP");
-                            glp_set_obj_dir(lp, GLP_MIN);
-                            // Add columns (variables) to the problem for the P vector
-                            size_t n = minTransitionM.row(index).n_cols; // Number of elements in P vector
-                            glp_add_cols(lp, n+1);
-                            for (size_t i = 1; i <= n; ++i) {
-                                glp_set_col_name(lp, i, ("P_" + to_string(i)).c_str());
-                                if(minTransitionM.row(index)(i - 1) == maxTransitionM.row(index)(i - 1)){
-                                    glp_set_col_bnds(lp, i, GLP_FX, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
-                                }else{
-                                    glp_set_col_bnds(lp, i, GLP_DB, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
-                                }
-                                glp_set_obj_coef(lp, i, second(i-1)); // Set objective coefficients from V vector
-                            }
-                            glp_set_col_name(lp, n+1, "A");
-                            if(minAvoidM(index) == maxAvoidM(index)){
-                                glp_set_col_bnds(lp, n+1, GLP_FX, minAvoidM(index), maxAvoidM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+1, GLP_DB, minAvoidM(index), maxAvoidM(index));
-                            }
-                            glp_set_obj_coef(lp, n+1, 0.0);
-                            
-                            // Add a constraint for the sum of elements in P = 1
-                            glp_add_rows(lp, 1);
-                            glp_set_row_name(lp, 1, "Constraint");
-                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0); // Sum of P elements = 1
-                            vector<int> ia = {0}; // GLPK uses 1-based indexing, so 0 is added as a placeholder
-                            vector<int> ja(n + 2); // Indices of the P vector elements
-                            vector<double> ar(n + 2); // Coefficients for the P vector elements in the constraint
-                            for (size_t i = 1; i <= n; ++i) {
-                                ja[i] = i;
-                                ar[i] = 1.0; // Coefficient 1 for the corresponding P element
-                            }
-                            ja[n+1] = n+1;
-                            ar[n+1] = 1.0;
-                            glp_set_mat_row(lp, 1, n+1, &ja[0], &ar[0]);
-                            
-                            // Use the simplex method to solve the LP problem
-                            glp_simplex(lp, nullptr);
-                            
-                            // Retrieve the optimal objective value and P vector values
-                            
-                            cdfAccessor[index] = 0;
-                            for (size_t i = 1; i <= n; ++i) {
-                                cdfAccessor[index] += glp_get_col_prim(lp, i)*second(i-1);
-                            }
-                            // Clean up GLPK data structures
-                            glp_delete_prob(lp);
-                        });
-                    });
-                }
-                queue.wait_and_throw();
-                second = secondnew;
-            }
-            k = k+1;
-        }
-        cout << endl;
-        
-        if (IMDP_lower){
-            cout << "Upper bound found." << endl;
-        }else{
-            cout << "Lower bound found." << endl;
-        }
-        controller.set_size(state_space_size, dim_x + 2);
-        controller.cols(0,dim_x-1) = state_space;
-        controller.col(dim_x) = first;
-        controller.col(dim_x + 1) = second;
-        
-        //DISTURB ONLY
-    }else if(input_space_size == 0){
-        vec first(state_space_size, 1, fill::ones);
-        mat firstnew(state_space_size*disturb_space_size, 1, fill::ones);
-        //reduce matrix by choosing minimal probability from disturbances at each state
-        
-        size_t k = 0;
-        cout << "first loop iterations: " << endl;
-        while (k != timeHorizon) {
-            cout << "." << flush;
-            if (IMDP_lower == true){ // for IMDP lower bound
-                
-                sycl::queue queue;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<double> cdfBuffer(firstnew.memptr(),firstnew.n_rows);
-                    
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                    queue.submit([&](sycl::handler& cgh) {
-                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                        
-                        cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size*disturb_space_size), [=](sycl::item<1> item) {
-                            size_t index = item.get_id(0);
-                            
-                            glp_term_out(GLP_OFF);
-                            glp_prob *lp;
-                            lp = glp_create_prob();
-                            glp_set_prob_name(lp, "SimpleLP");
-                            glp_set_obj_dir(lp, GLP_MIN);
-                            // Add columns (variables) to the problem for the P vector
-                            size_t n = minTransitionM.row(index).n_cols; // Number of elements in P vector
-                            glp_add_cols(lp, n+1);
-                            for (size_t i = 1; i <= n; ++i) {
-                                glp_set_col_name(lp, i, ("P_" + to_string(i)).c_str());
-                                if(minTransitionM.row(index)(i - 1) == maxTransitionM.row(index)(i - 1)){
-                                    glp_set_col_bnds(lp, i, GLP_FX, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
-                                }else{
-                                    glp_set_col_bnds(lp, i, GLP_DB, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
-                                }
-                                glp_set_obj_coef(lp, i, first(i-1)); // Set objective coefficients from V vector
-                            }
-                            glp_set_col_name(lp, n+1, "A");
-                            if(minAvoidM(index) == maxAvoidM(index)){
-                                glp_set_col_bnds(lp, n+1, GLP_FX, minAvoidM(index), maxAvoidM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+1, GLP_DB, minAvoidM(index), maxAvoidM(index));
-                            }
-                            glp_set_obj_coef(lp, n+1, 0.0);
-                            
-                            // Add a constraint for the sum of elements in P = 1
-                            glp_add_rows(lp, 1);
-                            glp_set_row_name(lp, 1, "Constraint");
-                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0); // Sum of P elements = 1
-                            vector<int> ia = {0}; // GLPK uses 1-based indexing, so 0 is added as a placeholder
-                            vector<int> ja(n + 2); // Indices of the P vector elements
-                            vector<double> ar(n + 2); // Coefficients for the P vector elements in the constraint
-                            for (size_t i = 1; i <= n; ++i) {
-                                ja[i] = i;
-                                ar[i] = 1.0; // Coefficient 1 for the corresponding P element
-                            }
-                            ja[n+1] = n+1;
-                            ar[n+1] = 1.0;
-                            //glp_set_matrix(lp, n, ia, ja, ar);
-                            glp_set_mat_row(lp, 1, n+1, &ja[0], &ar[0]);
-                            
-                            // Use the simplex method to solve the LP problem
-                            glp_simplex(lp, nullptr);
-                            
-                            // Retrieve the optimal objective value and P vector values
-                            
-                            cdfAccessor[index] = 0;
-                            for (size_t i = 1; i <= n; ++i) {
-                                cdfAccessor[index] += glp_get_col_prim(lp, i)*first(i-1);
-                            }
-                            // Clean up GLPK data structures
-                            glp_delete_prob(lp);
-                        });
-                    });
-                }
-                queue.wait_and_throw();
-                
-                /*Resize to minimise over disturbance - worst case scenario*/
-                firstnew.reshape(state_space_size, disturb_space_size);
-                first = conv_to< colvec >::from(min(firstnew,1));
-                
-            }else{ // for IMDP upper bound
-                sycl::queue queue;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<double> cdfBuffer(firstnew.memptr(),firstnew.n_rows);
-                    
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                    queue.submit([&](sycl::handler& cgh) {
-                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                        
-                        cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size*disturb_space_size), [=](sycl::item<1> item) {
-                            size_t index = item.get_id(0);
-                            
-                            glp_term_out(GLP_OFF);
-                            glp_prob *lp;
-                            lp = glp_create_prob();
-                            glp_set_prob_name(lp, "SimpleLP");
-                            glp_set_obj_dir(lp, GLP_MAX);
-                            // Add columns (variables) to the problem for the P vector
-                            size_t n = minTransitionM.row(index).n_cols; // Number of elements in P vector
-                            glp_add_cols(lp, n+1);
-                            for (size_t i = 1; i <= n; ++i) {
-                                glp_set_col_name(lp, i, ("P_" + to_string(i)).c_str());
-                                if(minTransitionM.row(index)(i - 1) == maxTransitionM.row(index)(i - 1)){
-                                    glp_set_col_bnds(lp, i, GLP_FX, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
-                                }else{
-                                    glp_set_col_bnds(lp, i, GLP_DB, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
-                                }
-                                glp_set_obj_coef(lp, i, first(i-1)); // Set objective coefficients from V vector
-                            }
-                            glp_set_col_name(lp, n+1, "A");
-                            if(minAvoidM(index) == maxAvoidM(index)){
-                                glp_set_col_bnds(lp, n+1, GLP_FX, minAvoidM(index), maxAvoidM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+1, GLP_DB, minAvoidM(index), maxAvoidM(index));
-                            }
-                            glp_set_obj_coef(lp, n+1, 0.0);
-                            
-                            // Add a constraint for the sum of elements in P = 1
-                            glp_add_rows(lp, 1);
-                            glp_set_row_name(lp, 1, "Constraint");
-                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0); // Sum of P elements = 1
-                            vector<int> ia = {0}; // GLPK uses 1-based indexing, so 0 is added as a placeholder
-                            vector<int> ja(n + 2); // Indices of the P vector elements
-                            vector<double> ar(n + 2); // Coefficients for the P vector elements in the constraint
-                            for (size_t i = 1; i <= n; ++i) {
-                                ja[i] = i;
-                                ar[i] = 1.0; // Coefficient 1 for the corresponding P element
-                            }
-                            ja[n+1] = n+1;
-                            ar[n+1] = 1.0;
-                            glp_set_mat_row(lp, 1, n+1, &ja[0], &ar[0]);
-                            
-                            // Use the simplex method to solve the LP problem
-                            glp_simplex(lp, nullptr);
-                            
-                            // Retrieve the optimal objective value and P vector values
-                            
-                            cdfAccessor[index] = 0;
-                            for (size_t i = 1; i <= n; ++i) {
-                                cdfAccessor[index] += glp_get_col_prim(lp, i)*first(i-1);
-                            }
-                            
-                            // Clean up GLPK data structures
-                            glp_delete_prob(lp);
-                        });
-                    });
-                }
-                queue.wait_and_throw();
-                /*Resize to minimise over disturbance - worst case scenario*/
-                firstnew.reshape(state_space_size, disturb_space_size);
-                first = conv_to< colvec >::from(min(firstnew,1));
-            }
-            k = k+1;
-        }
-        cout << endl;
-        
-        if (IMDP_lower){
-            cout << "verification lower bound found, finding upper bound." << endl;
-        }else{
-            cout << "verification upper bound found, finding lower bound." << endl;
-        }
-        
-        vec second(state_space_size, 1, fill::ones);
-        mat secondnew(state_space_size*disturb_space_size, 1, fill::ones);
-        
-        k = 0;
-        cout << "second loop iterations: " << endl;
-        
-        while (k != timeHorizon) {
-            cout << "." << flush;
-            if (IMDP_lower == true){ // for IMDP upper bound (opposite to before)
-                sycl::queue queue;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<double> cdfBuffer(secondnew.memptr(),secondnew.n_rows);
-                    
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                    queue.submit([&](sycl::handler& cgh) {
-                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                        
-                        cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size*disturb_space_size), [=](sycl::item<1> item) {
-                            size_t index = item.get_id(0);
-                            
-                            glp_term_out(GLP_OFF);
-                            glp_prob *lp;
-                            lp = glp_create_prob();
-                            glp_set_prob_name(lp, "SimpleLP");
-                            glp_set_obj_dir(lp, GLP_MAX);
-                            // Add columns (variables) to the problem for the P vector
-                            size_t n = minTransitionM.row(index).n_cols; // Number of elements in P vector
-                            glp_add_cols(lp, n+1);
-                            for (size_t i = 1; i <= n; ++i) {
-                                glp_set_col_name(lp, i, ("P_" + to_string(i)).c_str());
-                                if(minTransitionM.row(index)(i - 1) == maxTransitionM.row(index)(i - 1)){
-                                    glp_set_col_bnds(lp, i, GLP_FX, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
-                                }else{
-                                    glp_set_col_bnds(lp, i, GLP_DB, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
-                                }
-                                glp_set_obj_coef(lp, i, second(i-1)); // Set objective coefficients as 1.0, multiply by V later
-                            }
-                            glp_set_col_name(lp, n+1, "A");
-                            if(minAvoidM(index) == maxAvoidM(index)){
-                                glp_set_col_bnds(lp, n+1, GLP_FX, minAvoidM(index), maxAvoidM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+1, GLP_DB, minAvoidM(index), maxAvoidM(index));
-                            }
-                            glp_set_obj_coef(lp, n+1, 0.0); // Set objective coefficients from V vector
-                            
-                            // Add a constraint for the sum of elements in P = 1
-                            glp_add_rows(lp, 1);
-                            glp_set_row_name(lp, 1, "Constraint");
-                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0); // Sum of P elements = 1
-                            vector<int> ia = {0}; // GLPK uses 1-based indexing, so 0 is added as a placeholder
-                            vector<int> ja(n + 2); // Indices of the P vector elements
-                            vector<double> ar(n + 2); // Coefficients for the P vector elements in the constraint
-                            for (size_t i = 1; i <= n; ++i) {
-                                ja[i] = i;
-                                ar[i] = 1.0; // Coefficient 1 for the corresponding P element
-                            }
-                            ja[n+1] = n+1;
-                            ar[n+1] = 1.0;
-                            glp_set_mat_row(lp, 1, n+1, &ja[0], &ar[0]);
-                            
-                            // Use the simplex method to solve the LP problem
-                            glp_simplex(lp, nullptr);
-                            
-                            // Retrieve the optimal objective value and P vector values
-                            
-                            cdfAccessor[index] = 0;
-                            for (size_t i = 1; i <= n; ++i) {
-                                cdfAccessor[index] += glp_get_col_prim(lp, i)*second(i-1);
-                            }
-                            // Clean up GLPK data structures
-                            glp_delete_prob(lp);
-                        });
-                    });
-                }
-                queue.wait_and_throw();
-                /*Resize to minimise over disturbance - worst case scenario*/
-                secondnew.reshape(state_space_size, disturb_space_size);
-                second = conv_to< colvec >::from(min(secondnew,1));
-            }else{ // for IMDP lower bound (opposite to first)
-                sycl::queue queue;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<double> cdfBuffer(secondnew.memptr(),secondnew.n_rows);
-                    
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                    queue.submit([&](sycl::handler& cgh) {
-                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                        cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size*disturb_space_size), [=](sycl::item<1> item) {
-                            size_t index = item.get_id(0);
-                            
-                            glp_term_out(GLP_OFF);
-                            glp_prob *lp;
-                            lp = glp_create_prob();
-                            glp_set_prob_name(lp, "SimpleLP");
-                            glp_set_obj_dir(lp, GLP_MIN);
-                            // Add columns (variables) to the problem for the P vector
-                            size_t n = minTransitionM.row(index).n_cols; // Number of elements in P vector
-                            glp_add_cols(lp, n+1);
-                            for (size_t i = 1; i <= n; ++i) {
-                                glp_set_col_name(lp, i, ("P_" + to_string(i)).c_str());
-                                if(minTransitionM.row(index)(i - 1) == maxTransitionM.row(index)(i - 1)){
-                                    glp_set_col_bnds(lp, i, GLP_FX, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
-                                }else{
-                                    glp_set_col_bnds(lp, i, GLP_DB, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
-                                }
-                                glp_set_obj_coef(lp, i, second(i-1)); // Set objective coefficients as 1.0, multiply by V later
-                            }
-                            glp_set_col_name(lp, n+1, "A");
-                            if(minAvoidM(index) == maxAvoidM(index)){
-                                glp_set_col_bnds(lp, n+1, GLP_FX, minAvoidM(index), maxAvoidM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+1, GLP_DB, minAvoidM(index), maxAvoidM(index));
-                            }
-                            glp_set_obj_coef(lp, n+1, 0.0); // Set objective coefficients from V vector
-                            
-                            // Add a constraint for the sum of elements in P = 1
-                            glp_add_rows(lp, 1);
-                            glp_set_row_name(lp, 1, "Constraint");
-                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0); // Sum of P elements = 1
-                            vector<int> ia = {0}; // GLPK uses 1-based indexing, so 0 is added as a placeholder
-                            vector<int> ja(n + 2); // Indices of the P vector elements
-                            vector<double> ar(n + 2); // Coefficients for the P vector elements in the constraint
-                            for (size_t i = 1; i <= n; ++i) {
-                                ja[i] = i;
-                                ar[i] = 1.0; // Coefficient 1 for the corresponding P element
-                            }
-                            ja[n+1] = n+1;
-                            ar[n+1] = 1.0;
-                            glp_set_mat_row(lp, 1, n+1, &ja[0], &ar[0]);
-                            
-                            // Use the simplex method to solve the LP problem
-                            glp_simplex(lp, nullptr);
-                            
-                            // Retrieve the optimal objective value and P vector values
-                            
-                            cdfAccessor[index] = 0;
-                            for (size_t i = 1; i <= n; ++i) {
-                                cdfAccessor[index] += glp_get_col_prim(lp, i)*second(i-1);
-                            }
-                            // Clean up GLPK data structures
-                            glp_delete_prob(lp);
-                        });
-                    });
-                }
-                queue.wait_and_throw();
-                /*Resize to minimise over disturbance - worst case scenario*/
-                secondnew.reshape(state_space_size, disturb_space_size);
-                second = conv_to< colvec >::from(min(secondnew,1));
-            }
-            k = k+1;
-        }
-        cout << endl;
-        
-        if (IMDP_lower){
-            cout << "Upper bound found." << endl;
-        }else{
-            cout << "Lower bound found." << endl;
-        }
-        
-        controller.set_size(state_space_size, dim_x + 2);
-        controller.cols(0,dim_x-1) = state_space;
-        controller.col(dim_x) = first;
-        controller.col(dim_x + 1) = second;
-        
-        //INPUT ONLY
-    }else if (disturb_space_size == 0){
-        vec first(state_space_size, 1, fill::ones);
-        mat firstnew(state_space_size*input_space_size, 1, fill::ones);
-        uvec U_pos(state_space_size, 1, fill::zeros);
-        
-        size_t k = 0;
-        cout << "first loop iterations: " << endl;
-        while (k != timeHorizon) {
-            cout << "." << flush;
-            if (IMDP_lower == true){ // for IMDP lower bound
-                
-                sycl::queue queue;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<double> cdfBuffer(firstnew.memptr(),firstnew.n_rows);
-                    
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                    queue.submit([&](sycl::handler& cgh) {
-                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                        
-                        cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size*input_space_size), [=](sycl::item<1> item) {
-                            size_t index = item.get_id(0);
-                            
-                            glp_term_out(GLP_OFF);
-                            glp_prob *lp;
-                            lp = glp_create_prob();
-                            glp_set_prob_name(lp, "SimpleLP");
-                            glp_set_obj_dir(lp, GLP_MIN);
-                            // Add columns (variables) to the problem for the P vector
-                            size_t n = minTransitionM.row(index).n_cols; // Number of elements in P vector
-                            glp_add_cols(lp, n+1);
-                            for (size_t i = 1; i <= n; ++i) {
-                                glp_set_col_name(lp, i, ("P_" + to_string(i)).c_str());
-                                if(minTransitionM.row(index)(i - 1) == maxTransitionM.row(index)(i - 1)){
-                                    glp_set_col_bnds(lp, i, GLP_FX, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
-                                }else{
-                                    glp_set_col_bnds(lp, i, GLP_DB, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
-                                }
-                                glp_set_obj_coef(lp, i, first(i-1)); // Set objective coefficients from V vector
-                            }
-                            glp_set_col_name(lp, n+1, "A");
-                            if(minAvoidM(index) == maxAvoidM(index)){
-                                glp_set_col_bnds(lp, n+1, GLP_FX, minAvoidM(index), maxAvoidM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+1, GLP_DB, minAvoidM(index), maxAvoidM(index));
-                            }
-                            glp_set_obj_coef(lp, n+1, 0.0);
-                            
-                            // Add a constraint for the sum of elements in P = 1
-                            glp_add_rows(lp, 1);
-                            glp_set_row_name(lp, 1, "Constraint");
-                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0); // Sum of P elements = 1
-                            vector<int> ia = {0}; // GLPK uses 1-based indexing, so 0 is added as a placeholder
-                            vector<int> ja(n + 2); // Indices of the P vector elements
-                            vector<double> ar(n + 2); // Coefficients for the P vector elements in the constraint
-                            for (size_t i = 1; i <= n; ++i) {
-                                ja[i] = i;
-                                ar[i] = 1.0; // Coefficient 1 for the corresponding P element
-                            }
-                            ja[n+1] = n+1;
-                            ar[n+1] = 1.0;
-                            glp_set_mat_row(lp, 1, n+1, &ja[0], &ar[0]);
-                            
-                            // Use the simplex method to solve the LP problem
-                            glp_simplex(lp, nullptr);
-                            
-                            // Retrieve the optimal objective value and P vector values
-                            
-                            cdfAccessor[index] = 0;
-                            
-                            for (size_t i = 1; i <= n; ++i) {
-                                cdfAccessor[index] += glp_get_col_prim(lp, i)*first(i-1);
-                            }
-                            // Clean up GLPK data structures
-                            glp_delete_prob(lp);
-                        });
-                    });
-                }
-                queue.wait_and_throw();
-                
-                /*Resize to maximise over input*/
-                firstnew.reshape(state_space_size, input_space_size);
-                first = conv_to< colvec >::from(max(firstnew,1));
-                
-                /*Choose input to store for controller*/
-                sycl::queue Q;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<uword> cdfBuffer(U_pos.memptr(),U_pos.n_rows);
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                    Q.submit([&](sycl::handler& cgh) {
-                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                        cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size), [=](sycl::item<1> item) {
-                            size_t index = item.get_id(0);
-                            firstnew.row(index).max(cdfAccessor[index]);
-                        });
-                    });
-                }
-                Q.wait_and_throw();
-                
-            }else{ // for IMDP upper bound
-                
-                sycl::queue queue;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<double> cdfBuffer(firstnew.memptr(),firstnew.n_rows);
-                    
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                    queue.submit([&](sycl::handler& cgh) {
-                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                        
-                        cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size*input_space_size), [=](sycl::item<1> item) {
-                            size_t index = item.get_id(0);
-                            
-                            glp_term_out(GLP_OFF);
-                            glp_prob *lp;
-                            lp = glp_create_prob();
-                            glp_set_prob_name(lp, "SimpleLP");
-                            glp_set_obj_dir(lp, GLP_MAX);
-                            // Add columns (variables) to the problem for the P vector
-                            size_t n = minTransitionM.row(index).n_cols; // Number of elements in P vector
-                            glp_add_cols(lp, n+1);
-                            for (size_t i = 1; i <= n; ++i) {
-                                glp_set_col_name(lp, i, ("P_" + to_string(i)).c_str());
-                                if(minTransitionM.row(index)(i - 1) == maxTransitionM.row(index)(i - 1)){
-                                    glp_set_col_bnds(lp, i, GLP_FX, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
-                                }else{
-                                    glp_set_col_bnds(lp, i, GLP_DB, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
-                                }
-                                glp_set_obj_coef(lp, i, first(i-1)); // Set objective coefficients as 1.0, multiply by V later
-                            }
-                            glp_set_col_name(lp, n+1, "A");
-                            if(minAvoidM(index) == maxAvoidM(index)){
-                                glp_set_col_bnds(lp, n+1, GLP_FX, minAvoidM(index), maxAvoidM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+1, GLP_DB, minAvoidM(index), maxAvoidM(index));
-                            }
-                            glp_set_obj_coef(lp, n+1, 0.0); // Set objective coefficients from V vector
-                            
-                            // Add a constraint for the sum of elements in P = 1
-                            glp_add_rows(lp, 1);
-                            glp_set_row_name(lp, 1, "Constraint");
-                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0); // Sum of P elements = 1
-                            vector<int> ia = {0}; // GLPK uses 1-based indexing, so 0 is added as a placeholder
-                            vector<int> ja(n + 2); // Indices of the P vector elements
-                            vector<double> ar(n + 2); // Coefficients for the P vector elements in the constraint
-                            for (size_t i = 1; i <= n; ++i) {
-                                ja[i] = i;
-                                ar[i] = 1.0; // Coefficient 1 for the corresponding P element
-                            }
-                            ja[n+1] = n+1;
-                            ar[n+1] = 1.0;
-                            glp_set_mat_row(lp, 1, n+1, &ja[0], &ar[0]);
-                            
-                            // Use the simplex method to solve the LP problem
-                            glp_simplex(lp, nullptr);
-                            
-                            // Retrieve the optimal objective value and P vector values
-                            
-                            cdfAccessor[index] = 0;
-                            for (size_t i = 1; i <= n; ++i) {
-                                cdfAccessor[index] += glp_get_col_prim(lp, i)*first(i-1);
-                            }
-                            // Clean up GLPK data structures
-                            glp_delete_prob(lp);
-                            
-                        });
-                    });
-                }
-                queue.wait_and_throw();
-                
-                /*Resize to maximise over input*/
-                firstnew.reshape(state_space_size, input_space_size);
-                first = conv_to< colvec >::from(max(firstnew,1));
-                
-                sycl::queue Q;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<uword> cdfBuffer(U_pos.memptr(),U_pos.n_rows);
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                    Q.submit([&](sycl::handler& cgh) {
-                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                        cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size), [=](sycl::item<1> item) {
-                            size_t index = item.get_id(0);
-                            firstnew.row(index).max(cdfAccessor[index]);
-                        });
-                    });
-                }
-                Q.wait_and_throw();
-                
-            }
-            k = k+1;
-        }
-        //cout << endl;
-        if (IMDP_lower){
-            cout << "control policy for lower bound found, finding upper bound." << endl;
-        }else{
-            cout << "control policy for upper bound found, finding lower bound." << endl;
-        }
-        
-        vec second(state_space_size, 1, fill::ones);
-        mat secondnew(state_space_size, 1, fill::ones);
-        k = 0;
-        cout << "second loop iterations: " << endl;
-        mat tempTmin(state_space_size, state_space_size, fill::zeros);
-        mat tempTmax(state_space_size, state_space_size, fill::zeros);
-        vec tempTTmin(state_space_size, 1, fill::zeros);
-        vec tempTTmax(state_space_size, 1, fill::zeros);
-        
-        cout << "Create reduced matrix where input is fixed." << endl;
-        for (size_t i = 0; i < state_space_size; i++){
-            tempTmin.row(i) = minTransitionM.row(U_pos(i)*state_space_size+i);
-            tempTmax.row(i) = maxTransitionM.row(U_pos(i)*state_space_size+i);
-            tempTTmin(i)= minAvoidM(U_pos(i)*state_space_size+i);
-            tempTTmax(i)= maxAvoidM(U_pos(i)*state_space_size+i);
-        }
-        
-        cout << "Matrix Fixed" << endl;
-        while (k != timeHorizon) {
-            cout << "." << flush;
-            if (IMDP_lower == true){ // for IMDP upper bound (opposite to before)
-                
-                sycl::queue queue;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<double> cdfBuffer(secondnew.memptr(),secondnew.n_rows);
-                    
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                    queue.submit([&](sycl::handler& cgh) {
-                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                        
-                        cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size), [=](sycl::item<1> item) {
-                            size_t index = item.get_id(0);
-                            
-                            glp_term_out(GLP_OFF);
-                            glp_prob *lp;
-                            lp = glp_create_prob();
-                            glp_set_prob_name(lp, "SimpleLP");
-                            glp_set_obj_dir(lp, GLP_MAX);
-                            // Add columns (variables) to the problem for the P vector
-                            size_t n = tempTmin.row(index).n_cols; // Number of elements in P vector
-                            glp_add_cols(lp, n+1);
-                            for (size_t i = 1; i <= n; ++i) {
-                                glp_set_col_name(lp, i, ("P_" + to_string(i)).c_str());
-                                if(tempTmin.row(index)(i - 1) == tempTmax.row(index)(i - 1)){
-                                    glp_set_col_bnds(lp, i, GLP_FX, tempTmin.row(index)(i - 1), tempTmax.row(index)(i - 1));
-                                }else{
-                                    glp_set_col_bnds(lp, i, GLP_DB, tempTmin.row(index)(i - 1), tempTmax.row(index)(i - 1));
-                                }
-                                glp_set_obj_coef(lp, i, second(i-1)); // Set objective coefficients from V vector
-                            }
-                            glp_set_col_name(lp, n+1, "A");
-                            if(tempTTmin(index) == tempTTmax(index)){
-                                glp_set_col_bnds(lp, n+1, GLP_FX, tempTTmin(index), tempTTmax(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+1, GLP_DB,tempTTmin(index), tempTTmax(index));
-                            }
-                            glp_set_obj_coef(lp, n+1, 0.0);
-                            
-                            // Add a constraint for the sum of elements in P = 1
-                            glp_add_rows(lp, 1);
-                            glp_set_row_name(lp, 1, "Constraint");
-                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0); // Sum of P elements = 1
-                            vector<int> ia = {0}; // GLPK uses 1-based indexing, so 0 is added as a placeholder
-                            vector<int> ja(n + 2); // Indices of the P vector elements
-                            vector<double> ar(n + 2); // Coefficients for the P vector elements in the constraint
-                            for (size_t i = 1; i <= n; ++i) {
-                                ja[i] = i;
-                                ar[i] = 1.0; // Coefficient 1 for the corresponding P element
-                            }
-                            ja[n+1] = n+1;
-                            ar[n+1] = 1.0;
-                            glp_set_mat_row(lp, 1, n+1, &ja[0], &ar[0]);
-                            
-                            // Use the simplex method to solve the LP problem
-                            glp_simplex(lp, nullptr);
-                            
-                            // Retrieve the optimal objective value and P vector values
-                            cdfAccessor[index] = 0;
-                            for (size_t i = 1; i <= n; ++i) {
-                                cdfAccessor[index] += glp_get_col_prim(lp, i)*second(i-1);
-                            }
-                            // Clean up GLPK data structures
-                            glp_delete_prob(lp);
-                        });
-                    });
-                }
-                queue.wait_and_throw();
-                second = secondnew;
-                
-            }else{ // for IMDP lower bound (opposite to first)
-                
-                sycl::queue queue;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<double> cdfBuffer(secondnew.memptr(),secondnew.n_rows);
-                    
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                    queue.submit([&](sycl::handler& cgh) {
-                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                        
-                        cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size), [=](sycl::item<1> item) {
-                            size_t index = item.get_id(0);
-                            
-                            glp_term_out(GLP_OFF);
-                            glp_prob *lp;
-                            lp = glp_create_prob();
-                            glp_set_prob_name(lp, "SimpleLP");
-                            glp_set_obj_dir(lp, GLP_MIN);
-                            // Add columns (variables) to the problem for the P vector
-                            size_t n = tempTmin.row(index).n_cols; // Number of elements in P vector
-                            glp_add_cols(lp, n+1);
-                            for (size_t i = 1; i <= n; ++i) {
-                                glp_set_col_name(lp, i, ("P_" + to_string(i)).c_str());
-                                if(tempTmin.row(index)(i - 1) == tempTmax.row(index)(i - 1)){
-                                    glp_set_col_bnds(lp, i, GLP_FX, tempTmin.row(index)(i - 1), tempTmax.row(index)(i - 1));
-                                }else{
-                                    glp_set_col_bnds(lp, i, GLP_DB, tempTmin.row(index)(i - 1), tempTmax.row(index)(i - 1));
-                                }
-                                glp_set_obj_coef(lp, i, second(i-1)); // Set objective coefficients as 1.0, multiply by V later
-                            }
-                            glp_set_col_name(lp, n+1, "A");
-                            if(tempTTmin(index) == tempTTmax(index)){
-                                glp_set_col_bnds(lp, n+1, GLP_FX, tempTTmin(index), tempTTmax(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+1, GLP_DB,tempTTmin(index), tempTTmax(index));
-                            }
-                            glp_set_obj_coef(lp, n+1, 0.0); // Set objective coefficients from V vector
-                            glp_add_rows(lp, 1);
-                            glp_set_row_name(lp, 1, "Constraint");
-                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0); // Sum of P elements = 1
-                            vector<int> ia = {0}; // GLPK uses 1-based indexing, so 0 is added as a placeholder
-                            vector<int> ja(n + 2); // Indices of the P vector elements
-                            vector<double> ar(n + 2); // Coefficients for the P vector elements in the constraint
-                            for (size_t i = 1; i <= n; ++i) {
-                                ja[i] = i;
-                                ar[i] = 1.0; // Coefficient 1 for the corresponding P element
-                            }
-                            ja[n+1] = n+1;
-                            ar[n+1] = 1.0;
-                            glp_set_mat_row(lp, 1, n+1, &ja[0], &ar[0]);
-                            
-                            // Use the simplex method to solve the LP problem
-                            glp_simplex(lp, nullptr);
-                            
-                            // Retrieve the optimal objective value and P vector values
-                            cdfAccessor[index] = 0;
-                            for (size_t i = 1; i <= n; ++i) {
-                                cdfAccessor[index] += glp_get_col_prim(lp, i)*second(i-1);
-                            }
-                            // Clean up GLPK data structures
-                            glp_delete_prob(lp);
-                        });
-                    });
-                }
-                queue.wait_and_throw();
-                second = secondnew;
-            }
-            k = k+1;
-        }
-        cout << endl;
-        
-        if (IMDP_lower){
-            cout << "Upper bound found." << endl;
-        }else{
-            cout << "Lower bound found." << endl;
-        }
-        
-        controller.set_size(state_space_size, dim_x + dim_u + 2);
-        controller.cols(0,dim_x-1) = state_space;
-        controller.col(dim_x+dim_u) = first;
-        controller.col(dim_x+dim_u + 1) = second;
-        for (size_t i = 0; i < state_space_size; ++i) {
-            controller.row(i).cols(dim_x, dim_x + dim_u - 1) = input_space.row(U_pos(i));
-        }
-        //THE ELSE
-    }else{
-        vec first(state_space_size, 1, fill::ones);
-        mat firstnew(state_space_size*input_space_size*disturb_space_size, 1, fill::ones);
-        uvec U_pos(state_space_size, 1, fill::zeros);
-        //reduce matrix by choosing minimal probability from disturbances at each state
-        mat input_and_state(input_space_size*state_space_size, 1, fill::zeros);
-        
-        size_t k = 0;
-        cout << "first loop iterations: " << endl;
-        while (k != 0) {
-            cout << "." << flush;
-            if (IMDP_lower == true){ // for IMDP lower bound
-                sycl::queue queue;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<double> cdfBuffer(firstnew.memptr(),firstnew.n_rows);
-                    
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                    queue.submit([&](sycl::handler& cgh) {
-                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                        
-                        cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size*input_space_size), [=](sycl::item<1> item) {
-                            size_t index = item.get_id(0);
-                            
-                            glp_term_out(GLP_OFF);
-                            glp_prob *lp;
-                            lp = glp_create_prob();
-                            glp_set_prob_name(lp, "SimpleLP");
-                            glp_set_obj_dir(lp, GLP_MIN);
-                            // Add columns (variables) to the problem for the P vector
-                            size_t n = minTransitionM.row(index).n_cols; // Number of elements in P vector
-                            glp_add_cols(lp, n+1);
-                            for (size_t i = 1; i <= n; ++i) {
-                                glp_set_col_name(lp, i, ("P_" + to_string(i)).c_str());
-                                if(minTransitionM.row(index)(i - 1) == maxTransitionM.row(index)(i - 1)){
-                                    glp_set_col_bnds(lp, i, GLP_FX, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
-                                }else{
-                                    glp_set_col_bnds(lp, i, GLP_DB, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
-                                }
-                                glp_set_obj_coef(lp, i, first(i-1)); // Set objective coefficients from V vector
-                            }
-                            glp_set_col_name(lp, n+1, "A");
-                            if(minAvoidM(index) == maxAvoidM(index)){
-                                glp_set_col_bnds(lp, n+1, GLP_FX, minAvoidM(index), maxAvoidM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+1, GLP_DB, minAvoidM(index), maxAvoidM(index));
-                            }
-                            glp_set_obj_coef(lp, n+1, 0.0);
-                            
-                            // Add a constraint for the sum of elements in P = 1
-                            glp_add_rows(lp, 1);
-                            glp_set_row_name(lp, 1, "Constraint");
-                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0); // Sum of P elements = 1
-                            vector<int> ia = {0}; // GLPK uses 1-based indexing, so 0 is added as a placeholder
-                            vector<int> ja(n + 2); // Indices of the P vector elements
-                            vector<double> ar(n + 2); // Coefficients for the P vector elements in the constraint
-                            for (size_t i = 1; i <= n; ++i) {
-                                ja[i] = i;
-                                ar[i] = 1.0; // Coefficient 1 for the corresponding P element
-                            }
-                            ja[n+1] = n+1;
-                            ar[n+1] = 1.0;
-                            glp_set_mat_row(lp, 1, n+1, &ja[0], &ar[0]);
-                            
-                            // Use the simplex method to solve the LP problem
-                            glp_simplex(lp, nullptr);
-                            
-                            // Retrieve the optimal objective value and P vector values
-                            
-                            cdfAccessor[index] = 0;
-                            
-                            for (size_t i = 1; i <= n; ++i) {
-                                cdfAccessor[index] += glp_get_col_prim(lp, i)*first(i-1);
-                            }
-                            // Clean up GLPK data structures
-                            glp_delete_prob(lp);
-                        });
-                    });
-                }
-                queue.wait_and_throw();
-                /*Resize to minimise over disturbance - worst case scenario*/
-                firstnew.reshape(state_space_size*input_space_size, disturb_space_size);
-                input_and_state = min(firstnew,1);
-                
-                /*Resize to maximise over input*/
-                input_and_state.reshape(state_space_size, input_space_size);
-                first = conv_to< colvec >::from(max(input_and_state,1));
-                /*Choose input to store for controller*/
-                sycl::queue Q;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<uword> cdfBuffer0(U_pos.memptr(),U_pos.n_rows);
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                    Q.submit([&](sycl::handler& cgh) {
-                        auto cdfAccessor0 = cdfBuffer0.get_access<sycl::access::mode::discard_write>(cgh);
-                        cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size), [=](sycl::item<1> item) {
-                            size_t index = item.get_id(0);
-                            input_and_state.row(index).max(cdfAccessor0[index]);
-                        });
-                    });
-                }
-                Q.wait_and_throw();
-            }else{ // for IMDP upper bound
-                sycl::queue queue;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<double> cdfBuffer(firstnew.memptr(),firstnew.n_rows);
-                    
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                    queue.submit([&](sycl::handler& cgh) {
-                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                        
-                        cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size*input_space_size), [=](sycl::item<1> item) {
-                            size_t index = item.get_id(0);
-                            
-                            glp_term_out(GLP_OFF);
-                            
-                            glp_prob *lp;
-                            lp = glp_create_prob();
-                            glp_set_prob_name(lp, "SimpleLP");
-                            glp_set_obj_dir(lp, GLP_MAX);
-                            // Add columns (variables) to the problem for the P vector
-                            size_t n = minTransitionM.row(index).n_cols; // Number of elements in P vector
-                            glp_add_cols(lp, n+1);
-                            for (size_t i = 1; i <= n; ++i) {
-                                glp_set_col_name(lp, i, ("P_" + to_string(i)).c_str());
-                                if(minTransitionM.row(index)(i - 1) == maxTransitionM.row(index)(i - 1)){
-                                    glp_set_col_bnds(lp, i, GLP_FX, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
-                                }else{
-                                    glp_set_col_bnds(lp, i, GLP_DB, minTransitionM.row(index)(i - 1), maxTransitionM.row(index)(i - 1));
-                                }
-                                glp_set_obj_coef(lp, i, first(i-1)); // Set objective coefficients as 1.0, multiply by V later
-                            }
-                            glp_set_col_name(lp, n+1, "A");
-                            if(minAvoidM(index) == maxAvoidM(index)){
-                                glp_set_col_bnds(lp, n+1, GLP_FX, minAvoidM(index), maxAvoidM(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+1, GLP_DB, minAvoidM(index), maxAvoidM(index));
-                            }
-                            glp_set_obj_coef(lp, n+1, 0.0); // Set objective coefficients from V vector
-                            
-                            // Add a constraint for the sum of elements in P = 1
-                            glp_add_rows(lp, 1);
-                            glp_set_row_name(lp, 1, "Constraint");
-                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0); // Sum of P elements = 1
-                            vector<int> ia = {0}; // GLPK uses 1-based indexing, so 0 is added as a placeholder
-                            vector<int> ja(n + 2); // Indices of the P vector elements
-                            vector<double> ar(n + 2); // Coefficients for the P vector elements in the constraint
-                            for (size_t i = 1; i <= n; ++i) {
-                                ja[i] = i;
-                                ar[i] = 1.0; // Coefficient 1 for the corresponding P element
-                            }
-                            ja[n+1] = n+1;
-                            ar[n+1] = 1.0;
-                            glp_set_mat_row(lp, 1, n+1, &ja[0], &ar[0]);
-                            
-                            // Use the simplex method to solve the LP problem
-                            glp_simplex(lp, nullptr);
-                            
-                            // Retrieve the optimal objective value and P vector values
-                            
-                            cdfAccessor[index] = 0;
-                            for (size_t i = 1; i <= n; ++i) {
-                                cdfAccessor[index] += glp_get_col_prim(lp, i)*first(i-1);
-                            }
-                            // Clean up GLPK data structures
-                            glp_delete_prob(lp);
-                        });
-                    });
-                }
-                queue.wait_and_throw();
-                /*Resize to maximise over disturbance - best case scenario*/
-                firstnew.reshape(state_space_size*input_space_size, disturb_space_size);
-                input_and_state = min(firstnew,1);
-                
-                /*Resize to maximise over input*/
-                input_and_state.reshape(state_space_size, input_space_size);
-                first = conv_to< colvec >::from(max(input_and_state,1));
-                /*Choose input to store for controller*/
-                sycl::queue Q;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<uword> cdfBuffer(U_pos.memptr(),U_pos.n_rows);
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                    Q.submit([&](sycl::handler& cgh) {
-                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                        cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size), [=](sycl::item<1> item) {
-                            size_t index = item.get_id(0);
-                            input_and_state.row(index).max(cdfAccessor[index]);
-                        });
-                    });
-                }
-                Q.wait_and_throw();
-            }
-            k = k+1;
-        }
-        cout << endl;
-        
-        if (IMDP_lower){
-            cout << "control policy for lower bound found, finding upper bound." << endl;
-        }else{
-            cout << "control policy for upper bound found, finding lower bound." << endl;
-        }
-        vec second(state_space_size, 1, fill::ones);
-        mat secondnew(state_space_size*disturb_space_size, 1, fill::ones);
-        
-        mat tempTmin(state_space_size*disturb_space_size, state_space_size, fill::zeros);
-        mat tempTmax(state_space_size*disturb_space_size, state_space_size, fill::zeros);
-        vec tempATmin(state_space_size*disturb_space_size, 1, fill::zeros);
-        vec tempATmax(state_space_size*disturb_space_size, 1, fill::zeros);
-        
-        cout << "Create reduced matrix where input is fixed." << endl;
-        for (size_t j = 0; j < disturb_space_size; j++){
-            for (size_t i = 0; i < state_space_size; i++){
-                tempTmin.row(j*state_space_size+ i) = minTransitionM.row(j*input_space_size*state_space_size+U_pos(i)*state_space_size+i);
-                tempTmax.row(j*state_space_size+i) = maxTransitionM.row(j*input_space_size*state_space_size+U_pos(i)*state_space_size+i);
-                tempATmin(j*state_space_size+i)= minAvoidM(j*input_space_size*state_space_size+U_pos(i)*state_space_size+i);
-                tempATmax(j*state_space_size+i)= maxAvoidM(j*input_space_size*state_space_size+U_pos(i)*state_space_size+i);
-            }
-        }
-        
-        k = 0;
-        cout << "second loop iterations: " << endl;
-        
-        while (k != timeHorizon) {
-            cout << "." << flush;
-            if (IMDP_lower == true){ // for IMDP upper bound (opposite to before)
-                sycl::queue queue;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<double> cdfBuffer(secondnew.memptr(),secondnew.n_rows);
-                    
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                    queue.submit([&](sycl::handler& cgh) {
-                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                        
-                        cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size*disturb_space_size), [=](sycl::item<1> item) {
-                            size_t index = item.get_id(0);
-                            
-                            glp_term_out(GLP_OFF);
-                            glp_prob *lp;
-                            lp = glp_create_prob();
-                            glp_set_prob_name(lp, "SimpleLP");
-                            glp_set_obj_dir(lp, GLP_MAX);
-                            // Add columns (variables) to the problem for the P vector
-                            size_t n = tempTmin.row(index).n_cols; // Number of elements in P vector
-                            glp_add_cols(lp, n+1);
-                            for (size_t i = 1; i <= n; ++i) {
-                                glp_set_col_name(lp, i, ("P_" + to_string(i)).c_str());
-                                if(tempTmin.row(index)(i - 1) == tempTmax.row(index)(i - 1)){
-                                    glp_set_col_bnds(lp, i, GLP_FX, tempTmin.row(index)(i - 1), tempTmax.row(index)(i - 1));
-                                }else{
-                                    glp_set_col_bnds(lp, i, GLP_DB, tempTmin.row(index)(i - 1), tempTmax.row(index)(i - 1));
-                                }
-                                glp_set_obj_coef(lp, i, second(i-1)); // Set objective coefficients from V vector
-                            }
-                            glp_set_col_name(lp, n+1, "A");
-                            if(tempATmin(index) == tempATmax(index)){
-                                glp_set_col_bnds(lp, n+1, GLP_FX, tempATmin(index), tempATmax(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+1, GLP_DB,tempATmin(index), tempATmax(index));
-                            }
-                            glp_set_obj_coef(lp, n+1, 0.0);
-                            
-                            // Add a constraint for the sum of elements in P = 1
-                            glp_add_rows(lp, 1);
-                            glp_set_row_name(lp, 1, "Constraint");
-                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0); // Sum of P elements = 1
-                            vector<int> ia = {0}; // GLPK uses 1-based indexing, so 0 is added as a placeholder
-                            vector<int> ja(n + 2); // Indices of the P vector elements
-                            vector<double> ar(n + 2); // Coefficients for the P vector elements in the constraint
-                            for (size_t i = 1; i <= n; ++i) {
-                                ja[i] = i;
-                                ar[i] = 1.0; // Coefficient 1 for the corresponding P element
-                            }
-                            ja[n+1] = n+1;
-                            ar[n+1] = 1.0;
-                            glp_set_mat_row(lp, 1, n+1, &ja[0], &ar[0]);
-                            
-                            // Use the simplex method to solve the LP problem
-                            glp_simplex(lp, nullptr);
-                            
-                            // Retrieve the optimal objective value and P vector values
-                            cdfAccessor[index] = 0;
-                            for (size_t i = 1; i <= n; ++i) {
-                                cdfAccessor[index] += glp_get_col_prim(lp, i)*second(i-1);
-                            }
-                            // Clean up GLPK data structures
-                            glp_delete_prob(lp);
-                        });
-                    });
-                }
-                queue.wait_and_throw();
-                
-                /*Resize to maximise over disturbance - best case scenario*/
-                secondnew.reshape(state_space_size,disturb_space_size);
-                second = conv_to< colvec >::from(min(secondnew,1));
-                
-                
-            }else{ // for IMDP lower bound (opposite to first)
-                sycl::queue queue;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<double> cdfBuffer(secondnew.memptr(),secondnew.n_rows);
-                    
-                    // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                    queue.submit([&](sycl::handler& cgh) {
-                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                        
-                        cgh.parallel_for<class minTarget_kernel>(sycl::range<1>(state_space_size*disturb_space_size), [=](sycl::item<1> item) {
-                            size_t index = item.get_id(0);
-                            
-                            glp_term_out(GLP_OFF);
-                            glp_prob *lp;
-                            lp = glp_create_prob();
-                            glp_set_prob_name(lp, "SimpleLP");
-                            glp_set_obj_dir(lp, GLP_MIN);
-                            // Add columns (variables) to the problem for the P vector
-                            size_t n = tempTmin.row(index).n_cols; // Number of elements in P vector
-                            glp_add_cols(lp, n+1);
-                            for (size_t i = 1; i <= n; ++i) {
-                                glp_set_col_name(lp, i, ("P_" + to_string(i)).c_str());
-                                if(tempTmin.row(index)(i - 1) == tempTmax.row(index)(i - 1)){
-                                    glp_set_col_bnds(lp, i, GLP_FX, tempTmin.row(index)(i - 1), tempTmax.row(index)(i - 1));
-                                }else{
-                                    glp_set_col_bnds(lp, i, GLP_DB, tempTmin.row(index)(i - 1), tempTmax.row(index)(i - 1));
-                                }
-                                glp_set_obj_coef(lp, i, second(i-1)); // Set objective coefficients from V vector
-                            }
-                            glp_set_col_name(lp, n+1, "A");
-                            if(tempATmin(index) == tempATmax(index)){
-                                glp_set_col_bnds(lp, n+1, GLP_FX, tempATmin(index), tempATmax(index));
-                            }else{
-                                glp_set_col_bnds(lp, n+1, GLP_DB,tempATmin(index), tempATmax(index));
-                            }
-                            glp_set_obj_coef(lp, n+1, 0.0);
-                            
-                            // Add a constraint for the sum of elements in P = 1
-                            glp_add_rows(lp, 1);
-                            glp_set_row_name(lp, 1, "Constraint");
-                            glp_set_row_bnds(lp, 1, GLP_FX, 1.0, 1.0); // Sum of P elements = 1
-                            vector<int> ia = {0}; // GLPK uses 1-based indexing, so 0 is added as a placeholder
-                            vector<int> ja(n + 2); // Indices of the P vector elements
-                            vector<double> ar(n + 2); // Coefficients for the P vector elements in the constraint
-                            for (size_t i = 1; i <= n; ++i) {
-                                ja[i] = i;
-                                ar[i] = 1.0; // Coefficient 1 for the corresponding P element
-                            }
-                            ja[n+1] = n+1;
-                            ar[n+1] = 1.0;
-                            glp_set_mat_row(lp, 1, n+1, &ja[0], &ar[0]);
-                            
-                            // Use the simplex method to solve the LP problem
-                            glp_simplex(lp, nullptr);
-                            
-                            // Retrieve the optimal objective value and P vector values
-                            cdfAccessor[index] = 0;
-                            for (size_t i = 1; i <= n; ++i) {
-                                cdfAccessor[index] += glp_get_col_prim(lp, i)*second(i-1);
-                            }
-                            // Clean up GLPK data structures
-                            glp_delete_prob(lp);
-                        });
-                    });
-                }
-                queue.wait_and_throw();
-                
-                /*Resize to minimise over disturbance - worst case scenario*/
-                secondnew.reshape(state_space_size,disturb_space_size);
-                second = conv_to< colvec >::from(min(secondnew,1));
-                
-            }
-            k = k+1;
-        }
-        cout << endl;
-        
-        if (IMDP_lower){
-            cout << "Upper bound found." << endl;
-        }else{
-            cout << "Lower bound found." << endl;
-        }
-        
-        controller.set_size(state_space_size, dim_x + dim_u + 2);
-        controller.cols(0,dim_x-1) = state_space;
-        controller.col(dim_x+dim_u) = first;
-        controller.col(dim_x+dim_u + 1) = second;
-        for (size_t i = 0; i < state_space_size; ++i) {
-            controller.row(i).cols(dim_x, dim_x + dim_u - 1) = input_space.row(U_pos(i));
-        }
-    }
-    // Stop the timer
-    auto end = chrono::steady_clock::now();
-    auto duration = chrono::duration_cast<chrono::milliseconds>(end - start);
-    cout << "Execution time: " << duration.count()/1000.0 << " seconds" << endl;
+    finiteHorizonControllerImpl(IMDP_lower, timeHorizon, false);
 }
+
+/// finite horizon safety synthesis - DEPRECATED: Original implementation
+/// that has been replaced by finiteHorizonControllerImpl(IMDP_lower, timeHorizon, false) above.
+/// This is kept for reference during validation, and should be deleted after verification.
