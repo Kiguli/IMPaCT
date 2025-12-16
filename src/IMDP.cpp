@@ -248,6 +248,36 @@ double costFunctionNormalFull(unsigned n, const double* x, double* grad, void* m
     }
 }
 
+/// Initialize noise-specific fields for costFunctionDataNormal (free function for SYCL kernel use)
+inline void initializeNormalNoiseData(costFunctionDataNormal& data, bool is_diagonal,
+                                       const vec& sigma_val, const mat& inv_cov_val,
+                                       double det_val, size_t samples_val, double dim_val) {
+    data.is_diagonal = is_diagonal;
+    if (is_diagonal) {
+        data.sigma = sigma_val;
+    } else {
+        data.inv_cov = inv_cov_val;
+        data.det = det_val;
+        data.samples = samples_val;
+        data.dim = dim_val;
+    }
+}
+
+/// Initialize noise-specific fields for costFunctionDataNormalFull (free function for SYCL kernel use)
+inline void initializeNormalNoiseDataFull(costFunctionDataNormalFull& data, bool is_diagonal,
+                                           const vec& sigma_val, const mat& inv_cov_val,
+                                           double det_val, size_t samples_val, double dim_val) {
+    data.is_diagonal = is_diagonal;
+    if (is_diagonal) {
+        data.sigma = sigma_val;
+    } else {
+        data.inv_cov = inv_cov_val;
+        data.det = det_val;
+        data.samples = samples_val;
+        data.dim = dim_val;
+    }
+}
+
 /* CUSTOM DISTRIBUTIONS */
 
 /// custom cost function with 1 dimension for full state space
@@ -606,8 +636,9 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
         if (avoid_space.n_rows > 0){
             temp.set_size(total_states, avoid_space.n_rows);
         }
-        if (noise == NoiseType::NORMAL && diagonal == true){
-            cout << "Parallel run for Normal-diagonal AvoidTransitionVector... " << endl;
+        if (noise == NoiseType::NORMAL){
+            const char* noise_type = diagonal ? "Normal-diagonal" : "Normal-offdiagonal";
+            cout << "Parallel run for " << noise_type << " AvoidTransitionVector... " << endl;
             sycl::queue queue;
             {
                 sycl::buffer<double> cdfBuffer(output.memptr(),output.n_rows);
@@ -625,9 +656,8 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
                         data.lb = ss_lb;
                         data.ub = ss_ub;
                         data.eta = ss_eta;
-                        data.sigma = sigma;
                         data.dynamics1 = dynamics1;
-                        data.is_diagonal = diagonal;
+                        initializeNormalNoiseDataFull(data, diagonal, sigma, inv_covariance_matrix, covariance_matrix_determinant, calls, dim_x);
                         // INVERTED: min avoid -> max inside, max avoid -> min inside
                         if (is_min) {
                             opt.set_max_objective(costFunctionNormalFull, &data);
@@ -664,92 +694,9 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
                             costFunctionDataNormal data;
                             data.state_end = state_end;
                             data.eta = ss_eta;
-                            data.sigma = sigma;
                             data.dynamics1 = dynamics1;
-                            data.is_diagonal = diagonal;
+                            initializeNormalNoiseData(data, diagonal, sigma, inv_covariance_matrix, covariance_matrix_determinant, calls, dim_x);
                             // NORMAL: min avoid -> min, max avoid -> max
-                            if (is_min) {
-                                opt.set_min_objective(costFunctionNormal, &data);
-                            } else {
-                                opt.set_max_objective(costFunctionNormal, &data);
-                            }
-                            double minf;
-                            executeOptimization(opt, state_start, minf);
-                            cdfAccessor[index] = minf;
-                        });
-                    });
-                }
-                queue2.wait_and_throw();
-                output = output + sum(temp,1);
-            }
-            cout << " Complete." << endl;
-        }
-        else if (noise == NoiseType::NORMAL && diagonal == false){
-            cout << "Parallel run for Normal-offdiagonal AvoidTransitionVector... " << endl;
-            sycl::queue queue;
-            {
-                sycl::buffer<double> cdfBuffer(output.memptr(),output.n_rows);
-                queue.submit([&](sycl::handler& cgh) {
-                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                    sycl::range<1> global(total_states);
-                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<1> idx) {
-                        size_t i = idx[0];
-                        const vec state_start = state_space.row(i).t();
-                        nlopt::opt opt(algo, state_start.size());
-                        initializeOptimizer(opt, state_start, ss_eta);
-
-                        costFunctionDataNormalFull data;
-                        data.dim = dim_x;
-                        data.state_start = state_start;
-                        data.lb = ss_lb;
-                        data.ub = ss_ub;
-                        data.eta = ss_eta;
-                        data.inv_cov = inv_covariance_matrix;
-                        data.det = covariance_matrix_determinant;
-                        data.dynamics1 = dynamics1;
-                        data.is_diagonal = diagonal;
-                        data.samples = calls;
-                        if (is_min) {
-                            opt.set_max_objective(costFunctionNormalFull, &data);
-                        } else {
-                            opt.set_min_objective(costFunctionNormalFull, &data);
-                        }
-                        double minf;
-                        executeOptimization(opt, state_start, minf);
-                        double ans = 1.0 - minf;
-                        cdfAccessor[i] = ans;
-                    });
-                });
-            }
-            queue.wait_and_throw();
-            if(avoid_space.n_rows > 0){
-                sycl::queue queue2;
-                {
-                    sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
-                    queue2.submit([&](sycl::handler& cgh) {
-                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                        sycl::range<2> global(total_states, avoid_space.n_rows);
-                        cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
-                            const size_t x0 = idx[0];
-                            const size_t x1 = idx[1];
-                            size_t index = x0 * avoid_space.n_rows + x1;
-                            size_t row = index%total_states;
-                            size_t col = index/total_states;
-                            size_t i = row % state_space_size;
-                            const vec state_start = state_space.row(i).t();
-                            nlopt::opt opt(algo, state_start.size());
-                            initializeOptimizer(opt, state_start, ss_eta);
-
-                            const vec state_end = avoid_space.row(col).t();
-                            costFunctionDataNormal data;
-                            data.dim = dim_x;
-                            data.state_end = state_end;
-                            data.eta = ss_eta;
-                            data.inv_cov = inv_covariance_matrix;
-                            data.det = covariance_matrix_determinant;
-                            data.dynamics1 = dynamics1;
-                            data.is_diagonal = diagonal;
-                            data.samples = calls;
                             if (is_min) {
                                 opt.set_min_objective(costFunctionNormal, &data);
                             } else {
@@ -858,8 +805,9 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
         if (avoid_space.n_rows > 0){
             temp.set_size(total_states, avoid_space.n_rows);
         }
-        if (noise == NoiseType::NORMAL && diagonal == true){
-            cout << "Parallel run for Normal-diagonal AvoidTransitionVector... " << endl;
+        if (noise == NoiseType::NORMAL){
+            const char* noise_type = diagonal ? "Normal-diagonal" : "Normal-offdiagonal";
+            cout << "Parallel run for " << noise_type << " AvoidTransitionVector... " << endl;
             sycl::queue queue;
             {
                 sycl::buffer<double> cdfBuffer(output.memptr(),output.n_rows);
@@ -880,9 +828,8 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
                         data.lb = ss_lb;
                         data.ub = ss_ub;
                         data.eta = ss_eta;
-                        data.sigma = sigma;
                         data.dynamics2 = dynamics2;
-                        data.is_diagonal = diagonal;
+                        initializeNormalNoiseDataFull(data, diagonal, sigma, inv_covariance_matrix, covariance_matrix_determinant, calls, dim_x);
                         if (is_min) {
                             opt.set_max_objective(costFunctionNormalFull, &data);
                         } else {
@@ -921,97 +868,8 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
                             data.state_end = state_end;
                             data.second = input;
                             data.eta = ss_eta;
-                            data.sigma = sigma;
                             data.dynamics2 = dynamics2;
-                            data.is_diagonal = diagonal;
-                            if (is_min) {
-                                opt.set_min_objective(costFunctionNormal, &data);
-                            } else {
-                                opt.set_max_objective(costFunctionNormal, &data);
-                            }
-                            double minf;
-                            executeOptimization(opt, state_start, minf);
-                            cdfAccessor[index] = minf;
-                        });
-                    });
-                }
-                queue2.wait_and_throw();
-                output = output + sum(temp,1);
-            }
-            cout << " Complete." << endl;
-        }
-        else if (noise == NoiseType::NORMAL && diagonal == false){
-            cout << "Parallel run for Normal-offdiagonal AvoidTransitionVector... " << endl;
-            sycl::queue queue;
-            {
-                sycl::buffer<double> cdfBuffer(output.memptr(),output.n_rows);
-                queue.submit([&](sycl::handler& cgh) {
-                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                    cgh.parallel_for<class SetMatrix>(sycl::range<1>(total_states), [=](sycl::item<1> item) {
-                        size_t index = item.get_id(0);
-                        size_t k = (index / state_space_size) % input_space_size;
-                        size_t i = index % state_space_size;
-                        const vec input = input_space.row(k).t();
-                        const vec state_start = state_space.row(i).t();
-                        nlopt::opt opt(algo, state_start.size());
-                        initializeOptimizer(opt, state_start, ss_eta);
-
-                        costFunctionDataNormalFull data;
-                        data.dim = dim_x;
-                        data.state_start = state_start;
-                        data.second = input;
-                        data.lb = ss_lb;
-                        data.ub = ss_ub;
-                        data.eta = ss_eta;
-                        data.inv_cov = inv_covariance_matrix;
-                        data.det = covariance_matrix_determinant;
-                        data.dynamics2 = dynamics2;
-                        data.is_diagonal = diagonal;
-                        data.samples = calls;
-                        if (is_min) {
-                            opt.set_max_objective(costFunctionNormalFull, &data);
-                        } else {
-                            opt.set_min_objective(costFunctionNormalFull, &data);
-                        }
-                        double minf;
-                        executeOptimization(opt, state_start, minf);
-                        double ans = 1.0 - minf;
-                        cdfAccessor[index] = ans;
-                    });
-                });
-            }
-            queue.wait_and_throw();
-            if(avoid_space.n_rows > 0){
-                sycl::queue queue2;
-                {
-                    sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
-                    queue2.submit([&](sycl::handler& cgh) {
-                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                        sycl::range<2> global(total_states, avoid_space.n_rows);
-                        cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
-                            const size_t x0 = idx[0];
-                            const size_t x1 = idx[1];
-                            size_t index = x0 * avoid_space.n_rows + x1;
-                            size_t row = index%total_states;
-                            size_t col = index/total_states;
-                            size_t k = (row / state_space_size) % input_space_size;
-                            size_t i = row % state_space_size;
-                            const vec input = input_space.row(k).t();
-                            const vec state_start = state_space.row(i).t();
-                            nlopt::opt opt(algo, state_start.size());
-                            initializeOptimizer(opt, state_start, ss_eta);
-
-                            const vec state_end = avoid_space.row(col).t();
-                            costFunctionDataNormal data;
-                            data.dim = dim_x;
-                            data.state_end = state_end;
-                            data.second = input;
-                            data.eta = ss_eta;
-                            data.inv_cov = inv_covariance_matrix;
-                            data.det = covariance_matrix_determinant;
-                            data.dynamics2 = dynamics2;
-                            data.is_diagonal = diagonal;
-                            data.samples = calls;
+                            initializeNormalNoiseData(data, diagonal, sigma, inv_covariance_matrix, covariance_matrix_determinant, calls, dim_x);
                             if (is_min) {
                                 opt.set_min_objective(costFunctionNormal, &data);
                             } else {
@@ -1127,8 +985,9 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
         if (avoid_space.n_rows > 0){
             temp.set_size(total_states, avoid_space.n_rows);
         }
-        if (noise == NoiseType::NORMAL && diagonal == true){
-            cout << "Parallel run for Normal-diagonal AvoidTransitionVector... " << endl;
+        if (noise == NoiseType::NORMAL){
+            const char* noise_type = diagonal ? "Normal-diagonal" : "Normal-offdiagonal";
+            cout << "Parallel run for " << noise_type << " AvoidTransitionVector... " << endl;
             sycl::queue queue;
             {
                 sycl::buffer<double> cdfBuffer(output.memptr(),output.n_rows);
@@ -1149,9 +1008,8 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
                         data.lb = ss_lb;
                         data.ub = ss_ub;
                         data.eta = ss_eta;
-                        data.sigma = sigma;
                         data.dynamics2 = dynamics2;
-                        data.is_diagonal = diagonal;
+                        initializeNormalNoiseDataFull(data, diagonal, sigma, inv_covariance_matrix, covariance_matrix_determinant, calls, dim_x);
                         if (is_min) {
                             opt.set_max_objective(costFunctionNormalFull, &data);
                         } else {
@@ -1190,97 +1048,8 @@ void IMDP::avoidTransitionVectorImpl(vec& output, bool is_min){
                             data.state_end = state_end;
                             data.second = disturb;
                             data.eta = ss_eta;
-                            data.sigma = sigma;
                             data.dynamics2 = dynamics2;
-                            data.is_diagonal = diagonal;
-                            if (is_min) {
-                                opt.set_min_objective(costFunctionNormal, &data);
-                            } else {
-                                opt.set_max_objective(costFunctionNormal, &data);
-                            }
-                            double minf;
-                            executeOptimization(opt, state_start, minf);
-                            cdfAccessor[index] = minf;
-                        });
-                    });
-                }
-                queue2.wait_and_throw();
-                output = output + sum(temp,1);
-            }
-            cout << " Complete." << endl;
-        }
-        else if (noise == NoiseType::NORMAL && diagonal == false){
-            cout << "Parallel run for Normal-offdiagonal AvoidTransitionVector... " << endl;
-            sycl::queue queue;
-            {
-                sycl::buffer<double> cdfBuffer(output.memptr(),output.n_rows);
-                queue.submit([&](sycl::handler& cgh) {
-                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                    cgh.parallel_for<class SetMatrix>(sycl::range<1>(total_states), [=](sycl::item<1> item) {
-                        size_t index = item.get_id(0);
-                        size_t k = (index / state_space_size) % disturb_space_size;
-                        size_t i = index % state_space_size;
-                        const vec disturb = disturb_space.row(k).t();
-                        const vec state_start = state_space.row(i).t();
-                        nlopt::opt opt(algo, state_start.size());
-                        initializeOptimizer(opt, state_start, ss_eta);
-
-                        costFunctionDataNormalFull data;
-                        data.dim = dim_x;
-                        data.state_start = state_start;
-                        data.second = disturb;
-                        data.lb = ss_lb;
-                        data.ub = ss_ub;
-                        data.eta = ss_eta;
-                        data.inv_cov = inv_covariance_matrix;
-                        data.det = covariance_matrix_determinant;
-                        data.dynamics2 = dynamics2;
-                        data.is_diagonal = diagonal;
-                        data.samples = calls;
-                        if (is_min) {
-                            opt.set_max_objective(costFunctionNormalFull, &data);
-                        } else {
-                            opt.set_min_objective(costFunctionNormalFull, &data);
-                        }
-                        double minf;
-                        executeOptimization(opt, state_start, minf);
-                        double ans = 1.0 - minf;
-                        cdfAccessor[index] = ans;
-                    });
-                });
-            }
-            queue.wait_and_throw();
-            if(avoid_space.n_rows > 0){
-                sycl::queue queue2;
-                {
-                    sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
-                    queue2.submit([&](sycl::handler& cgh) {
-                        auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                        sycl::range<2> global(total_states, avoid_space.n_rows);
-                        cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
-                            const size_t x0 = idx[0];
-                            const size_t x1 = idx[1];
-                            size_t index = x0 * avoid_space.n_rows + x1;
-                            size_t row = index%total_states;
-                            size_t col = index/total_states;
-                            size_t k = (row / state_space_size) % disturb_space_size;
-                            size_t i = row % state_space_size;
-                            const vec disturb = disturb_space.row(k).t();
-                            const vec state_start = state_space.row(i).t();
-                            nlopt::opt opt(algo, state_start.size());
-                            initializeOptimizer(opt, state_start, ss_eta);
-
-                            const vec state_end = avoid_space.row(col).t();
-                            costFunctionDataNormal data;
-                            data.dim = dim_x;
-                            data.state_end = state_end;
-                            data.second = disturb;
-                            data.eta = ss_eta;
-                            data.inv_cov = inv_covariance_matrix;
-                            data.det = covariance_matrix_determinant;
-                            data.dynamics2 = dynamics2;
-                            data.is_diagonal = diagonal;
-                            data.samples = calls;
+                            initializeNormalNoiseData(data, diagonal, sigma, inv_covariance_matrix, covariance_matrix_determinant, calls, dim_x);
                             if (is_min) {
                                 opt.set_min_objective(costFunctionNormal, &data);
                             } else {
