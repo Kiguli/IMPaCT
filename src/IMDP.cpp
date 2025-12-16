@@ -3383,22 +3383,25 @@ void IMDP::maxAvoidTransitionVector(){
     cout << "Execution time: " << duration.count()/1000.0 << " seconds" << endl;
 }
 
-void IMDP::minTransitionMatrix(){
+/// Internal implementation for transition matrix abstraction (handles both min and max)
+void IMDP::transitionMatrixImpl(mat& output, bool is_min){
     //Start timer
     auto start = chrono::steady_clock::now();
-    cout << "Calculating minimal transition probability matrix." << endl;
-    
+    const char* bound_type = is_min ? "minimal" : "maximal";
+    const char* bound_type_short = is_min ? "minimum" : "maximum";
+    cout << "Calculating " << bound_type << " transition probability matrix." << endl;
+
     if (disturb_space_size == 0 && input_space_size == 0){
         const size_t total_states = state_space_size;
-        cout << "minimum transition matrix dimensions: " << total_states << " x " << state_space_size << endl;
-        minTransitionM.set_size(total_states, state_space_size);
+        cout << bound_type_short << " transition matrix dimensions: " << total_states << " x " << state_space_size << endl;
+        output.set_size(total_states, state_space_size);
         cout << "Approximate memory required if stored: " << total_states*state_space_size*sizeof(double)/1000000.0 << "Mb, " << total_states*state_space_size*sizeof(double)/1000000000.0 << "Gb" << endl;
         if (noise == NoiseType::NORMAL && diagonal == true){
-            cout << "Parallel run for Normal-diagonal Minimal Transition Matrix... " << endl;
+            cout << "Parallel run for Normal-diagonal Transition Matrix... " << endl;
             sycl::queue queue;
             {
                 // Create a SYCL buffer to store the space
-                sycl::buffer<double> cdfBuffer(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
+                sycl::buffer<double> cdfBuffer(output.memptr(),output.n_rows*output.n_cols);
                 // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                 queue.submit([&](sycl::handler& cgh) {
                     auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
@@ -3422,7 +3425,7 @@ void IMDP::minTransitionMatrix(){
                         opt.set_lower_bounds(lb);
                         opt.set_upper_bounds(ub);
                         opt.set_xtol_rel(1e-3);
-                        
+
                         // Prepare data for costfunction
                         const vec state_end = state_space.row(col).t();
                         costFunctionDataNormal data;
@@ -3431,7 +3434,11 @@ void IMDP::minTransitionMatrix(){
                         data.sigma = sigma;
                         data.dynamics1 = dynamics1;
                         data.is_diagonal = diagonal;
-                        opt.set_min_objective(costFunctionNormal, &data);
+                        if (is_min) {
+                            opt.set_min_objective(costFunctionNormal, &data);
+                        } else {
+                            opt.set_max_objective(costFunctionNormal, &data);
+                        }
                         vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                         double minf;
                         try {
@@ -3451,7 +3458,7 @@ void IMDP::minTransitionMatrix(){
             sycl::queue queue;
             {
                 // Create a SYCL buffer to store the space
-                sycl::buffer<double> cdfBuffer(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
+                sycl::buffer<double> cdfBuffer(output.memptr(),output.n_rows*output.n_cols);
                 // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                 queue.submit([&](sycl::handler& cgh) {
                     auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
@@ -3479,7 +3486,7 @@ void IMDP::minTransitionMatrix(){
                         opt.set_lower_bounds(lb);
                         opt.set_upper_bounds(ub);
                         opt.set_xtol_rel(1e-3);
-                        
+
                         // Prepare data for costfunction
                         const vec state_end = state_space.row(col).t();
                         costFunctionDataNormal data;
@@ -3491,7 +3498,11 @@ void IMDP::minTransitionMatrix(){
                         data.dynamics1 = dynamics1;
                         data.is_diagonal = diagonal;
                         data.samples = calls;
-                        opt.set_min_objective(costFunctionNormal, &data);
+                        if (is_min) {
+                            opt.set_min_objective(costFunctionNormal, &data);
+                        } else {
+                            opt.set_max_objective(costFunctionNormal, &data);
+                        }
                         vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                         double minf;
                         try {
@@ -3507,11 +3518,11 @@ void IMDP::minTransitionMatrix(){
             cout << " Complete." << endl;
         }
         else if (noise == NoiseType::CUSTOM){
-            cout << "Parallel run for Normal-offdiagonal TransitionMatrix... " << endl;
+            cout << "Parallel run for Custom TransitionMatrix... " << endl;
             sycl::queue queue;
             {
                 // Create a SYCL buffer to store the space
-                sycl::buffer<double> cdfBuffer(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
+                sycl::buffer<double> cdfBuffer(output.memptr(),output.n_rows*output.n_cols);
                 // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                 queue.submit([&](sycl::handler& cgh) {
                     auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
@@ -3539,7 +3550,7 @@ void IMDP::minTransitionMatrix(){
                         opt.set_lower_bounds(lb);
                         opt.set_upper_bounds(ub);
                         opt.set_xtol_rel(1e-3);
-                        
+
                         // Prepare data for costfunction
                         const vec state_end = state_space.row(col).t();
                         costcustom1 data;
@@ -3550,7 +3561,11 @@ void IMDP::minTransitionMatrix(){
                         data.dynamics = dynamics1;
                         data.customPDF = customPDF;
                         data.samples = calls;
-                        opt.set_min_objective(custom1, &data);
+                        if (is_min) {
+                            opt.set_min_objective(custom1, &data);
+                        } else {
+                            opt.set_max_objective(custom1, &data);
+                        }
                         vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                         double minf;
                         try {
@@ -3569,18 +3584,18 @@ void IMDP::minTransitionMatrix(){
             cout << "Unsupported noise combination, either swap offdiagonal/diagonal or change type of noise." << endl;
         }
     }
-    
+
     else if (disturb_space_size == 0){
         const size_t total_states = state_space_size * input_space_size;
-        cout << "minimum transition Matrix dimensions: " << total_states << " x " << state_space_size << endl;
-        minTransitionM.set_size(total_states, state_space_size);
+        cout << bound_type_short << " transition Matrix dimensions: " << total_states << " x " << state_space_size << endl;
+        output.set_size(total_states, state_space_size);
         cout << "Approximate memory required if stored: " << total_states*state_space_size*sizeof(double)/1000000.0 << "Mb, " << total_states*state_space_size*sizeof(double)/1000000000.0 << "Gb" << endl;
         if (noise == NoiseType::NORMAL && diagonal == true){
             cout << "Parallel run for Normal-diagonal Transition Matrix... " << endl;
             sycl::queue queue;
             {
                 // Create a SYCL buffer to store the space
-                sycl::buffer<double> cdfBuffer(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
+                sycl::buffer<double> cdfBuffer(output.memptr(),output.n_rows*output.n_cols);
                 // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                 queue.submit([&](sycl::handler& cgh) {
                     auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
@@ -3606,7 +3621,7 @@ void IMDP::minTransitionMatrix(){
                         opt.set_lower_bounds(lb);
                         opt.set_upper_bounds(ub);
                         opt.set_xtol_rel(1e-3);
-                        
+
                         // Prepare data for costfunction
                         const vec state_end = state_space.row(col).t();
                         costFunctionDataNormal data;
@@ -3616,7 +3631,11 @@ void IMDP::minTransitionMatrix(){
                         data.sigma = sigma;
                         data.dynamics2 = dynamics2;
                         data.is_diagonal = diagonal;
-                        opt.set_min_objective(costFunctionNormal, &data);
+                        if (is_min) {
+                            opt.set_min_objective(costFunctionNormal, &data);
+                        } else {
+                            opt.set_max_objective(costFunctionNormal, &data);
+                        }
                         vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                         double minf;
                         try {
@@ -3636,7 +3655,7 @@ void IMDP::minTransitionMatrix(){
             sycl::queue queue;
             {
                 // Create a SYCL buffer to store the space
-                sycl::buffer<double> cdfBuffer(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
+                sycl::buffer<double> cdfBuffer(output.memptr(),output.n_rows*output.n_cols);
                 // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                 queue.submit([&](sycl::handler& cgh) {
                     auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
@@ -3662,7 +3681,7 @@ void IMDP::minTransitionMatrix(){
                         opt.set_lower_bounds(lb);
                         opt.set_upper_bounds(ub);
                         opt.set_xtol_rel(1e-3);
-                        
+
                         // Prepare data for costfunction
                         const vec state_end = state_space.row(col).t();
                         costFunctionDataNormal data;
@@ -3675,7 +3694,11 @@ void IMDP::minTransitionMatrix(){
                         data.dynamics2 = dynamics2;
                         data.is_diagonal = diagonal;
                         data.samples = calls;
-                        opt.set_min_objective(costFunctionNormal, &data);
+                        if (is_min) {
+                            opt.set_min_objective(costFunctionNormal, &data);
+                        } else {
+                            opt.set_max_objective(costFunctionNormal, &data);
+                        }
                         vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                         double minf;
                         try {
@@ -3695,7 +3718,7 @@ void IMDP::minTransitionMatrix(){
             sycl::queue queue;
             {
                 // Create a SYCL buffer to store the space
-                sycl::buffer<double> cdfBuffer(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
+                sycl::buffer<double> cdfBuffer(output.memptr(),output.n_rows*output.n_cols);
                 // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                 queue.submit([&](sycl::handler& cgh) {
                     auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
@@ -3721,7 +3744,7 @@ void IMDP::minTransitionMatrix(){
                         opt.set_lower_bounds(lb);
                         opt.set_upper_bounds(ub);
                         opt.set_xtol_rel(1e-3);
-                        
+
                         // Prepare data for costfunction
                         const vec state_end = state_space.row(col).t();
                         costcustom2 data;
@@ -3734,7 +3757,11 @@ void IMDP::minTransitionMatrix(){
                         data.customPDF = customPDF;
                         data.samples = calls;
                         data.input_space_size = input_space_size;
-                        opt.set_min_objective(custom2, &data);
+                        if (is_min) {
+                            opt.set_min_objective(custom2, &data);
+                        } else {
+                            opt.set_max_objective(custom2, &data);
+                        }
                         vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                         double minf;
                         try {
@@ -3743,7 +3770,7 @@ void IMDP::minTransitionMatrix(){
                             cout << "nlopt failed: " << e.what() << endl;
                         }
                         cdfAccessor[index] = minf;
-                        
+
                     });
                 });
             }
@@ -3756,15 +3783,15 @@ void IMDP::minTransitionMatrix(){
     }
     else if (input_space_size == 0){
         const size_t total_states = state_space_size * disturb_space_size;
-        cout << "minimum transition Matrix dimensions: " << total_states << " x " << state_space_size << endl;
-        minTransitionM.set_size(total_states, state_space_size);
+        cout << bound_type_short << " transition Matrix dimensions: " << total_states << " x " << state_space_size << endl;
+        output.set_size(total_states, state_space_size);
         cout << "Approximate memory required if stored: " << total_states*state_space_size*sizeof(double)/1000000.0 << "Mb, " << total_states*state_space_size*sizeof(double)/1000000000.0 << "Gb" << endl;
         if (noise == NoiseType::NORMAL && diagonal == true){
             cout << "Parallel run for Normal-diagonal Transition Matrix... " << endl;
             sycl::queue queue;
             {
                 // Create a SYCL buffer to store the space
-                sycl::buffer<double> cdfBuffer(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
+                sycl::buffer<double> cdfBuffer(output.memptr(),output.n_rows*output.n_cols);
                 // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                 queue.submit([&](sycl::handler& cgh) {
                     auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
@@ -3790,7 +3817,7 @@ void IMDP::minTransitionMatrix(){
                         opt.set_lower_bounds(lb);
                         opt.set_upper_bounds(ub);
                         opt.set_xtol_rel(1e-3);
-                        
+
                         // Prepare data for costfunction
                         const vec state_end = state_space.row(col).t();
                         costFunctionDataNormal data;
@@ -3800,7 +3827,11 @@ void IMDP::minTransitionMatrix(){
                         data.sigma = sigma;
                         data.dynamics2 = dynamics2;
                         data.is_diagonal = diagonal;
-                        opt.set_min_objective(costFunctionNormal, &data);
+                        if (is_min) {
+                            opt.set_min_objective(costFunctionNormal, &data);
+                        } else {
+                            opt.set_max_objective(costFunctionNormal, &data);
+                        }
                         vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                         double minf;
                         try {
@@ -3820,7 +3851,7 @@ void IMDP::minTransitionMatrix(){
             sycl::queue queue;
             {
                 // Create a SYCL buffer to store the space
-                sycl::buffer<double> cdfBuffer(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
+                sycl::buffer<double> cdfBuffer(output.memptr(),output.n_rows*output.n_cols);
                 // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                 queue.submit([&](sycl::handler& cgh) {
                     auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
@@ -3846,7 +3877,7 @@ void IMDP::minTransitionMatrix(){
                         opt.set_lower_bounds(lb);
                         opt.set_upper_bounds(ub);
                         opt.set_xtol_rel(1e-3);
-                        
+
                         // Prepare data for costfunction
                         const vec state_end = state_space.row(col).t();
                         costFunctionDataNormal data;
@@ -3859,7 +3890,11 @@ void IMDP::minTransitionMatrix(){
                         data.dynamics2 = dynamics2;
                         data.is_diagonal = diagonal;
                         data.samples = calls;
-                        opt.set_min_objective(costFunctionNormal, &data);
+                        if (is_min) {
+                            opt.set_min_objective(costFunctionNormal, &data);
+                        } else {
+                            opt.set_max_objective(costFunctionNormal, &data);
+                        }
                         vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                         double minf;
                         try {
@@ -3879,7 +3914,7 @@ void IMDP::minTransitionMatrix(){
             sycl::queue queue;
             {
                 // Create a SYCL buffer to store the space
-                sycl::buffer<double> cdfBuffer(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
+                sycl::buffer<double> cdfBuffer(output.memptr(),output.n_rows*output.n_cols);
                 // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                 queue.submit([&](sycl::handler& cgh) {
                     auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
@@ -3905,7 +3940,7 @@ void IMDP::minTransitionMatrix(){
                         opt.set_lower_bounds(lb);
                         opt.set_upper_bounds(ub);
                         opt.set_xtol_rel(1e-3);
-                        
+
                         // Prepare data for costfunction
                         const vec state_end = state_space.row(col).t();
                         costcustom2 data;
@@ -3918,7 +3953,11 @@ void IMDP::minTransitionMatrix(){
                         data.customPDF = customPDF;
                         data.samples = calls;
                         data.input_space_size = input_space_size;
-                        opt.set_min_objective(custom2, &data);
+                        if (is_min) {
+                            opt.set_min_objective(custom2, &data);
+                        } else {
+                            opt.set_max_objective(custom2, &data);
+                        }
                         vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                         double minf;
                         try {
@@ -3938,15 +3977,15 @@ void IMDP::minTransitionMatrix(){
         }
     }else{
         const size_t total_states = state_space_size * input_space_size * disturb_space_size;
-        cout << "minimum transition Matrix dimensions: " << total_states << " x " << state_space_size << endl;
-        minTransitionM.set_size(total_states, state_space_size);
+        cout << bound_type_short << " transition Matrix dimensions: " << total_states << " x " << state_space_size << endl;
+        output.set_size(total_states, state_space_size);
         cout << "Approximate memory required if stored: " << total_states*state_space_size*sizeof(double)/1000000.0 << "Mb, " << total_states*state_space_size*sizeof(double)/1000000000.0 << "Gb" << endl;
         if (noise == NoiseType::NORMAL && diagonal == true){
             cout << "Parallel run for Normal-diagonal TransitionMatrix... " << endl;
             sycl::queue queue;
             {
                 // Create a SYCL buffer to store the space
-                sycl::buffer<double> cdfBuffer(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
+                sycl::buffer<double> cdfBuffer(output.memptr(),output.n_rows*output.n_cols);
                 // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                 queue.submit([&](sycl::handler& cgh) {
                     auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
@@ -3974,7 +4013,7 @@ void IMDP::minTransitionMatrix(){
                         opt.set_lower_bounds(lb);
                         opt.set_upper_bounds(ub);
                         opt.set_xtol_rel(1e-3);
-                        
+
                         // Prepare data for costfunction
                         const vec state_end = state_space.row(col).t();
                         costFunctionDataNormal data;
@@ -3985,7 +4024,11 @@ void IMDP::minTransitionMatrix(){
                         data.sigma = sigma;
                         data.dynamics3 = dynamics3;
                         data.is_diagonal = diagonal;
-                        opt.set_min_objective(costFunctionNormal, &data);
+                        if (is_min) {
+                            opt.set_min_objective(costFunctionNormal, &data);
+                        } else {
+                            opt.set_max_objective(costFunctionNormal, &data);
+                        }
                         vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                         double minf;
                         try {
@@ -4005,7 +4048,7 @@ void IMDP::minTransitionMatrix(){
             sycl::queue queue;
             {
                 // Create a SYCL buffer to store the space
-                sycl::buffer<double> cdfBuffer(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
+                sycl::buffer<double> cdfBuffer(output.memptr(),output.n_rows*output.n_cols);
                 // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                 queue.submit([&](sycl::handler& cgh) {
                     auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
@@ -4033,7 +4076,7 @@ void IMDP::minTransitionMatrix(){
                         opt.set_lower_bounds(lb);
                         opt.set_upper_bounds(ub);
                         opt.set_xtol_rel(1e-3);
-                        
+
                         // Prepare data for costfunction
                         const vec state_end = state_space.row(col).t();
                         costFunctionDataNormal data;
@@ -4047,7 +4090,11 @@ void IMDP::minTransitionMatrix(){
                         data.dynamics3 = dynamics3;
                         data.is_diagonal = diagonal;
                         data.samples = calls;
-                        opt.set_min_objective(costFunctionNormal, &data);
+                        if (is_min) {
+                            opt.set_min_objective(costFunctionNormal, &data);
+                        } else {
+                            opt.set_max_objective(costFunctionNormal, &data);
+                        }
                         vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                         double minf;
                         try {
@@ -4067,7 +4114,7 @@ void IMDP::minTransitionMatrix(){
             sycl::queue queue;
             {
                 // Create a SYCL buffer to store the space
-                sycl::buffer<double> cdfBuffer(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
+                sycl::buffer<double> cdfBuffer(output.memptr(),output.n_rows*output.n_cols);
                 // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                 queue.submit([&](sycl::handler& cgh) {
                     auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
@@ -4095,7 +4142,7 @@ void IMDP::minTransitionMatrix(){
                         opt.set_lower_bounds(lb);
                         opt.set_upper_bounds(ub);
                         opt.set_xtol_rel(1e-3);
-                        
+
                         // Prepare data for costfunction
                         const vec state_end = state_space.row(col).t();
                         costcustom3 data;
@@ -4108,7 +4155,11 @@ void IMDP::minTransitionMatrix(){
                         data.dynamics = dynamics3;
                         data.customPDF = customPDF;
                         data.samples = calls;
-                        opt.set_min_objective(custom3, &data);
+                        if (is_min) {
+                            opt.set_min_objective(custom3, &data);
+                        } else {
+                            opt.set_max_objective(custom3, &data);
+                        }
                         vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
                         double minf;
                         try {
@@ -4133,35 +4184,43 @@ void IMDP::minTransitionMatrix(){
     cout << "Execution time: " << duration.count()/1000.0 << " seconds" << endl;
 }
 
+/// Abstraction for minimal transition matrix
+void IMDP::minTransitionMatrix(){
+    transitionMatrixImpl(minTransitionM, true);
+}
+
 /// Abstraction for maximal transition matrix
 void IMDP::maxTransitionMatrix(){
-    //Start timer
+    transitionMatrixImpl(maxTransitionM, false);
+}
+
+/// Internal implementation for target transition vector abstraction (handles both min and max)
+void IMDP::targetTransitionVectorImpl(vec& output, bool is_min){
     auto start = chrono::steady_clock::now();
-    cout << "Calculating maximal transition probability matrix." << endl;
-    
+    const char* bound_type = is_min ? "minimal" : "maximal";
+    cout << "Calculating " << bound_type << " target transition probability vector." << endl;
+
     if (disturb_space_size == 0 && input_space_size == 0){
         const size_t total_states = state_space_size;
-        cout << "maximum transition Matrix dimensions: " << total_states << " x " << state_space_size << endl;
-        maxTransitionM.set_size(total_states, state_space_size);
-        cout << "Approximate memory required if stored: " << total_states*state_space_size*sizeof(double)/1000000.0 << "Mb, " << total_states*state_space_size*sizeof(double)/1000000000.0 << "Gb" << endl;
-        
+        cout << "Target Vector dimensions before summation: " << total_states << " x " << target_space.n_rows << endl;
+        mat temp;
+        temp.set_size(total_states, target_space.n_rows);
+        cout << "Approximate memory required if stored: " << total_states*target_space.n_rows*sizeof(double)/1000000.0 << "Mb, " << total_states*target_space.n_rows*sizeof(double)/1000000000.0 << "Gb" << endl;
+
         if (noise == NoiseType::NORMAL && diagonal == true){
-            cout << "Parallel run for Normal-diagonal TransitionMatrix... " << endl;
+            cout << "Parallel run for Normal-diagonal TargetTransitionVector... " << endl;
             sycl::queue queue;
             {
-                // Create a SYCL buffer to store the space
-                sycl::buffer<double> cdfBuffer(maxTransitionM.memptr(),maxTransitionM.n_rows*maxTransitionM.n_cols);
-                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
                 queue.submit([&](sycl::handler& cgh) {
                     auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                    sycl::range<2> global(total_states, state_space_size);
+                    sycl::range<2> global(total_states, target_space.n_rows);
                     cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
                         const size_t x0 = idx[0];
                         const size_t x1 = idx[1];
-                        size_t index = x0 * state_space_size + x1;
+                        size_t index = x0 * target_space.n_rows + x1;
                         size_t row = index%total_states;
                         size_t col = index/total_states;
-                        double cdf_product = 1.0;
                         size_t i = row % state_space_size;
                         const vec state_start = state_space.row(i).t();
                         nlopt::opt opt(algo, state_start.size());
@@ -4174,16 +4233,19 @@ void IMDP::maxTransitionMatrix(){
                         opt.set_lower_bounds(lb);
                         opt.set_upper_bounds(ub);
                         opt.set_xtol_rel(1e-3);
-                        
-                        // Prepare data for costfunction
-                        const vec state_end = state_space.row(col).t();
+
+                        const vec state_end = target_space.row(col).t();
                         costFunctionDataNormal data;
                         data.state_end = state_end;
                         data.eta = ss_eta;
                         data.sigma = sigma;
                         data.dynamics1 = dynamics1;
                         data.is_diagonal = diagonal;
-                        opt.set_max_objective(costFunctionNormal, &data);
+                        if (is_min) {
+                            opt.set_min_objective(costFunctionNormal, &data);
+                        } else {
+                            opt.set_max_objective(costFunctionNormal, &data);
+                        }
                         vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                         double minf;
                         try {
@@ -4196,25 +4258,23 @@ void IMDP::maxTransitionMatrix(){
                 });
             }
             queue.wait_and_throw();
+            output = sum(temp,1);
             cout << " Complete." << endl;
         }
         else if (noise == NoiseType::NORMAL && diagonal == false){
-            cout << "Parallel run for Normal-offdiagonal TransitionMatrix... " << endl;
+            cout << "Parallel run for Normal-offdiagonal TargetTransitionVector... " << endl;
             sycl::queue queue;
             {
-                // Create a SYCL buffer to store the space
-                sycl::buffer<double> cdfBuffer(maxTransitionM.memptr(),maxTransitionM.n_rows*maxTransitionM.n_cols);
-                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
                 queue.submit([&](sycl::handler& cgh) {
                     auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                    sycl::range<2> global(total_states, state_space_size);
+                    sycl::range<2> global(total_states, target_space.n_rows);
                     cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
                         const size_t x0 = idx[0];
                         const size_t x1 = idx[1];
-                        size_t index = x0 * state_space_size + x1;
+                        size_t index = x0 * target_space.n_rows + x1;
                         size_t row = index%total_states;
                         size_t col = index/total_states;
-                        double cdf_product = 1.0;
                         size_t i = row % state_space_size;
                         const vec state_start = state_space.row(i).t();
                         nlopt::opt opt(algo, state_start.size());
@@ -4227,18 +4287,23 @@ void IMDP::maxTransitionMatrix(){
                         opt.set_lower_bounds(lb);
                         opt.set_upper_bounds(ub);
                         opt.set_xtol_rel(1e-3);
-                        
-                        // Prepare data for costfunction
-                        const vec state_end = state_space.row(col).t();
+
+                        const vec state_end = target_space.row(col).t();
                         costFunctionDataNormal data;
                         data.dim = dim_x;
                         data.state_end = state_end;
                         data.eta = ss_eta;
+                        data.inv_cov = inv_covariance_matrix;
+                        data.det = covariance_matrix_determinant;
                         data.dynamics1 = dynamics1;
-                        data.samples = calls;
                         data.is_diagonal = diagonal;
-                        opt.set_max_objective(costFunctionNormal, &data);
-                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
+                        data.samples = calls;
+                        if (is_min) {
+                            opt.set_min_objective(costFunctionNormal, &data);
+                        } else {
+                            opt.set_max_objective(costFunctionNormal, &data);
+                        }
+                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                         double minf;
                         try {
                             nlopt::result result = opt.optimize(initial_guess, minf);
@@ -4250,28 +4315,23 @@ void IMDP::maxTransitionMatrix(){
                 });
             }
             queue.wait_and_throw();
+            output = sum(temp,1);
             cout << " Complete." << endl;
         }
         else if (noise == NoiseType::CUSTOM){
-            cout << "Parallel run for Custom TransitionMatrix... " << endl;
+            cout << "Parallel run for Custom TargetTransitionVector... " << endl;
             sycl::queue queue;
             {
-                // Create a SYCL buffer to store the space
-                sycl::buffer<double> cdfBuffer(maxTransitionM.memptr(),maxTransitionM.n_rows*maxTransitionM.n_cols);
-                
-                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
                 queue.submit([&](sycl::handler& cgh) {
                     auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                    
-                    sycl::range<2> global(total_states, state_space_size);
-                    
+                    sycl::range<2> global(total_states, target_space.n_rows);
                     cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
                         const size_t x0 = idx[0];
                         const size_t x1 = idx[1];
-                        size_t index = x0 * state_space_size + x1;
+                        size_t index = x0 * target_space.n_rows + x1;
                         size_t row = index%total_states;
                         size_t col = index/total_states;
-                        double cdf_product = 1.0;
                         size_t i = row % state_space_size;
                         const vec state_start = state_space.row(i).t();
                         nlopt::opt opt(algo, state_start.size());
@@ -4284,9 +4344,8 @@ void IMDP::maxTransitionMatrix(){
                         opt.set_lower_bounds(lb);
                         opt.set_upper_bounds(ub);
                         opt.set_xtol_rel(1e-3);
-                        
-                        // Prepare data for costfunction
-                        const vec state_end = state_space.row(col).t();
+
+                        const vec state_end = target_space.row(col).t();
                         costcustom1 data;
                         data.dim = dim_x;
                         data.state_start = state_start;
@@ -4295,73 +4354,11 @@ void IMDP::maxTransitionMatrix(){
                         data.dynamics = dynamics1;
                         data.customPDF = customPDF;
                         data.samples = calls;
-                        opt.set_max_objective(custom1, &data);
-                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
-                        double minf;
-                        try {
-                            nlopt::result result = opt.optimize(initial_guess, minf);
-                        } catch (exception& e) {
-                            cout << "nlopt failed: " << e.what() << endl;
+                        if (is_min) {
+                            opt.set_min_objective(custom1, &data);
+                        } else {
+                            opt.set_max_objective(custom1, &data);
                         }
-                        cdfAccessor[index] = minf;
-                    });
-                });
-            }
-            queue.wait_and_throw();
-            cout << " Complete." << endl;
-        }
-        else{
-            cout << "Unsupported noise combination, either swap offdiagonal/diagonal or change type of noise." << endl;
-        }
-    }
-    
-    else if (disturb_space_size == 0){
-        const size_t total_states = state_space_size * input_space_size;
-        cout << "maximum transition Matrix dimensions: " << total_states << " x " << state_space_size << endl;
-        maxTransitionM.set_size(total_states, state_space_size);
-        cout << "Approximate memory required if stored: " << total_states*state_space_size*sizeof(double)/1000000.0 << "Mb, " << total_states*state_space_size*sizeof(double)/1000000000.0 << "Gb" << endl;
-        if (noise == NoiseType::NORMAL && diagonal == true){
-            cout << "Parallel run for Normal-diagonal TransitionMatrix... " << endl;
-            sycl::queue queue;
-            {
-                // Create a SYCL buffer to store the space
-                sycl::buffer<double> cdfBuffer(maxTransitionM.memptr(),maxTransitionM.n_rows*maxTransitionM.n_cols);
-                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                queue.submit([&](sycl::handler& cgh) {
-                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                    sycl::range<2> global(total_states, state_space_size);
-                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
-                        const size_t x0 = idx[0];
-                        const size_t x1 = idx[1];
-                        size_t index = x0 * state_space_size + x1;
-                        size_t row = index%total_states;
-                        size_t col = index/total_states;
-                        double cdf_product = 1.0;
-                        size_t k = (row / state_space_size) % input_space_size;
-                        size_t i = row % state_space_size;
-                        const vec input = input_space.row(k).t();
-                        const vec state_start = state_space.row(i).t();
-                        nlopt::opt opt(algo, state_start.size());
-                        vector<double> lb(state_start.size());
-                        vector<double> ub(state_start.size());
-                        for (size_t m = 0; m < state_start.size(); ++m) {
-                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                        }
-                        opt.set_lower_bounds(lb);
-                        opt.set_upper_bounds(ub);
-                        opt.set_xtol_rel(1e-3);
-                        
-                        // Prepare data for costfunction
-                        const vec state_end = state_space.row(col).t();
-                        costFunctionDataNormal data;
-                        data.state_end = state_end;
-                        data.second = input;
-                        data.eta = ss_eta;
-                        data.sigma = sigma;
-                        data.dynamics2 = dynamics2;
-                        data.is_diagonal = diagonal;
-                        opt.set_max_objective(costFunctionNormal, &data);
                         vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                         double minf;
                         try {
@@ -4374,25 +4371,35 @@ void IMDP::maxTransitionMatrix(){
                 });
             }
             queue.wait_and_throw();
+            output = sum(temp,1);
             cout << " Complete." << endl;
         }
-        else if (noise == NoiseType::NORMAL && diagonal == false){
-            cout << "Parallel run for Normal-offdiagonal TransitionMatrix... " << endl;
+        else{
+            cout << "Unsupported noise combination, either swap offdiagonal/diagonal or change type of noise." << endl;
+        }
+    }
+
+    else if (disturb_space_size == 0){
+        const size_t total_states = state_space_size * input_space_size;
+        cout << "Target Vector dimensions before summation: " << total_states << " x " << target_space.n_rows << endl;
+        mat temp;
+        temp.set_size(total_states, target_space.n_rows);
+        cout << "Approximate memory required if stored: " << total_states*target_space.n_rows*sizeof(double)/1000000.0 << "Mb, " << total_states*target_space.n_rows*sizeof(double)/1000000000.0 << "Gb" << endl;
+
+        if (noise == NoiseType::NORMAL && diagonal == true){
+            cout << "Parallel run for Normal-diagonal TargetTransitionVector... " << endl;
             sycl::queue queue;
             {
-                // Create a SYCL buffer to store the space
-                sycl::buffer<double> cdfBuffer(maxTransitionM.memptr(),maxTransitionM.n_rows*maxTransitionM.n_cols);
-                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
                 queue.submit([&](sycl::handler& cgh) {
                     auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                    sycl::range<2> global(total_states, state_space_size);
+                    sycl::range<2> global(total_states, target_space.n_rows);
                     cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
                         const size_t x0 = idx[0];
                         const size_t x1 = idx[1];
-                        size_t index = x0 * state_space_size + x1;
+                        size_t index = x0 * target_space.n_rows + x1;
                         size_t row = index%total_states;
                         size_t col = index/total_states;
-                        double cdf_product = 1.0;
                         size_t k = (row / state_space_size) % input_space_size;
                         size_t i = row % state_space_size;
                         const vec input = input_space.row(k).t();
@@ -4407,9 +4414,65 @@ void IMDP::maxTransitionMatrix(){
                         opt.set_lower_bounds(lb);
                         opt.set_upper_bounds(ub);
                         opt.set_xtol_rel(1e-3);
-                        
-                        // Prepare data for costfunction
-                        const vec state_end = state_space.row(col).t();
+
+                        const vec state_end = target_space.row(col).t();
+                        costFunctionDataNormal data;
+                        data.state_end = state_end;
+                        data.second = input;
+                        data.eta = ss_eta;
+                        data.sigma = sigma;
+                        data.dynamics2 = dynamics2;
+                        data.is_diagonal = diagonal;
+                        if (is_min) {
+                            opt.set_min_objective(costFunctionNormal, &data);
+                        } else {
+                            opt.set_max_objective(costFunctionNormal, &data);
+                        }
+                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        cdfAccessor[index] = minf;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            output = sum(temp,1);
+            cout << " Complete." << endl;
+        }
+        else if (noise == NoiseType::NORMAL && diagonal == false){
+            cout << "Parallel run for Normal-offdiagonal TargetTransitionVector... " << endl;
+            sycl::queue queue;
+            {
+                sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<2> global(total_states, target_space.n_rows);
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                        const size_t x0 = idx[0];
+                        const size_t x1 = idx[1];
+                        size_t index = x0 * target_space.n_rows + x1;
+                        size_t row = index%total_states;
+                        size_t col = index/total_states;
+                        size_t k = (row / state_space_size) % input_space_size;
+                        size_t i = row % state_space_size;
+                        const vec input = input_space.row(k).t();
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+
+                        const vec state_end = target_space.row(col).t();
                         costFunctionDataNormal data;
                         data.dim = dim_x;
                         data.state_end = state_end;
@@ -4420,8 +4483,12 @@ void IMDP::maxTransitionMatrix(){
                         data.dynamics2 = dynamics2;
                         data.is_diagonal = diagonal;
                         data.samples = calls;
-                        opt.set_max_objective(costFunctionNormal, &data);
-                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
+                        if (is_min) {
+                            opt.set_min_objective(costFunctionNormal, &data);
+                        } else {
+                            opt.set_max_objective(costFunctionNormal, &data);
+                        }
+                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                         double minf;
                         try {
                             nlopt::result result = opt.optimize(initial_guess, minf);
@@ -4433,24 +4500,23 @@ void IMDP::maxTransitionMatrix(){
                 });
             }
             queue.wait_and_throw();
+            output = sum(temp,1);
             cout << " Complete." << endl;
-        }else if (noise ==NoiseType::CUSTOM){
-            cout << "Parallel run for Custom TransitionMatrix... " << endl;
+        }
+        else if(noise == NoiseType::CUSTOM){
+            cout << "Parallel run for Custom TargetTransitionVector... " << endl;
             sycl::queue queue;
             {
-                // Create a SYCL buffer to store the space
-                sycl::buffer<double> cdfBuffer(maxTransitionM.memptr(),maxTransitionM.n_rows*maxTransitionM.n_cols);
-                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
                 queue.submit([&](sycl::handler& cgh) {
                     auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                    sycl::range<2> global(total_states, state_space_size);
+                    sycl::range<2> global(total_states, target_space.n_rows);
                     cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
                         const size_t x0 = idx[0];
                         const size_t x1 = idx[1];
-                        size_t index = x0 * state_space_size + x1;
+                        size_t index = x0 * target_space.n_rows + x1;
                         size_t row = index%total_states;
                         size_t col = index/total_states;
-                        double cdf_product = 1.0;
                         size_t k = (row / state_space_size) % input_space_size;
                         size_t i = row % state_space_size;
                         const vec input = input_space.row(k).t();
@@ -4465,9 +4531,8 @@ void IMDP::maxTransitionMatrix(){
                         opt.set_lower_bounds(lb);
                         opt.set_upper_bounds(ub);
                         opt.set_xtol_rel(1e-3);
-                        
-                        // Prepare data for costfunction
-                        const vec state_end = state_space.row(col).t();
+
+                        const vec state_end = target_space.row(col).t();
                         costcustom2 data;
                         data.dim = dim_x;
                         data.state_start = state_start;
@@ -4478,8 +4543,12 @@ void IMDP::maxTransitionMatrix(){
                         data.customPDF = customPDF;
                         data.samples = calls;
                         data.input_space_size = input_space_size;
-                        opt.set_max_objective(custom2, &data);
-                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
+                        if (is_min) {
+                            opt.set_min_objective(custom2, &data);
+                        } else {
+                            opt.set_max_objective(custom2, &data);
+                        }
+                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                         double minf;
                         try {
                             nlopt::result result = opt.optimize(initial_guess, minf);
@@ -4491,6 +4560,7 @@ void IMDP::maxTransitionMatrix(){
                 });
             }
             queue.wait_and_throw();
+            output = sum(temp,1);
             cout << " Complete." << endl;
         }
         else{
@@ -4499,26 +4569,25 @@ void IMDP::maxTransitionMatrix(){
     }
     else if (input_space_size == 0){
         const size_t total_states = state_space_size * disturb_space_size;
-        cout << "maximum transition Matrix dimensions: " << total_states << " x " << state_space_size << endl;
-        maxTransitionM.set_size(total_states, state_space_size);
-        cout << "Approximate memory required if stored: " << total_states*state_space_size*sizeof(double)/1000000.0 << "Mb, " << total_states*state_space_size*sizeof(double)/1000000000.0 << "Gb" << endl;
+        cout << "Target Vector dimensions before summation: " << total_states << " x " << target_space.n_rows << endl;
+        mat temp;
+        temp.set_size(total_states, target_space.n_rows);
+        cout << "Approximate memory required if stored: " << total_states*target_space.n_rows*sizeof(double)/1000000.0 << "Mb, " << total_states*target_space.n_rows*sizeof(double)/1000000000.0 << "Gb" << endl;
+
         if (noise == NoiseType::NORMAL && diagonal == true){
-            cout << "Parallel run for Normal-diagonal TransitionMatrix... " << endl;
+            cout << "Parallel run for Normal-diagonal TargetTransitionVector... " << endl;
             sycl::queue queue;
             {
-                // Create a SYCL buffer to store the space
-                sycl::buffer<double> cdfBuffer(maxTransitionM.memptr(),maxTransitionM.n_rows*maxTransitionM.n_cols);
-                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
                 queue.submit([&](sycl::handler& cgh) {
                     auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                    sycl::range<2> global(total_states, state_space_size);
+                    sycl::range<2> global(total_states, target_space.n_rows);
                     cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
                         const size_t x0 = idx[0];
                         const size_t x1 = idx[1];
-                        size_t index = x0 * state_space_size + x1;
+                        size_t index = x0 * target_space.n_rows + x1;
                         size_t row = index%total_states;
                         size_t col = index/total_states;
-                        double cdf_product = 1.0;
                         size_t k = (row / state_space_size) % disturb_space_size;
                         size_t i = row % state_space_size;
                         const vec disturb = disturb_space.row(k).t();
@@ -4533,9 +4602,8 @@ void IMDP::maxTransitionMatrix(){
                         opt.set_lower_bounds(lb);
                         opt.set_upper_bounds(ub);
                         opt.set_xtol_rel(1e-3);
-                        
-                        // Prepare data for costfunction
-                        const vec state_end = state_space.row(col).t();
+
+                        const vec state_end = target_space.row(col).t();
                         costFunctionDataNormal data;
                         data.state_end = state_end;
                         data.second = disturb;
@@ -4543,193 +4611,11 @@ void IMDP::maxTransitionMatrix(){
                         data.sigma = sigma;
                         data.dynamics2 = dynamics2;
                         data.is_diagonal = diagonal;
-                        opt.set_max_objective(costFunctionNormal, &data);
-                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
-                        double minf;
-                        try {
-                            nlopt::result result = opt.optimize(initial_guess, minf);
-                        } catch (exception& e) {
-                            cout << "nlopt failed: " << e.what() << endl;
+                        if (is_min) {
+                            opt.set_min_objective(costFunctionNormal, &data);
+                        } else {
+                            opt.set_max_objective(costFunctionNormal, &data);
                         }
-                        cdfAccessor[index] = minf;
-                    });
-                });
-            }
-            queue.wait_and_throw();
-            cout << " Complete." << endl;
-        }
-        else if (noise == NoiseType::NORMAL && diagonal == false){
-            cout << "Parallel run for Normal-offdiagonal TransitionMatrix... " << endl;
-            sycl::queue queue;
-            {
-                // Create a SYCL buffer to store the space
-                sycl::buffer<double> cdfBuffer(maxTransitionM.memptr(),maxTransitionM.n_rows*maxTransitionM.n_cols);
-                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                queue.submit([&](sycl::handler& cgh) {
-                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                    sycl::range<2> global(total_states, state_space_size);
-                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
-                        const size_t x0 = idx[0];
-                        const size_t x1 = idx[1];
-                        size_t index = x0 * state_space_size + x1;
-                        size_t row = index%total_states;
-                        size_t col = index/total_states;
-                        double cdf_product = 1.0;
-                        size_t k = (row / state_space_size) % input_space_size;
-                        size_t i = row % state_space_size;
-                        const vec disturb = disturb_space.row(k).t();
-                        const vec state_start = state_space.row(i).t();
-                        nlopt::opt opt(algo, state_start.size());
-                        vector<double> lb(state_start.size());
-                        vector<double> ub(state_start.size());
-                        for (size_t m = 0; m < state_start.size(); ++m) {
-                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                        }
-                        opt.set_lower_bounds(lb);
-                        opt.set_upper_bounds(ub);
-                        opt.set_xtol_rel(1e-3);
-                        
-                        // Prepare data for costfunction
-                        const vec state_end = state_space.row(col).t();
-                        costFunctionDataNormal data;
-                        data.dim = dim_x;
-                        data.state_end = state_end;
-                        data.second = disturb;
-                        data.eta = ss_eta;
-                        data.inv_cov = inv_covariance_matrix;
-                        data.det = covariance_matrix_determinant;
-                        data.dynamics2 = dynamics2;
-                        data.is_diagonal = diagonal;
-                        data.samples = calls;
-                        opt.set_max_objective(costFunctionNormal, &data);
-                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
-                        double minf;
-                        try {
-                            nlopt::result result = opt.optimize(initial_guess, minf);
-                        } catch (exception& e) {
-                            cout << "nlopt failed: " << e.what() << endl;
-                        }
-                        cdfAccessor[index] = minf;
-                    });
-                });
-            }
-            queue.wait_and_throw();
-            cout << " Complete." << endl;
-        }
-        else if (noise == NoiseType::CUSTOM){
-            cout << "Parallel run for Custom TransitionMatrix... " << endl;
-            sycl::queue queue;
-            {
-                // Create a SYCL buffer to store the space
-                sycl::buffer<double> cdfBuffer(maxTransitionM.memptr(),maxTransitionM.n_rows*maxTransitionM.n_cols);
-                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                queue.submit([&](sycl::handler& cgh) {
-                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                    sycl::range<2> global(total_states, state_space_size);
-                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
-                        const size_t x0 = idx[0];
-                        const size_t x1 = idx[1];
-                        size_t index = x0 * state_space_size + x1;
-                        size_t row = index%total_states;
-                        size_t col = index/total_states;
-                        double cdf_product = 1.0;
-                        size_t k = (row / state_space_size) % input_space_size;
-                        size_t i = row % state_space_size;
-                        const vec disturb = disturb_space.row(k).t();
-                        const vec state_start = state_space.row(i).t();
-                        nlopt::opt opt(algo, state_start.size());
-                        vector<double> lb(state_start.size());
-                        vector<double> ub(state_start.size());
-                        for (size_t m = 0; m < state_start.size(); ++m) {
-                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                        }
-                        opt.set_lower_bounds(lb);
-                        opt.set_upper_bounds(ub);
-                        opt.set_xtol_rel(1e-3);
-                        
-                        // Prepare data for costfunction
-                        const vec state_end = state_space.row(col).t();
-                        costcustom2 data;
-                        data.dim = dim_x;
-                        data.state_start = state_start;
-                        data.state_end = state_end;
-                        data.second = disturb;
-                        data.eta = ss_eta;
-                        data.dynamics = dynamics2;
-                        data.customPDF = customPDF;
-                        data.samples = calls;
-                        data.input_space_size = input_space_size;
-                        opt.set_max_objective(custom2, &data);
-                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
-                        double minf;
-                        try {
-                            nlopt::result result = opt.optimize(initial_guess, minf);
-                        } catch (exception& e) {
-                            cout << "nlopt failed: " << e.what() << endl;
-                        }
-                        cdfAccessor[index] = minf;
-                    });
-                });
-            }
-            queue.wait_and_throw();
-            cout << " Complete." << endl;
-        }
-        else{
-            cout << "Unsupported noise combination, either swap offdiagonal/diagonal or change type of noise." << endl;
-        }
-    }else{
-        
-        const size_t total_states = state_space_size * input_space_size * disturb_space_size;
-        cout << "maximum transition Matrix dimensions: " << total_states << " x " << state_space_size << endl;
-        maxTransitionM.set_size(total_states, state_space_size);
-        cout << "Approximate memory required if stored: " << total_states*state_space_size*sizeof(double)/1000000.0 << "Mb, " << total_states*state_space_size*sizeof(double)/1000000000.0 << "Gb" << endl;
-        if (noise == NoiseType::NORMAL && diagonal == true){
-            cout << "Parallel run for Normal-diagonal TransitionMatrix... " << endl;
-            sycl::queue queue;
-            {
-                // Create a SYCL buffer to store the space
-                sycl::buffer<double> cdfBuffer(maxTransitionM.memptr(),maxTransitionM.n_rows*maxTransitionM.n_cols);
-                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                queue.submit([&](sycl::handler& cgh) {
-                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                    sycl::range<2> global(total_states, state_space_size);
-                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
-                        const size_t x0 = idx[0];
-                        const size_t x1 = idx[1];
-                        size_t index = x0 * state_space_size + x1;
-                        size_t row = index%total_states;
-                        size_t col = index/total_states;
-                        double cdf_product = 1.0;
-                        size_t l = row / (input_space_size * state_space_size);
-                        size_t k = (row / state_space_size) % input_space_size;
-                        size_t i = row % state_space_size;
-                        const vec disturb = disturb_space.row(l).t();
-                        const vec input = input_space.row(k).t();
-                        const vec state_start = state_space.row(i).t();
-                        nlopt::opt opt(algo, state_start.size());
-                        vector<double> lb(state_start.size());
-                        vector<double> ub(state_start.size());
-                        for (size_t m = 0; m < state_start.size(); ++m) {
-                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                        }
-                        opt.set_lower_bounds(lb);
-                        opt.set_upper_bounds(ub);
-                        opt.set_xtol_rel(1e-3);
-                        
-                        // Prepare data for costfunction
-                        const vec state_end = state_space.row(col).t();
-                        costFunctionDataNormal data;
-                        data.state_end = state_end;
-                        data.input = input;
-                        data.disturb = disturb;
-                        data.eta = ss_eta;
-                        data.sigma = sigma;
-                        data.dynamics3 = dynamics3;
-                        data.is_diagonal = diagonal;
-                        opt.set_max_objective(costFunctionNormal, &data);
                         vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                         double minf;
                         try {
@@ -4742,25 +4628,154 @@ void IMDP::maxTransitionMatrix(){
                 });
             }
             queue.wait_and_throw();
+            output = sum(temp,1);
             cout << " Complete." << endl;
         }
         else if (noise == NoiseType::NORMAL && diagonal == false){
-            cout << "Parallel run for Normal-offdiagonal TransitionMatrix... " << endl;
+            cout << "Parallel run for Normal-offdiagonal TargetTransitionVector... " << endl;
             sycl::queue queue;
             {
-                // Create a SYCL buffer to store the space
-                sycl::buffer<double> cdfBuffer(maxTransitionM.memptr(),maxTransitionM.n_rows*maxTransitionM.n_cols);
-                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
                 queue.submit([&](sycl::handler& cgh) {
                     auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                    sycl::range<2> global(total_states, state_space_size);
+                    sycl::range<2> global(total_states, target_space.n_rows);
                     cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
                         const size_t x0 = idx[0];
                         const size_t x1 = idx[1];
-                        size_t index = x0 * state_space_size + x1;
+                        size_t index = x0 * target_space.n_rows + x1;
                         size_t row = index%total_states;
                         size_t col = index/total_states;
-                        double cdf_product = 1.0;
+                        size_t k = (row / state_space_size) % disturb_space_size;
+                        size_t i = row % state_space_size;
+                        const vec disturb = disturb_space.row(k).t();
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+
+                        const vec state_end = target_space.row(col).t();
+                        costFunctionDataNormal data;
+                        data.dim = dim_x;
+                        data.state_end = state_end;
+                        data.second = disturb;
+                        data.eta = ss_eta;
+                        data.inv_cov = inv_covariance_matrix;
+                        data.det = covariance_matrix_determinant;
+                        data.dynamics2 = dynamics2;
+                        data.is_diagonal = diagonal;
+                        data.samples = calls;
+                        if (is_min) {
+                            opt.set_min_objective(costFunctionNormal, &data);
+                        } else {
+                            opt.set_max_objective(costFunctionNormal, &data);
+                        }
+                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        cdfAccessor[index] = minf;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            output = sum(temp,1);
+            cout << " Complete." << endl;
+        }
+        else if (noise == NoiseType::CUSTOM){
+            cout << "Parallel run for Custom TargetTransitionVector... " << endl;
+            sycl::queue queue;
+            {
+                sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<2> global(total_states, target_space.n_rows);
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                        const size_t x0 = idx[0];
+                        const size_t x1 = idx[1];
+                        size_t index = x0 * target_space.n_rows + x1;
+                        size_t row = index%total_states;
+                        size_t col = index/total_states;
+                        size_t k = (row / state_space_size) % disturb_space_size;
+                        size_t i = row % state_space_size;
+                        const vec disturb = disturb_space.row(k).t();
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+
+                        const vec state_end = target_space.row(col).t();
+                        costcustom2 data;
+                        data.dim = dim_x;
+                        data.state_start = state_start;
+                        data.state_end = state_end;
+                        data.second = disturb;
+                        data.eta = ss_eta;
+                        data.dynamics = dynamics2;
+                        data.customPDF = customPDF;
+                        data.samples = calls;
+                        data.input_space_size = input_space_size;
+                        if (is_min) {
+                            opt.set_min_objective(custom2, &data);
+                        } else {
+                            opt.set_max_objective(custom2, &data);
+                        }
+                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        cdfAccessor[index] = minf;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            output = sum(temp,1);
+            cout << " Complete." << endl;
+        }
+        else{
+            cout << "Unsupported noise combination, either swap offdiagonal/diagonal or change type of noise." << endl;
+        }
+    }
+    else{
+        const size_t total_states = state_space_size * input_space_size * disturb_space_size;
+        cout << "Target Vector dimensions before summation: " << total_states << " x " << target_space.n_rows << endl;
+        mat temp;
+        temp.set_size(total_states, target_space.n_rows);
+        cout << "Approximate memory required if stored: " << total_states*target_space.n_rows*sizeof(double)/1000000.0 << "Mb, " << total_states*target_space.n_rows*sizeof(double)/1000000000.0 << "Gb" << endl;
+
+        if (noise == NoiseType::NORMAL && diagonal == true){
+            cout << "Parallel run for Normal-diagonal TargetTransitionVector... " << endl;
+            sycl::queue queue;
+            {
+                sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<2> global(total_states, target_space.n_rows);
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                        const size_t x0 = idx[0];
+                        const size_t x1 = idx[1];
+                        size_t index = x0 * target_space.n_rows + x1;
+                        size_t row = index%total_states;
+                        size_t col = index/total_states;
                         size_t l = row / (input_space_size * state_space_size);
                         size_t k = (row / state_space_size) % input_space_size;
                         size_t i = row % state_space_size;
@@ -4777,9 +4792,68 @@ void IMDP::maxTransitionMatrix(){
                         opt.set_lower_bounds(lb);
                         opt.set_upper_bounds(ub);
                         opt.set_xtol_rel(1e-3);
-                        
-                        // Prepare data for costfunction
-                        const vec state_end = state_space.row(col).t();
+
+                        const vec state_end = target_space.row(col).t();
+                        costFunctionDataNormal data;
+                        data.state_end = state_end;
+                        data.input = input;
+                        data.disturb = disturb;
+                        data.eta = ss_eta;
+                        data.sigma = sigma;
+                        data.dynamics3 = dynamics3;
+                        data.is_diagonal = diagonal;
+                        if (is_min) {
+                            opt.set_min_objective(costFunctionNormal, &data);
+                        } else {
+                            opt.set_max_objective(costFunctionNormal, &data);
+                        }
+                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
+                        double minf;
+                        try {
+                            nlopt::result result = opt.optimize(initial_guess, minf);
+                        } catch (exception& e) {
+                            cout << "nlopt failed: " << e.what() << endl;
+                        }
+                        cdfAccessor[index] = minf;
+                    });
+                });
+            }
+            queue.wait_and_throw();
+            output = sum(temp,1);
+            cout << " Complete." << endl;
+        }
+        else if (noise == NoiseType::NORMAL && diagonal == false){
+            cout << "Parallel run for Normal-offdiagonal TargetTransitionVector... " << endl;
+            sycl::queue queue;
+            {
+                sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
+                queue.submit([&](sycl::handler& cgh) {
+                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
+                    sycl::range<2> global(total_states, target_space.n_rows);
+                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
+                        const size_t x0 = idx[0];
+                        const size_t x1 = idx[1];
+                        size_t index = x0 * target_space.n_rows + x1;
+                        size_t row = index%total_states;
+                        size_t col = index/total_states;
+                        size_t l = row / (input_space_size * state_space_size);
+                        size_t k = (row / state_space_size) % input_space_size;
+                        size_t i = row % state_space_size;
+                        const vec disturb = disturb_space.row(l).t();
+                        const vec input = input_space.row(k).t();
+                        const vec state_start = state_space.row(i).t();
+                        nlopt::opt opt(algo, state_start.size());
+                        vector<double> lb(state_start.size());
+                        vector<double> ub(state_start.size());
+                        for (size_t m = 0; m < state_start.size(); ++m) {
+                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
+                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
+                        }
+                        opt.set_lower_bounds(lb);
+                        opt.set_upper_bounds(ub);
+                        opt.set_xtol_rel(1e-3);
+
+                        const vec state_end = target_space.row(col).t();
                         costFunctionDataNormal data;
                         data.dim = dim_x;
                         data.state_end = state_end;
@@ -4791,8 +4865,12 @@ void IMDP::maxTransitionMatrix(){
                         data.dynamics3 = dynamics3;
                         data.is_diagonal = diagonal;
                         data.samples = calls;
-                        opt.set_max_objective(costFunctionNormal, &data);
-                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
+                        if (is_min) {
+                            opt.set_min_objective(costFunctionNormal, &data);
+                        } else {
+                            opt.set_max_objective(costFunctionNormal, &data);
+                        }
+                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                         double minf;
                         try {
                             nlopt::result result = opt.optimize(initial_guess, minf);
@@ -4804,25 +4882,23 @@ void IMDP::maxTransitionMatrix(){
                 });
             }
             queue.wait_and_throw();
+            output = sum(temp,1);
             cout << " Complete." << endl;
         }
         else if (noise == NoiseType::CUSTOM){
-            cout << "Parallel run for Custom TransitionMatrix... " << endl;
+            cout << "Parallel run for Custom TargetTransitionVector... " << endl;
             sycl::queue queue;
             {
-                // Create a SYCL buffer to store the space
-                sycl::buffer<double> cdfBuffer(maxTransitionM.memptr(),maxTransitionM.n_rows*maxTransitionM.n_cols);
-                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
+                sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
                 queue.submit([&](sycl::handler& cgh) {
                     auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                    sycl::range<2> global(total_states, state_space_size);
+                    sycl::range<2> global(total_states, target_space.n_rows);
                     cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
                         const size_t x0 = idx[0];
                         const size_t x1 = idx[1];
-                        size_t index = x0 * state_space_size + x1;
+                        size_t index = x0 * target_space.n_rows + x1;
                         size_t row = index%total_states;
                         size_t col = index/total_states;
-                        double cdf_product = 1.0;
                         size_t l = row / (input_space_size * state_space_size);
                         size_t k = (row / state_space_size) % input_space_size;
                         size_t i = row % state_space_size;
@@ -4839,9 +4915,8 @@ void IMDP::maxTransitionMatrix(){
                         opt.set_lower_bounds(lb);
                         opt.set_upper_bounds(ub);
                         opt.set_xtol_rel(1e-3);
-                        
-                        // Prepare data for costfunction
-                        const vec state_end = state_space.row(col).t();
+
+                        const vec state_end = target_space.row(col).t();
                         costcustom3 data;
                         data.dim = dim_x;
                         data.state_start = state_start;
@@ -4852,8 +4927,12 @@ void IMDP::maxTransitionMatrix(){
                         data.dynamics = dynamics3;
                         data.customPDF = customPDF;
                         data.samples = calls;
-                        opt.set_max_objective(custom3, &data);
-                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
+                        if (is_min) {
+                            opt.set_min_objective(custom3, &data);
+                        } else {
+                            opt.set_max_objective(custom3, &data);
+                        }
+                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
                         double minf;
                         try {
                             nlopt::result result = opt.optimize(initial_guess, minf);
@@ -4865,12 +4944,13 @@ void IMDP::maxTransitionMatrix(){
                 });
             }
             queue.wait_and_throw();
+            output = sum(temp,1);
             cout << " Complete." << endl;
         }
         else{
             cout << "Unsupported noise combination, either swap offdiagonal/diagonal or change type of noise." << endl;
         }
-    }// Stop the timer
+    }
     auto end = chrono::steady_clock::now();
     auto duration = chrono::duration_cast<chrono::milliseconds>(end - start);
     cout << "Execution time: " << duration.count()/1000.0 << " seconds" << endl;
@@ -4878,1525 +4958,13 @@ void IMDP::maxTransitionMatrix(){
 
 ///Abstraction of minimal target transition vector
 void IMDP::minTargetTransitionVector(){
-    auto start = chrono::steady_clock::now();
-    cout << "Calculating maximal transition probability Vector." << endl;
-    if (disturb_space_size == 0 && input_space_size == 0){
-        const size_t total_states = state_space_size;
-        cout << "Target Vector dimensions before summation: " << total_states << " x " << target_space.n_rows << endl;
-        mat temp;
-        temp.set_size(total_states, target_space.n_rows);
-        cout << "Approximate memory required if stored: " << total_states*target_space.n_rows*sizeof(double)/1000000.0 << "Mb, " << total_states*target_space.n_rows*sizeof(double)/1000000000.0 << "Gb" << endl;
-        
-        if (noise == NoiseType::NORMAL && diagonal == true){
-            cout << "Parallel run for Normal-diagonal TargetTransitionVector... " << endl;
-            sycl::queue queue;
-            {
-                // Create a SYCL buffer to store the space
-                sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
-                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                queue.submit([&](sycl::handler& cgh) {
-                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                    sycl::range<2> global(total_states, target_space.n_rows);
-                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
-                        const size_t x0 = idx[0];
-                        const size_t x1 = idx[1];
-                        size_t index = x0 * target_space.n_rows + x1;
-                        size_t row = index%total_states;
-                        size_t col = index/total_states;
-                        double cdf_product = 1.0;
-                        size_t i = row % state_space_size;
-                        const vec state_start = state_space.row(i).t();
-                        nlopt::opt opt(algo, state_start.size());
-                        vector<double> lb(state_start.size());
-                        vector<double> ub(state_start.size());
-                        for (size_t m = 0; m < state_start.size(); ++m) {
-                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                        }
-                        opt.set_lower_bounds(lb);
-                        opt.set_upper_bounds(ub);
-                        opt.set_xtol_rel(1e-3);
-                        
-                        // Prepare data for costfunction
-                        const vec state_end = target_space.row(col).t();
-                        costFunctionDataNormal data;
-                        data.state_end = state_end;
-                        data.eta = ss_eta;
-                        data.sigma = sigma;
-                        data.dynamics1 = dynamics1;
-                        data.is_diagonal = diagonal;
-                        opt.set_min_objective(costFunctionNormal, &data);
-                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
-                        double minf;
-                        try {
-                            nlopt::result result = opt.optimize(initial_guess, minf);
-                        } catch (exception& e) {
-                            cout << "nlopt failed: " << e.what() << endl;
-                        }
-                        cdfAccessor[index] = minf;
-                        
-                    });
-                });
-            }
-            queue.wait_and_throw();
-            minTargetM = sum(temp,1);
-            cout << " Complete." << endl;
-        }
-        else if (noise == NoiseType::NORMAL && diagonal == false){
-            cout << "Parallel run for Normal-offdiagonal TargetTransitionVector... " << endl;
-            sycl::queue queue;
-            {
-                // Create a SYCL buffer to store the space
-                sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
-                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                queue.submit([&](sycl::handler& cgh) {
-                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                    sycl::range<2> global(total_states, target_space.n_rows);
-                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
-                        const size_t x0 = idx[0];
-                        const size_t x1 = idx[1];
-                        size_t index = x0 * target_space.n_rows + x1;
-                        size_t row = index%total_states;
-                        size_t col = index/total_states;
-                        double cdf_product = 1.0;
-                        size_t i = row % state_space_size;
-                        const vec state_start = target_space.row(i).t();
-                        nlopt::opt opt(algo, state_start.size());
-                        vector<double> lb(state_start.size());
-                        vector<double> ub(state_start.size());
-                        for (size_t m = 0; m < state_start.size(); ++m) {
-                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                        }
-                        opt.set_lower_bounds(lb);
-                        opt.set_upper_bounds(ub);
-                        opt.set_xtol_rel(1e-3);
-                        
-                        // Prepare data for costfunction
-                        const vec state_end = target_space.row(col).t();
-                        costFunctionDataNormal data;
-                        data.dim = dim_x;
-                        data.state_end = state_end;
-                        data.eta = ss_eta;
-                        data.inv_cov = inv_covariance_matrix;
-                        data.det = covariance_matrix_determinant;
-                        data.dynamics1 = dynamics1;
-                        data.is_diagonal = diagonal;
-                        data.samples = calls;
-                        opt.set_min_objective(costFunctionNormal, &data);
-                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
-                        double minf;
-                        try {
-                            nlopt::result result = opt.optimize(initial_guess, minf);
-                        } catch (exception& e) {
-                            cout << "nlopt failed: " << e.what() << endl;
-                        }
-                        cdfAccessor[index] = minf;
-                    });
-                });
-            }
-            queue.wait_and_throw();
-            minTargetM = sum(temp,1);
-            cout << " Complete." << endl;
-        }else if (noise == NoiseType::CUSTOM){
-            cout << "Parallel run for Normal-offdiagonal TargetTransitionVector... " << endl;
-            sycl::queue queue;
-            {
-                // Create a SYCL buffer to store the space
-                sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
-                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                queue.submit([&](sycl::handler& cgh) {
-                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                    sycl::range<2> global(total_states, target_space.n_rows);
-                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
-                        const size_t x0 = idx[0];
-                        const size_t x1 = idx[1];
-                        size_t index = x0 * target_space.n_rows + x1;
-                        size_t row = index%total_states;
-                        size_t col = index/total_states;
-                        double cdf_product = 1.0;
-                        size_t i = row % state_space_size;
-                        const vec state_start = target_space.row(i).t();
-                        nlopt::opt opt(algo, state_start.size());
-                        vector<double> lb(state_start.size());
-                        vector<double> ub(state_start.size());
-                        for (size_t m = 0; m < state_start.size(); ++m) {
-                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                        }
-                        opt.set_lower_bounds(lb);
-                        opt.set_upper_bounds(ub);
-                        opt.set_xtol_rel(1e-3);
-                        
-                        // Prepare data for costfunction
-                        const vec state_end = target_space.row(col).t();
-                        costcustom1 data;
-                        data.dim = dim_x;
-                        data.state_start = state_start;
-                        data.state_end = state_end;
-                        data.eta = ss_eta;
-                        data.dynamics = dynamics1;
-                        data.customPDF = customPDF;
-                        data.samples = calls;
-                        opt.set_min_objective(custom1, &data);
-                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
-                        double minf;
-                        try {
-                            nlopt::result result = opt.optimize(initial_guess, minf);
-                        } catch (exception& e) {
-                            cout << "nlopt failed: " << e.what() << endl;
-                        }
-                        cdfAccessor[index] = minf;
-                    });
-                });
-            }
-            queue.wait_and_throw();
-            minTargetM = sum(temp,1);
-            cout << " Complete." << endl;
-        }
-        else{
-            cout << "Unsupported noise combination, either swap offdiagonal/diagonal or change type of noise." << endl;
-        }
-    }
-    
-    else if (disturb_space_size == 0){
-        const size_t total_states = state_space_size * input_space_size;
-        cout << "Target Vector dimensions before summation: " << total_states << " x " << target_space.n_rows << endl;
-        mat temp;
-        temp.set_size(total_states, target_space.n_rows);
-        cout << "Approximate memory required if stored: " << total_states*target_space.n_rows*sizeof(double)/1000000.0 << "Mb, " << total_states*target_space.n_rows*sizeof(double)/1000000000.0 << "Gb" << endl;
-        
-        if (noise == NoiseType::NORMAL && diagonal == true){
-            cout << "Parallel run for Normal-diagonal TargetTransitionVector... " << endl;
-            sycl::queue queue;
-            {
-                // Create a SYCL buffer to store the space
-                sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
-                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                queue.submit([&](sycl::handler& cgh) {
-                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                    sycl::range<2> global(total_states, target_space.n_rows);
-                    cgh.parallel_for<class SetVector>(global, [=](sycl::id<2> idx) {
-                        const size_t x0 = idx[0];
-                        const size_t x1 = idx[1];
-                        size_t index = x0 * target_space.n_rows + x1;
-                        size_t row = index%total_states;
-                        size_t col = index/total_states;
-                        double cdf_product = 1.0;
-                        size_t k = (row / state_space_size) % input_space_size;
-                        size_t i = row % state_space_size;
-                        const vec input = input_space.row(k).t();
-                        const vec state_start = state_space.row(i).t();
-                        nlopt::opt opt(algo, state_start.size());
-                        vector<double> lb(state_start.size());
-                        vector<double> ub(state_start.size());
-                        for (size_t m = 0; m < state_start.size(); ++m) {
-                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                        }
-                        opt.set_lower_bounds(lb);
-                        opt.set_upper_bounds(ub);
-                        opt.set_xtol_rel(1e-3);
-                        
-                        // Prepare data for costfunction
-                        const vec state_end = target_space.row(col).t();
-                        costFunctionDataNormal data;
-                        data.state_end = state_end;
-                        data.second = input;
-                        data.eta = ss_eta;
-                        data.sigma = sigma;
-                        data.dynamics2 = dynamics2;
-                        data.is_diagonal = diagonal;
-                        opt.set_min_objective(costFunctionNormal, &data);
-                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
-                        double minf;
-                        try {
-                            nlopt::result result = opt.optimize(initial_guess, minf);
-                        } catch (exception& e) {
-                            cout << "nlopt failed: " << e.what() << endl;
-                        }
-                        cdfAccessor[index] = minf;
-                    });
-                });
-            }
-            queue.wait_and_throw();
-            minTargetM = sum(temp,1);
-            cout << " Complete." << endl;
-        }
-        else if (noise == NoiseType::NORMAL && diagonal == false){
-            cout << "Parallel run for Normal-offdiagonal TargetTransitionVector... " << endl;
-            sycl::queue queue;
-            {
-                // Create a SYCL buffer to store the space
-                sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
-                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                queue.submit([&](sycl::handler& cgh) {
-                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                    sycl::range<2> global(total_states, target_space.n_rows);
-                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
-                        const size_t x0 = idx[0];
-                        const size_t x1 = idx[1];
-                        size_t index = x0 * target_space.n_rows + x1;
-                        size_t row = index%total_states;
-                        size_t col = index/total_states;
-                        double cdf_product = 1.0;
-                        size_t k = (row / state_space_size) % input_space_size;
-                        size_t i = row % state_space_size;
-                        const vec input = input_space.row(k).t();
-                        const vec state_start = state_space.row(i).t();
-                        nlopt::opt opt(algo, state_start.size());
-                        vector<double> lb(state_start.size());
-                        vector<double> ub(state_start.size());
-                        for (size_t m = 0; m < state_start.size(); ++m) {
-                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                        }
-                        opt.set_lower_bounds(lb);
-                        opt.set_upper_bounds(ub);
-                        opt.set_xtol_rel(1e-3);
-                        
-                        // Prepare data for costfunction
-                        const vec state_end = target_space.row(col).t();
-                        costFunctionDataNormal data;
-                        data.dim = dim_x;
-                        data.state_end = state_end;
-                        data.second = input;
-                        data.eta = ss_eta;
-                        data.inv_cov = inv_covariance_matrix;
-                        data.det = covariance_matrix_determinant;
-                        data.dynamics2 = dynamics2;
-                        data.samples = calls;
-                        data.is_diagonal = diagonal;
-                        opt.set_min_objective(costFunctionNormal, &data);
-                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
-                        double minf;
-                        try {
-                            nlopt::result result = opt.optimize(initial_guess, minf);
-                        } catch (exception& e) {
-                            cout << "nlopt failed: " << e.what() << endl;
-                        }
-                        cdfAccessor[index] = minf;
-                    });
-                });
-            }
-            queue.wait_and_throw();
-            minTargetM = sum(temp,1);
-            cout << " Complete." << endl;
-        } else if (noise == NoiseType::CUSTOM){
-            cout << "Parallel run for Custom TargetTransitionVector... " << endl;
-            sycl::queue queue;
-            {
-                // Create a SYCL buffer to store the space
-                sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
-                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                queue.submit([&](sycl::handler& cgh) {
-                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                    sycl::range<2> global(total_states, target_space.n_rows);
-                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
-                        const size_t x0 = idx[0];
-                        const size_t x1 = idx[1];
-                        size_t index = x0 * target_space.n_rows + x1;
-                        size_t row = index%total_states;
-                        size_t col = index/total_states;
-                        double cdf_product = 1.0;
-                        size_t k = (row / state_space_size) % input_space_size;
-                        size_t i = row % state_space_size;
-                        const vec input = input_space.row(k).t();
-                        const vec state_start = state_space.row(i).t();
-                        nlopt::opt opt(algo, state_start.size());
-                        vector<double> lb(state_start.size());
-                        vector<double> ub(state_start.size());
-                        for (size_t m = 0; m < state_start.size(); ++m) {
-                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                        }
-                        opt.set_lower_bounds(lb);
-                        opt.set_upper_bounds(ub);
-                        opt.set_xtol_rel(1e-3);
-                        
-                        // Prepare data for costfunction
-                        const vec state_end = target_space.row(col).t();
-                        costcustom2 data;
-                        data.dim = dim_x;
-                        data.state_start = state_start;
-                        data.state_end = state_end;
-                        data.second = input;
-                        data.eta = ss_eta;
-                        data.dynamics = dynamics2;
-                        data.customPDF = customPDF;
-                        data.samples = calls;
-                        data.input_space_size = input_space_size;
-                        opt.set_min_objective(custom2, &data);
-                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
-                        double minf;
-                        try {
-                            nlopt::result result = opt.optimize(initial_guess, minf);
-                        } catch (exception& e) {
-                            cout << "nlopt failed: " << e.what() << endl;
-                        }
-                        cdfAccessor[index] = minf;
-                    });
-                });
-            }
-            queue.wait_and_throw();
-            minTargetM = sum(temp,1);
-            cout << " Complete." << endl;
-        }
-        else{
-            cout << "Unsupported noise combination, either swap offdiagonal/diagonal or change type of noise." << endl;
-        }
-    }
-    else if (input_space_size == 0){
-        const size_t total_states = state_space_size * disturb_space_size;
-        cout << "Target Vector dimensions before summation: " << total_states << " x " << target_space.n_rows << endl;
-        mat temp;
-        temp.set_size(total_states, target_space.n_rows);
-        cout << "Approximate memory required if stored: " << total_states*target_space.n_rows*sizeof(double)/1000000.0 << "Mb, " << total_states*target_space.n_rows*sizeof(double)/1000000000.0 << "Gb" << endl;
-        
-        if (noise == NoiseType::NORMAL && diagonal == true){
-            cout << "Parallel run for Normal-diagonal TargetTransitionVector... " << endl;
-            sycl::queue queue;
-            {
-                // Create a SYCL buffer to store the space
-                sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
-                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                queue.submit([&](sycl::handler& cgh) {
-                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                    sycl::range<2> global(total_states, target_space.n_rows);
-                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
-                        const size_t x0 = idx[0];
-                        const size_t x1 = idx[1];
-                        size_t index = x0 * target_space.n_rows + x1;
-                        size_t row = index%total_states;
-                        size_t col = index/total_states;
-                        double cdf_product = 1.0;
-                        size_t k = (row / state_space_size) % disturb_space_size;
-                        size_t i = row % state_space_size;
-                        const vec disturb = disturb_space.row(k).t();
-                        const vec state_start = state_space.row(i).t();
-                        nlopt::opt opt(algo, state_start.size());
-                        vector<double> lb(state_start.size());
-                        vector<double> ub(state_start.size());
-                        for (size_t m = 0; m < state_start.size(); ++m) {
-                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                        }
-                        opt.set_lower_bounds(lb);
-                        opt.set_upper_bounds(ub);
-                        opt.set_xtol_rel(1e-3);
-                        
-                        // Prepare data for costfunction
-                        const vec state_end = target_space.row(col).t();
-                        costFunctionDataNormal data;
-                        data.state_end = state_end;
-                        data.second = disturb;
-                        data.eta = ss_eta;
-                        data.sigma = sigma;
-                        data.dynamics2 = dynamics2;
-                        data.is_diagonal = diagonal;
-                        opt.set_min_objective(costFunctionNormal, &data);
-                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
-                        double minf;
-                        try {
-                            nlopt::result result = opt.optimize(initial_guess, minf);
-                        } catch (exception& e) {
-                            cout << "nlopt failed: " << e.what() << endl;
-                        }
-                        cdfAccessor[index] = minf;
-                    });
-                });
-            }
-            queue.wait_and_throw();
-            minTargetM = sum(temp,1);
-            cout << " Complete." << endl;
-        }
-        else if (noise == NoiseType::NORMAL && diagonal == false){
-            cout << "Parallel run for Normal-offdiagonal TargetTransitionVector... " << endl;
-            sycl::queue queue;
-            {
-                // Create a SYCL buffer to store the space
-                sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
-                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                queue.submit([&](sycl::handler& cgh) {
-                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                    sycl::range<2> global(total_states, target_space.n_rows);
-                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
-                        const size_t x0 = idx[0];
-                        const size_t x1 = idx[1];
-                        size_t index = x0 * target_space.n_rows + x1;
-                        size_t row = index%total_states;
-                        size_t col = index/total_states;
-                        double cdf_product = 1.0;
-                        size_t k = (row / state_space_size) % input_space_size;
-                        size_t i = row % state_space_size;
-                        const vec disturb = disturb_space.row(k).t();
-                        const vec state_start = state_space.row(i).t();
-                        nlopt::opt opt(algo, state_start.size());
-                        vector<double> lb(state_start.size());
-                        vector<double> ub(state_start.size());
-                        for (size_t m = 0; m < state_start.size(); ++m) {
-                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                        }
-                        opt.set_lower_bounds(lb);
-                        opt.set_upper_bounds(ub);
-                        opt.set_xtol_rel(1e-3);
-                        
-                        // Prepare data for costfunction
-                        const vec state_end = target_space.row(col).t();
-                        costFunctionDataNormal data;
-                        data.dim = dim_x;
-                        data.state_end = state_end;
-                        data.second = disturb;
-                        data.eta = ss_eta;
-                        data.inv_cov = inv_covariance_matrix;
-                        data.det = covariance_matrix_determinant;
-                        data.dynamics2 = dynamics2;
-                        data.is_diagonal = diagonal;
-                        data.samples = calls;
-                        opt.set_min_objective(costFunctionNormal, &data);
-                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
-                        double minf;
-                        try {
-                            nlopt::result result = opt.optimize(initial_guess, minf);
-                        } catch (exception& e) {
-                            cout << "nlopt failed: " << e.what() << endl;
-                        }
-                        cdfAccessor[index] = minf;
-                    });
-                });
-            }
-            queue.wait_and_throw();
-            minTargetM = sum(temp,1);
-            cout << " Complete." << endl;
-        }
-        else if (noise == NoiseType::CUSTOM){
-            cout << "Parallel run for Custom TargetTransitionVector... " << endl;
-            sycl::queue queue;
-            {
-                // Create a SYCL buffer to store the space
-                sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
-                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                queue.submit([&](sycl::handler& cgh) {
-                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                    sycl::range<2> global(total_states, target_space.n_rows);
-                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
-                        const size_t x0 = idx[0];
-                        const size_t x1 = idx[1];
-                        size_t index = x0 * target_space.n_rows + x1;
-                        size_t row = index%total_states;
-                        size_t col = index/total_states;
-                        double cdf_product = 1.0;
-                        size_t k = (row / state_space_size) % input_space_size;
-                        size_t i = row % state_space_size;
-                        const vec disturb = disturb_space.row(k).t();
-                        const vec state_start = state_space.row(i).t();
-                        nlopt::opt opt(algo, state_start.size());
-                        vector<double> lb(state_start.size());
-                        vector<double> ub(state_start.size());
-                        for (size_t m = 0; m < state_start.size(); ++m) {
-                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                        }
-                        opt.set_lower_bounds(lb);
-                        opt.set_upper_bounds(ub);
-                        opt.set_xtol_rel(1e-3);
-                        
-                        // Prepare data for costfunction
-                        const vec state_end = target_space.row(col).t();
-                        costcustom2 data;
-                        data.dim = dim_x;
-                        data.state_start = state_start;
-                        data.state_end = state_end;
-                        data.second = disturb;
-                        data.eta = ss_eta;
-                        data.dynamics = dynamics2;
-                        data.customPDF = customPDF;
-                        data.samples = calls;
-                        data.input_space_size = input_space_size;
-                        opt.set_min_objective(custom2, &data);
-                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
-                        double minf;
-                        try {
-                            nlopt::result result = opt.optimize(initial_guess, minf);
-                        } catch (exception& e) {
-                            cout << "nlopt failed: " << e.what() << endl;
-                        }
-                        cdfAccessor[index] = minf;
-                    });
-                });
-            }
-            queue.wait_and_throw();
-            minTargetM = sum(temp,1);
-            cout << " Complete." << endl;
-        }
-        else{
-            cout << "Unsupported noise combination, either swap offdiagonal/diagonal or change type of noise." << endl;
-        }
-    }else{
-        const size_t total_states = state_space_size * input_space_size * disturb_space_size;
-        cout << "Target Vector dimensions before summation: " << total_states << " x " << target_space.n_rows << endl;
-        mat temp;
-        temp.set_size(total_states, target_space.n_rows);
-        cout << "Approximate memory required if stored: " << total_states*target_space.n_rows*sizeof(double)/1000000.0 << "Mb, " << total_states*target_space.n_rows*sizeof(double)/1000000000.0 << "Gb" << endl;
-        
-        if (noise == NoiseType::NORMAL && diagonal == true){
-            cout << "Parallel run for Normal-diagonal TargetTransitionVector... " << endl;
-            sycl::queue queue;
-            {
-                // Create a SYCL buffer to store the space
-                sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
-                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                queue.submit([&](sycl::handler& cgh) {
-                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                    sycl::range<2> global(total_states, target_space.n_rows);
-                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
-                        const size_t x0 = idx[0];
-                        const size_t x1 = idx[1];
-                        size_t index = x0 * target_space.n_rows + x1;
-                        size_t row = index%total_states;
-                        size_t col = index/total_states;
-                        double cdf_product = 1.0;
-                        size_t l = row / (input_space_size * state_space_size);
-                        size_t k = (row / state_space_size) % input_space_size;
-                        size_t i = row % state_space_size;
-                        const vec disturb = disturb_space.row(l).t();
-                        const vec input = input_space.row(k).t();
-                        const vec state_start = state_space.row(i).t();
-                        nlopt::opt opt(algo, state_start.size());
-                        vector<double> lb(state_start.size());
-                        vector<double> ub(state_start.size());
-                        for (size_t m = 0; m < state_start.size(); ++m) {
-                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                        }
-                        opt.set_lower_bounds(lb);
-                        opt.set_upper_bounds(ub);
-                        opt.set_xtol_rel(1e-3);
-                        
-                        // Prepare data for costfunction
-                        const vec state_end = target_space.row(col).t();
-                        costFunctionDataNormal data;
-                        data.state_end = state_end;
-                        data.input = input;
-                        data.disturb = disturb;
-                        data.eta = ss_eta;
-                        data.sigma = sigma;
-                        data.dynamics3 = dynamics3;
-                        data.is_diagonal = diagonal;
-                        opt.set_min_objective(costFunctionNormal, &data);
-                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
-                        double minf;
-                        try {
-                            nlopt::result result = opt.optimize(initial_guess, minf);
-                        } catch (exception& e) {
-                            cout << "nlopt failed: " << e.what() << endl;
-                        }
-                        cdfAccessor[index] = minf;
-                    });
-                });
-            }
-            queue.wait_and_throw();
-            minTargetM = sum(temp,1);
-            cout << " Complete." << endl;
-        }
-        else if (noise == NoiseType::NORMAL && diagonal == false){
-            cout << "Parallel run for Normal-offdiagonal TargetTransitionVector... " << endl;
-            sycl::queue queue;
-            {
-                // Create a SYCL buffer to store the space
-                sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
-                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                queue.submit([&](sycl::handler& cgh) {
-                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                    sycl::range<2> global(total_states, target_space.n_rows);
-                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
-                        const size_t x0 = idx[0];
-                        const size_t x1 = idx[1];
-                        size_t index = x0 * target_space.n_rows + x1;
-                        size_t row = index%total_states;
-                        size_t col = index/total_states;
-                        double cdf_product = 1.0;
-                        size_t l = row / (input_space_size * state_space_size);
-                        size_t k = (row / state_space_size) % input_space_size;
-                        size_t i = row % state_space_size;
-                        const vec disturb = disturb_space.row(l).t();
-                        const vec input = input_space.row(k).t();
-                        const vec state_start = state_space.row(i).t();
-                        nlopt::opt opt(algo, state_start.size());
-                        vector<double> lb(state_start.size());
-                        vector<double> ub(state_start.size());
-                        for (size_t m = 0; m < state_start.size(); ++m) {
-                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                        }
-                        opt.set_lower_bounds(lb);
-                        opt.set_upper_bounds(ub);
-                        opt.set_xtol_rel(1e-3);
-                        
-                        // Prepare data for costfunction
-                        const vec state_end = target_space.row(col).t();
-                        costFunctionDataNormal data;
-                        data.dim = dim_x;
-                        data.state_end = state_end;
-                        data.input = input;
-                        data.disturb = disturb;
-                        data.eta = ss_eta;
-                        data.inv_cov = inv_covariance_matrix;
-                        data.det = covariance_matrix_determinant;
-                        data.dynamics3 = dynamics3;
-                        data.is_diagonal = diagonal;
-                        data.samples = calls;
-                        opt.set_min_objective(costFunctionNormal, &data);
-                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
-                        double minf;
-                        try {
-                            nlopt::result result = opt.optimize(initial_guess, minf);
-                        } catch (exception& e) {
-                            cout << "nlopt failed: " << e.what() << endl;
-                        }
-                        cdfAccessor[index] = minf;
-                    });
-                });
-            }
-            queue.wait_and_throw();
-            minTargetM = sum(temp,1);
-            cout << " Complete." << endl;
-        } else if (noise == NoiseType::CUSTOM){
-            cout << "Parallel run for Custom TargetTransitionVector... " << endl;
-            sycl::queue queue;
-            {
-                // Create a SYCL buffer to store the space
-                sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
-                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                queue.submit([&](sycl::handler& cgh) {
-                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                    sycl::range<2> global(total_states, target_space.n_rows);
-                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
-                        const size_t x0 = idx[0];
-                        const size_t x1 = idx[1];
-                        size_t index = x0 * target_space.n_rows + x1;
-                        size_t row = index%total_states;
-                        size_t col = index/total_states;
-                        double cdf_product = 1.0;
-                        size_t l = row / (input_space_size * state_space_size);
-                        size_t k = (row / state_space_size) % input_space_size;
-                        size_t i = row % state_space_size;
-                        const vec disturb = disturb_space.row(l).t();
-                        const vec input = input_space.row(k).t();
-                        const vec state_start = state_space.row(i).t();
-                        nlopt::opt opt(algo, state_start.size());
-                        vector<double> lb(state_start.size());
-                        vector<double> ub(state_start.size());
-                        for (size_t m = 0; m < state_start.size(); ++m) {
-                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                        }
-                        opt.set_lower_bounds(lb);
-                        opt.set_upper_bounds(ub);
-                        opt.set_xtol_rel(1e-3);
-                        
-                        // Prepare data for costfunction
-                        const vec state_end = target_space.row(col).t();
-                        costcustom3 data;
-                        data.dim = dim_x;
-                        data.state_start = state_start;
-                        data.state_end = state_end;
-                        data.input = input;
-                        data.disturb = disturb;
-                        data.eta = ss_eta;
-                        data.dynamics = dynamics3;
-                        data.customPDF = customPDF;
-                        data.samples = calls;
-                        opt.set_min_objective(custom3, &data);
-                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
-                        double minf;
-                        try {
-                            nlopt::result result = opt.optimize(initial_guess, minf);
-                        } catch (exception& e) {
-                            cout << "nlopt failed: " << e.what() << endl;
-                        }
-                        cdfAccessor[index] = minf;
-                    });
-                });
-            }
-            queue.wait_and_throw();
-            minTargetM = sum(temp,1);
-            cout << " Complete." << endl;
-        }
-        else{
-            cout << "Unsupported noise combination, either swap offdiagonal/diagonal or change type of noise." << endl;
-        }
-    }
-    // Stop the timer
-    auto end = chrono::steady_clock::now();
-    auto duration = chrono::duration_cast<chrono::milliseconds>(end - start);
-    cout << "Execution time: " << duration.count()/1000.0 << " seconds" << endl;
+    targetTransitionVectorImpl(minTargetM, true);
 }
-
 
 /// Abstraction of maximal target transition vector
 void IMDP::maxTargetTransitionVector(){
-    auto start = chrono::steady_clock::now();
-    cout << "Calculating maximal transition probability Vector." << endl;
-    if (disturb_space_size == 0 && input_space_size == 0){
-        const size_t total_states = state_space_size;
-        cout << "Target Vector dimensions before summation: " << total_states << " x " << target_space.n_rows << endl;
-        mat temp;
-        temp.set_size(total_states, target_space.n_rows);
-        cout << "Approximate memory required if stored: " << total_states*target_space.n_rows*sizeof(double)/1000000.0 << "Mb, " << total_states*target_space.n_rows*sizeof(double)/1000000000.0 << "Gb" << endl;
-        
-        if (noise == NoiseType::NORMAL && diagonal == true){
-            cout << "Parallel run for Normal-diagonal TargetTransitionVector... " << endl;
-            sycl::queue queue;
-            {
-                // Create a SYCL buffer to store the space
-                sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
-                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                queue.submit([&](sycl::handler& cgh) {
-                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                    sycl::range<2> global(total_states, target_space.n_rows);
-                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
-                        const size_t x0 = idx[0];
-                        const size_t x1 = idx[1];
-                        size_t index = x0 * target_space.n_rows + x1;
-                        size_t row = index%total_states;
-                        size_t col = index/total_states;
-                        double cdf_product = 1.0;
-                        size_t i = row % state_space_size;
-                        const vec state_start = state_space.row(i).t();
-                        nlopt::opt opt(algo, state_start.size());
-                        vector<double> lb(state_start.size());
-                        vector<double> ub(state_start.size());
-                        for (size_t m = 0; m < state_start.size(); ++m) {
-                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                        }
-                        opt.set_lower_bounds(lb);
-                        opt.set_upper_bounds(ub);
-                        opt.set_xtol_rel(1e-3);
-                        
-                        // Prepare data for costfunction
-                        const vec state_end = target_space.row(col).t();
-                        costFunctionDataNormal data;
-                        data.state_end = state_end;
-                        data.eta = ss_eta;
-                        data.sigma = sigma;
-                        data.dynamics1 = dynamics1;
-                        data.is_diagonal = diagonal;
-                        opt.set_max_objective(costFunctionNormal, &data);
-                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
-                        double minf;
-                        try {
-                            nlopt::result result = opt.optimize(initial_guess, minf);
-                        } catch (exception& e) {
-                            cout << "nlopt failed: " << e.what() << endl;
-                        }
-                        cdfAccessor[index] = minf;
-                    });
-                });
-            }
-            queue.wait_and_throw();
-            maxTargetM = sum(temp,1);
-            cout << " Complete." << endl;
-        }
-        else if (noise == NoiseType::NORMAL && diagonal == false){
-            cout << "Parallel run for Normal-offdiagonal TargetTransitionVector... " << endl;
-            sycl::queue queue;
-            {
-                // Create a SYCL buffer to store the space
-                sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
-                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                queue.submit([&](sycl::handler& cgh) {
-                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                    sycl::range<2> global(total_states, target_space.n_rows);
-                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
-                        const size_t x0 = idx[0];
-                        const size_t x1 = idx[1];
-                        size_t index = x0 * target_space.n_rows + x1;
-                        size_t row = index%total_states;
-                        size_t col = index/total_states;
-                        double cdf_product = 1.0;
-                        size_t i = row % state_space_size;
-                        const vec state_start = target_space.row(i).t();
-                        nlopt::opt opt(algo, state_start.size());
-                        vector<double> lb(state_start.size());
-                        vector<double> ub(state_start.size());
-                        for (size_t m = 0; m < state_start.size(); ++m) {
-                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                        }
-                        opt.set_lower_bounds(lb);
-                        opt.set_upper_bounds(ub);
-                        opt.set_xtol_rel(1e-3);
-                        
-                        // Prepare data for costfunction
-                        const vec state_end = target_space.row(col).t();
-                        costFunctionDataNormal data;
-                        data.dim = dim_x;
-                        data.state_end = state_end;
-                        data.eta = ss_eta;
-                        data.inv_cov = inv_covariance_matrix;
-                        data.det = covariance_matrix_determinant;
-                        data.dynamics1 = dynamics1;
-                        data.is_diagonal = diagonal;
-                        data.samples = calls;
-                        opt.set_max_objective(costFunctionNormal, &data);
-                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
-                        double minf;
-                        try {
-                            nlopt::result result = opt.optimize(initial_guess, minf);
-                        } catch (exception& e) {
-                            cout << "nlopt failed: " << e.what() << endl;
-                        }
-                        cdfAccessor[index] = minf;
-                    });
-                });
-            }
-            queue.wait_and_throw();
-            maxTargetM = sum(temp,1);
-            cout << " Complete." << endl;
-        } else if (noise == NoiseType::CUSTOM){
-            cout << "Parallel run for Custom TargetTransitionVector... " << endl;
-            sycl::queue queue;
-            {
-                // Create a SYCL buffer to store the space
-                sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
-                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                queue.submit([&](sycl::handler& cgh) {
-                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                    sycl::range<2> global(total_states, target_space.n_rows);
-                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
-                        const size_t x0 = idx[0];
-                        const size_t x1 = idx[1];
-                        size_t index = x0 * target_space.n_rows + x1;
-                        size_t row = index%total_states;
-                        size_t col = index/total_states;
-                        double cdf_product = 1.0;
-                        size_t i = row % state_space_size;
-                        const vec state_start = target_space.row(i).t();
-                        nlopt::opt opt(algo, state_start.size());
-                        vector<double> lb(state_start.size());
-                        vector<double> ub(state_start.size());
-                        for (size_t m = 0; m < state_start.size(); ++m) {
-                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                        }
-                        opt.set_lower_bounds(lb);
-                        opt.set_upper_bounds(ub);
-                        opt.set_xtol_rel(1e-3);
-                        
-                        // Prepare data for costfunction
-                        const vec state_end = target_space.row(col).t();
-                        costcustom1 data;
-                        data.dim = dim_x;
-                        data.state_start = state_start;
-                        data.state_end = state_end;
-                        data.eta = ss_eta;
-                        data.dynamics = dynamics1;
-                        data.customPDF = customPDF;
-                        data.samples = calls;
-                        opt.set_max_objective(custom1, &data);
-                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
-                        double minf;
-                        try {
-                            nlopt::result result = opt.optimize(initial_guess, minf);
-                        } catch (exception& e) {
-                            cout << "nlopt failed: " << e.what() << endl;
-                        }
-                        cdfAccessor[index] = minf;
-                    });
-                });
-            }
-            queue.wait_and_throw();
-            maxTargetM = sum(temp,1);
-            cout << " Complete." << endl;
-        }
-        else{
-            cout << "Unsupported noise combination, either swap offdiagonal/diagonal or change type of noise." << endl;
-        }
-    }
-    
-    else if (disturb_space_size == 0){
-        const size_t total_states = state_space_size * input_space_size;
-        cout << "Target Vector dimensions before summation: " << total_states << " x " << target_space.n_rows << endl;
-        mat temp;
-        temp.set_size(total_states, target_space.n_rows);
-        cout << "Approximate memory required if stored: " << total_states*target_space.n_rows*sizeof(double)/1000000.0 << "Mb, " << total_states*target_space.n_rows*sizeof(double)/1000000000.0 << "Gb" << endl;
-        
-        if (noise == NoiseType::NORMAL && diagonal == true){
-            cout << "Parallel run for Normal-diagonal TargetTransitionVector... " << endl;
-            sycl::queue queue;
-            {
-                // Create a SYCL buffer to store the space
-                sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
-                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                queue.submit([&](sycl::handler& cgh) {
-                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                    sycl::range<2> global(total_states, target_space.n_rows);
-                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
-                        const size_t x0 = idx[0];
-                        const size_t x1 = idx[1];
-                        size_t index = x0 * target_space.n_rows + x1;
-                        size_t row = index%total_states;
-                        size_t col = index/total_states;
-                        double cdf_product = 1.0;
-                        size_t k = (row / state_space_size) % input_space_size;
-                        size_t i = row % state_space_size;
-                        const vec input = input_space.row(k).t();
-                        const vec state_start = state_space.row(i).t();
-                        nlopt::opt opt(algo, state_start.size());
-                        vector<double> lb(state_start.size());
-                        vector<double> ub(state_start.size());
-                        for (size_t m = 0; m < state_start.size(); ++m) {
-                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                        }
-                        opt.set_lower_bounds(lb);
-                        opt.set_upper_bounds(ub);
-                        opt.set_xtol_rel(1e-3);
-                        
-                        // Prepare data for costfunction
-                        const vec state_end = target_space.row(col).t();
-                        costFunctionDataNormal data;
-                        data.state_end = state_end;
-                        data.second = input;
-                        data.eta = ss_eta;
-                        data.sigma = sigma;
-                        data.dynamics2 = dynamics2;
-                        data.is_diagonal = diagonal;
-                        opt.set_max_objective(costFunctionNormal, &data);
-                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
-                        double minf;
-                        try {
-                            nlopt::result result = opt.optimize(initial_guess, minf);
-                        } catch (exception& e) {
-                            cout << "nlopt failed: " << e.what() << endl;
-                        }
-                        cdfAccessor[index] = minf;
-                    });
-                });
-            }
-            queue.wait_and_throw();
-            maxTargetM = sum(temp,1);
-            cout << " Complete." << endl;
-        }
-        else if (noise == NoiseType::NORMAL && diagonal == false){
-            cout << "Parallel run for Normal-offdiagonal TargetTransitionVector... " << endl;
-            sycl::queue queue;
-            {
-                // Create a SYCL buffer to store the space
-                sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
-                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                queue.submit([&](sycl::handler& cgh) {
-                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                    sycl::range<2> global(total_states, target_space.n_rows);
-                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
-                        const size_t x0 = idx[0];
-                        const size_t x1 = idx[1];
-                        size_t index = x0 * target_space.n_rows + x1;
-                        size_t row = index%total_states;
-                        size_t col = index/total_states;
-                        double cdf_product = 1.0;
-                        size_t k = (row / state_space_size) % input_space_size;
-                        size_t i = row % state_space_size;
-                        const vec input = input_space.row(k).t();
-                        const vec state_start = state_space.row(i).t();
-                        nlopt::opt opt(algo, state_start.size());
-                        vector<double> lb(state_start.size());
-                        vector<double> ub(state_start.size());
-                        for (size_t m = 0; m < state_start.size(); ++m) {
-                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                        }
-                        opt.set_lower_bounds(lb);
-                        opt.set_upper_bounds(ub);
-                        opt.set_xtol_rel(1e-3);
-                        
-                        // Prepare data for costfunction
-                        const vec state_end = target_space.row(col).t();
-                        costFunctionDataNormal data;
-                        data.dim = dim_x;
-                        data.state_end = state_end;
-                        data.second = input;
-                        data.eta = ss_eta;
-                        data.inv_cov = inv_covariance_matrix;
-                        data.det = covariance_matrix_determinant;
-                        data.dynamics2 = dynamics2;
-                        data.is_diagonal = diagonal;
-                        data.samples = calls;
-                        opt.set_max_objective(costFunctionNormal, &data);
-                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
-                        double minf;
-                        try {
-                            nlopt::result result = opt.optimize(initial_guess, minf);
-                        } catch (exception& e) {
-                            cout << "nlopt failed: " << e.what() << endl;
-                        }
-                        cdfAccessor[index] = minf;
-                    });
-                });
-            }
-            queue.wait_and_throw();
-            maxTargetM = sum(temp,1);
-            cout << " Complete." << endl;
-        } else if (noise == NoiseType::CUSTOM){
-            cout << "Parallel run for Custom TargetTransitionVector... " << endl;
-            sycl::queue queue;
-            {
-                // Create a SYCL buffer to store the space
-                sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
-                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                queue.submit([&](sycl::handler& cgh) {
-                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                    sycl::range<2> global(total_states, target_space.n_rows);
-                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
-                        const size_t x0 = idx[0];
-                        const size_t x1 = idx[1];
-                        size_t index = x0 * target_space.n_rows + x1;
-                        size_t row = index%total_states;
-                        size_t col = index/total_states;
-                        double cdf_product = 1.0;
-                        size_t k = (row / state_space_size) % input_space_size;
-                        size_t i = row % state_space_size;
-                        const vec input = input_space.row(k).t();
-                        const vec state_start = state_space.row(i).t();
-                        nlopt::opt opt(algo, state_start.size());
-                        vector<double> lb(state_start.size());
-                        vector<double> ub(state_start.size());
-                        for (size_t m = 0; m < state_start.size(); ++m) {
-                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                        }
-                        opt.set_lower_bounds(lb);
-                        opt.set_upper_bounds(ub);
-                        opt.set_xtol_rel(1e-3);
-                        
-                        // Prepare data for costfunction
-                        const vec state_end = target_space.row(col).t();
-                        costcustom2 data;
-                        data.dim = dim_x;
-                        data.state_start = state_start;
-                        data.state_end = state_end;
-                        data.second = input;
-                        data.eta = ss_eta;
-                        data.dynamics = dynamics2;
-                        data.customPDF = customPDF;
-                        data.samples = calls;
-                        data.input_space_size = input_space_size;
-                        opt.set_max_objective(custom2, &data);
-                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
-                        double minf;
-                        try {
-                            nlopt::result result = opt.optimize(initial_guess, minf);
-                        } catch (exception& e) {
-                            cout << "nlopt failed: " << e.what() << endl;
-                        }
-                        cdfAccessor[index] = minf;
-                    });
-                });
-            }
-            queue.wait_and_throw();
-            maxTargetM = sum(temp,1);
-            cout << " Complete." << endl;
-        }
-        else{
-            cout << "Unsupported noise combination, either swap offdiagonal/diagonal or change type of noise." << endl;
-        }
-    }
-    else if (input_space_size == 0){
-        const size_t total_states = state_space_size * disturb_space_size;
-        cout << "Target Vector dimensions before summation: " << total_states << " x " << target_space.n_rows << endl;
-        mat temp;
-        temp.set_size(total_states, target_space.n_rows);
-        cout << "Approximate memory required if stored: " << total_states*target_space.n_rows*sizeof(double)/1000000.0 << "Mb, " << total_states*target_space.n_rows*sizeof(double)/1000000000.0 << "Gb" << endl;
-        
-        if (noise == NoiseType::NORMAL && diagonal == true){
-            cout << "Parallel run for Normal-diagonal TargetTransitionVector... " << endl;
-            sycl::queue queue;
-            {
-                // Create a SYCL buffer to store the space
-                sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
-                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                queue.submit([&](sycl::handler& cgh) {
-                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                    sycl::range<2> global(total_states, target_space.n_rows);
-                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
-                        const size_t x0 = idx[0];
-                        const size_t x1 = idx[1];
-                        size_t index = x0 * target_space.n_rows + x1;
-                        size_t row = index%total_states;
-                        size_t col = index/total_states;
-                        double cdf_product = 1.0;
-                        size_t k = (row / state_space_size) % disturb_space_size;
-                        size_t i = row % state_space_size;
-                        const vec disturb = disturb_space.row(k).t();
-                        const vec state_start = state_space.row(i).t();
-                        nlopt::opt opt(algo, state_start.size());
-                        vector<double> lb(state_start.size());
-                        vector<double> ub(state_start.size());
-                        for (size_t m = 0; m < state_start.size(); ++m) {
-                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                        }
-                        opt.set_lower_bounds(lb);
-                        opt.set_upper_bounds(ub);
-                        opt.set_xtol_rel(1e-3);
-                        
-                        // Prepare data for costfunction
-                        const vec state_end = target_space.row(col).t();
-                        costFunctionDataNormal data;
-                        data.state_end = state_end;
-                        data.second = disturb;
-                        data.eta = ss_eta;
-                        data.sigma = sigma;
-                        data.dynamics2 = dynamics2;
-                        data.is_diagonal = diagonal;
-                        opt.set_max_objective(costFunctionNormal, &data);
-                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
-                        double minf;
-                        try {
-                            nlopt::result result = opt.optimize(initial_guess, minf);
-                        } catch (exception& e) {
-                            cout << "nlopt failed: " << e.what() << endl;
-                        }
-                        cdfAccessor[index] = minf;
-                    });
-                });
-            }
-            queue.wait_and_throw();
-            maxTargetM = sum(temp,1);
-            cout << " Complete." << endl;
-        }
-        else if (noise == NoiseType::NORMAL && diagonal == false){
-            cout << "Parallel run for Normal-offdiagonal TargetTransitionVector... " << endl;
-            sycl::queue queue;
-            {
-                // Create a SYCL buffer to store the space
-                sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
-                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                queue.submit([&](sycl::handler& cgh) {
-                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                    sycl::range<2> global(total_states, target_space.n_rows);
-                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
-                        const size_t x0 = idx[0];
-                        const size_t x1 = idx[1];
-                        size_t index = x0 * target_space.n_rows + x1;
-                        size_t row = index%total_states;
-                        size_t col = index/total_states;
-                        double cdf_product = 1.0;
-                        size_t k = (row / state_space_size) % input_space_size;
-                        size_t i = row % state_space_size;
-                        const vec disturb = disturb_space.row(k).t();
-                        const vec state_start = state_space.row(i).t();
-                        nlopt::opt opt(algo, state_start.size());
-                        vector<double> lb(state_start.size());
-                        vector<double> ub(state_start.size());
-                        for (size_t m = 0; m < state_start.size(); ++m) {
-                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                        }
-                        opt.set_lower_bounds(lb);
-                        opt.set_upper_bounds(ub);
-                        opt.set_xtol_rel(1e-3);
-                        
-                        // Prepare data for costfunction
-                        const vec state_end = target_space.row(col).t();
-                        costFunctionDataNormal data;
-                        data.dim = dim_x;
-                        data.state_end = state_end;
-                        data.second = disturb;
-                        data.eta = ss_eta;
-                        data.inv_cov = inv_covariance_matrix;
-                        data.det = covariance_matrix_determinant;
-                        data.dynamics2 = dynamics2;
-                        data.is_diagonal = diagonal;
-                        data.samples = calls;
-                        opt.set_max_objective(costFunctionNormal, &data);
-                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
-                        double minf;
-                        try {
-                            nlopt::result result = opt.optimize(initial_guess, minf);
-                        } catch (exception& e) {
-                            cout << "nlopt failed: " << e.what() << endl;
-                        }
-                        cdfAccessor[index] = minf;
-                    });
-                });
-            }
-            queue.wait_and_throw();
-            maxTargetM = sum(temp,1);
-            cout << " Complete." << endl;
-        } else if (noise == NoiseType::CUSTOM){
-            cout << "Parallel run for Custom TargetTransitionVector... " << endl;
-            sycl::queue queue;
-            {
-                // Create a SYCL buffer to store the space
-                sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
-                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                queue.submit([&](sycl::handler& cgh) {
-                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                    sycl::range<2> global(total_states, target_space.n_rows);
-                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
-                        const size_t x0 = idx[0];
-                        const size_t x1 = idx[1];
-                        size_t index = x0 * target_space.n_rows + x1;
-                        size_t row = index%total_states;
-                        size_t col = index/total_states;
-                        double cdf_product = 1.0;
-                        size_t k = (row / state_space_size) % input_space_size;
-                        size_t i = row % state_space_size;
-                        const vec disturb = disturb_space.row(k).t();
-                        const vec state_start = state_space.row(i).t();
-                        nlopt::opt opt(algo, state_start.size());
-                        vector<double> lb(state_start.size());
-                        vector<double> ub(state_start.size());
-                        for (size_t m = 0; m < state_start.size(); ++m) {
-                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                        }
-                        opt.set_lower_bounds(lb);
-                        opt.set_upper_bounds(ub);
-                        opt.set_xtol_rel(1e-3);
-                        
-                        // Prepare data for costfunction
-                        const vec state_end = target_space.row(col).t();
-                        costcustom2 data;
-                        data.dim = dim_x;
-                        data.state_start = state_start;
-                        data.state_end = state_end;
-                        data.second = disturb;
-                        data.eta = ss_eta;
-                        data.dynamics = dynamics2;
-                        data.customPDF = customPDF;
-                        data.samples = calls;
-                        data.input_space_size = input_space_size;
-                        opt.set_max_objective(custom2, &data);
-                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
-                        double minf;
-                        try {
-                            nlopt::result result = opt.optimize(initial_guess, minf);
-                        } catch (exception& e) {
-                            cout << "nlopt failed: " << e.what() << endl;
-                        }
-                        cdfAccessor[index] = minf;
-                    });
-                });
-            }
-            queue.wait_and_throw();
-            maxTargetM = sum(temp,1);
-            cout << " Complete." << endl;
-        }
-        else{
-            cout << "Unsupported noise combination, either swap offdiagonal/diagonal or change type of noise." << endl;
-        }
-    }else{
-        
-        const size_t total_states = state_space_size * input_space_size * disturb_space_size;
-        cout << "Target Vector dimensions before summation: " << total_states << " x " << target_space.n_rows << endl;
-        mat temp;
-        temp.set_size(total_states, target_space.n_rows);
-        cout << "Approximate memory required if stored: " << total_states*target_space.n_rows*sizeof(double)/1000000.0 << "Mb, " << total_states*target_space.n_rows*sizeof(double)/1000000000.0 << "Gb" << endl;
-        
-        if (noise == NoiseType::NORMAL && diagonal == true){
-            cout << "Parallel run for Normal-diagonal TargetTransitionVector... " << endl;
-            sycl::queue queue;
-            {
-                // Create a SYCL buffer to store the space
-                sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
-                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                queue.submit([&](sycl::handler& cgh) {
-                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                    sycl::range<2> global(total_states, target_space.n_rows);
-                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
-                        const size_t x0 = idx[0];
-                        const size_t x1 = idx[1];
-                        size_t index = x0 * target_space.n_rows + x1;
-                        size_t row = index%total_states;
-                        size_t col = index/total_states;
-                        double cdf_product = 1.0;
-                        size_t l = row / (input_space_size * state_space_size);
-                        size_t k = (row / state_space_size) % input_space_size;
-                        size_t i = row % state_space_size;
-                        const vec disturb = disturb_space.row(l).t();
-                        const vec input = input_space.row(k).t();
-                        const vec state_start = state_space.row(i).t();
-                        nlopt::opt opt(algo, state_start.size());
-                        vector<double> lb(state_start.size());
-                        vector<double> ub(state_start.size());
-                        for (size_t m = 0; m < state_start.size(); ++m) {
-                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                        }
-                        opt.set_lower_bounds(lb);
-                        opt.set_upper_bounds(ub);
-                        opt.set_xtol_rel(1e-3);
-                        
-                        // Prepare data for costfunction
-                        const vec state_end = target_space.row(col).t();
-                        costFunctionDataNormal data;
-                        data.state_end = state_end;
-                        data.input = input;
-                        data.disturb = disturb;
-                        data.eta = ss_eta;
-                        data.sigma = sigma;
-                        data.dynamics3 = dynamics3;
-                        data.is_diagonal = diagonal;
-                        opt.set_max_objective(costFunctionNormal, &data);
-                        vector<double> initial_guess = conv_to<vector<double>>::from(state_start);
-                        double minf;
-                        try {
-                            nlopt::result result = opt.optimize(initial_guess, minf);
-                        } catch (exception& e) {
-                            cout << "nlopt failed: " << e.what() << endl;
-                        }
-                        cdfAccessor[index] = minf;
-                    });
-                });
-            }
-            queue.wait_and_throw();
-            maxTargetM = sum(temp,1);
-            cout << " Complete." << endl;
-        }
-        else if (noise == NoiseType::NORMAL && diagonal == false){
-            cout << "Parallel run for Normal-offdiagonal TargetTransitionVector... " << endl;
-            sycl::queue queue;
-            {
-                // Create a SYCL buffer to store the space
-                sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
-                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                queue.submit([&](sycl::handler& cgh) {
-                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                    sycl::range<2> global(total_states, target_space.n_rows);
-                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
-                        const size_t x0 = idx[0];
-                        const size_t x1 = idx[1];
-                        size_t index = x0 * target_space.n_rows + x1;
-                        size_t row = index%total_states;
-                        size_t col = index/total_states;
-                        double cdf_product = 1.0;
-                        size_t l = row / (input_space_size * state_space_size);
-                        size_t k = (row / state_space_size) % input_space_size;
-                        size_t i = row % state_space_size;
-                        const vec disturb = disturb_space.row(l).t();
-                        const vec input = input_space.row(k).t();
-                        const vec state_start = state_space.row(i).t();
-                        nlopt::opt opt(algo, state_start.size());
-                        vector<double> lb(state_start.size());
-                        vector<double> ub(state_start.size());
-                        for (size_t m = 0; m < state_start.size(); ++m) {
-                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                        }
-                        opt.set_lower_bounds(lb);
-                        opt.set_upper_bounds(ub);
-                        opt.set_xtol_rel(1e-3);
-                        
-                        // Prepare data for costfunction
-                        const vec state_end = target_space.row(col).t();
-                        costFunctionDataNormal data;
-                        data.dim = dim_x;
-                        data.state_end = state_end;
-                        data.input = input;
-                        data.disturb = disturb;
-                        data.eta = ss_eta;
-                        data.inv_cov = inv_covariance_matrix;
-                        data.det = covariance_matrix_determinant;
-                        data.is_diagonal = diagonal;
-                        data.dynamics3 = dynamics3;
-                        data.samples = calls;
-                        data.is_diagonal = diagonal;
-                        opt.set_max_objective(costFunctionNormal, &data);
-                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
-                        double minf;
-                        try {
-                            nlopt::result result = opt.optimize(initial_guess, minf);
-                        } catch (exception& e) {
-                            cout << "nlopt failed: " << e.what() << endl;
-                        }
-                        cdfAccessor[index] = minf;
-                    });
-                });
-            }
-            queue.wait_and_throw();
-            maxTargetM = sum(temp,1);
-            cout << " Complete." << endl;
-        } else if (noise == NoiseType::CUSTOM){
-            cout << "Parallel run for Custom TargetTransitionVector... " << endl;
-            sycl::queue queue;
-            {
-                // Create a SYCL buffer to store the space
-                sycl::buffer<double> cdfBuffer(temp.memptr(),temp.n_rows*temp.n_cols);
-                // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
-                queue.submit([&](sycl::handler& cgh) {
-                    auto cdfAccessor = cdfBuffer.get_access<sycl::access::mode::discard_write>(cgh);
-                    sycl::range<2> global(total_states, target_space.n_rows);
-                    cgh.parallel_for<class SetMatrix>(global, [=](sycl::id<2> idx) {
-                        const size_t x0 = idx[0];
-                        const size_t x1 = idx[1];
-                        size_t index = x0 * target_space.n_rows + x1;
-                        size_t row = index%total_states;
-                        size_t col = index/total_states;
-                        double cdf_product = 1.0;
-                        size_t l = row / (input_space_size * state_space_size);
-                        size_t k = (row / state_space_size) % input_space_size;
-                        size_t i = row % state_space_size;
-                        const vec disturb = disturb_space.row(l).t();
-                        const vec input = input_space.row(k).t();
-                        const vec state_start = state_space.row(i).t();
-                        nlopt::opt opt(algo, state_start.size());
-                        vector<double> lb(state_start.size());
-                        vector<double> ub(state_start.size());
-                        for (size_t m = 0; m < state_start.size(); ++m) {
-                            lb[m] = state_start[m] - ss_eta[m] / 2.0;
-                            ub[m] = state_start[m] + ss_eta[m] / 2.0;
-                        }
-                        opt.set_lower_bounds(lb);
-                        opt.set_upper_bounds(ub);
-                        opt.set_xtol_rel(1e-3);
-                        
-                        // Prepare data for costfunction
-                        const vec state_end = target_space.row(col).t();
-                        costcustom3 data;
-                        data.dim = dim_x;
-                        data.state_start = state_start;
-                        data.state_end = state_end;
-                        data.input = input;
-                        data.disturb = disturb;
-                        data.eta = ss_eta;
-                        data.dynamics = dynamics3;
-                        data.customPDF = customPDF;
-                        data.samples = calls;
-                        opt.set_max_objective(custom3, &data);
-                        vector<double> initial_guess = conv_to<vector<double>>::from( state_start);
-                        double minf;
-                        try {
-                            nlopt::result result = opt.optimize(initial_guess, minf);
-                        } catch (exception& e) {
-                            cout << "nlopt failed: " << e.what() << endl;
-                        }
-                        cdfAccessor[index] = minf;
-                    });
-                });
-            }
-            queue.wait_and_throw();
-            maxTargetM = sum(temp,1);
-            cout << " Complete." << endl;
-        }
-        else{
-            cout << "Unsupported noise combination, either swap offdiagonal/diagonal or change type of noise." << endl;
-        }
-    }
-    // Stop the timer
-    auto end = chrono::steady_clock::now();
-    auto duration = chrono::duration_cast<chrono::milliseconds>(end - start);
-    cout << "Execution time: " << duration.count()/1000.0 << " seconds" << endl;
+    targetTransitionVectorImpl(maxTargetM, false);
 }
-
-/* Low-cost Abstractions */
-
-/// Low-cost abstraction of transition matrices
-
 
 /* Low-cost Abstractions */
 
