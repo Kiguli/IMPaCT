@@ -9,6 +9,7 @@
 #include <AdaptiveCpp/CL/sycl.hpp>
 #include <chrono>
 #include "MDP.h"
+#include "IO_utils.h"
 #include <gsl/gsl_rng.h>
 #include <gsl/gsl_monte.h>
 #include <gsl/gsl_monte_vegas.h>
@@ -27,64 +28,14 @@ MDP::MDP(const int x, const int u, const int w){
     dim_w = w;
 }
 
-///Function to turn {lb, ub, eta} into a discretised space using centering
-void MDP::get_spaceC(mat& space, ivec& state_idx, const int& dim, const vec& lb, const vec& ub, const vec& eta) {
-    vector<int> state_idx2(dim);
+///Function to turn {lb, ub, eta} into a discretised space (uncentered)
+void MDP::get_spaceU(mat& space, const int& dim, const vec& lb, const vec& ub, const vec& eta) {
+    vector<int> state_idx(dim);
     vector<int> state_dim(dim);
     // Calculate the total state_dim
     int tot_states = 1;
     for (int i = dim-1; i >=0; --i) {
-        state_idx2[i] = tot_states;
-        state_dim[i] = static_cast<int>((ub(i) - lb(i)) / eta(i));
-        tot_states *= state_dim[i];
-    }
-    // Create Armadillo matrix (initialize to zeros)
-    space.set_size(tot_states, dim);
-    // Create a SYCL queue to execute tasks
-    sycl::queue queue(sycl::default_selector{});
-    {
-        // Get a buffer to access the matrix data
-        sycl::buffer<double> buffer(space.memptr(),space.n_rows*space.n_cols);
-        sycl::buffer<double> lb2(lb.memptr(),lb.n_elem);
-        sycl::buffer<double> eta2(eta.memptr(),eta.n_elem);
-        sycl::buffer<int> idx2(state_idx2.data(),dim);
-        sycl::buffer<int> dim2(state_dim.data(),dim);
-        // Submit a SYCL task to set the matrix elements in parallel
-        queue.submit([&](sycl::handler& cgh) {
-            auto acc = buffer.get_access<sycl::access::mode::discard_write>(cgh);
-            auto acclb = lb2.get_access<sycl::access::mode::read>(cgh);
-            auto acceta = eta2.get_access<sycl::access::mode::read>(cgh);
-            auto accidx = idx2.get_access<sycl::access::mode::read>(cgh);
-            auto accdim = dim2.get_access<sycl::access::mode::read>(cgh);
-            // Define a parallel range using nd_range
-            sycl::range<2> matrixRange(tot_states, dim);
-            cgh.parallel_for<class SetMatrix>(matrixRange, [=](sycl::id<2> idx) {
-                int x0 = idx[0];
-                int x1 = idx[1];
-                
-                int index = x0 * dim + x1;
-                
-                int row = index%tot_states;
-                int col = index/tot_states;
-                
-                acc[index] = acclb[col] + acceta[col]/2 +((row/accidx[col]) % accdim[col])*acceta[col];
-            });
-        });
-    }
-    // Wait for the SYCL queue to finish execution
-    queue.wait_and_throw();
-    
-}
-
-
-///Function to turn {lb, ub, eta} into a discretised space that is uncentered
-void MDP::get_spaceU(mat& space, ivec& state_idx, const int& dim, const vec& lb, const vec& ub, const vec& eta) {
-    vector<int> state_idx2(dim);
-    vector<int> state_dim(dim);
-    // Calculate the total state_dim
-    int tot_states = 1;
-    for (int i = dim-1; i >=0; --i) {
-        state_idx2[i] = tot_states;
+        state_idx[i] = tot_states;
         state_dim[i] = static_cast<int>((ub(i) - lb(i)) / eta(i)) + 1;
         tot_states *= state_dim[i];
     }
@@ -97,7 +48,7 @@ void MDP::get_spaceU(mat& space, ivec& state_idx, const int& dim, const vec& lb,
         sycl::buffer<double> buffer(space.memptr(),space.n_rows*space.n_cols);
         sycl::buffer<double> lb2(lb.memptr(),lb.n_elem);
         sycl::buffer<double> eta2(eta.memptr(),eta.n_elem);
-        sycl::buffer<int> idx2(state_idx2.data(),dim);
+        sycl::buffer<int> idx2(state_idx.data(),dim);
         sycl::buffer<int> dim2(state_dim.data(),dim);
         // Submit a SYCL task to set the matrix elements in parallel
         queue.submit([&](sycl::handler& cgh) {
@@ -166,21 +117,27 @@ void MDP::separate(mat& base_space, const function<bool(const vec&)>& separate_c
     }
 }
 
-/* State Space Functions */
-
-///Getters and Setters for State Space
-void MDP::setStateSpace(vec lb, vec ub, vec eta){
-    if (lb.size() == dim_x && ub.size() == dim_x && eta.size() == dim_x){
-        cout << "State space is of correct dimension, saving state space." << endl;
-        get_spaceU(state_space, ss_idx, dim_x, lb, ub, eta); //TODO: work out if centering or not!
-        state_space_size = state_space.n_rows;
-        cout << "State space size: " << state_space_size << endl;
-        ss_lb = lb;
-        ss_ub = ub;
-        ss_eta = eta;
-    }else{
-        cout << "Error: state space dimensions don't match." << endl;
+/* Private helper for space setters */
+void MDP::setSpaceHelper(mat& space, int dim, vec& lb_store, vec& ub_store,
+                         vec& eta_store, size_t& size, const vec& lb, const vec& ub,
+                         const vec& eta, const string& name) {
+    if (lb.size() == dim && ub.size() == dim && eta.size() == dim) {
+        cout << name << " is of correct dimension, saving " << name << "." << endl;
+        get_spaceU(space, dim, lb, ub, eta);
+        size = space.n_rows;
+        cout << name << " size: " << size << endl;
+        lb_store = lb;
+        ub_store = ub;
+        eta_store = eta;
+    } else {
+        cout << "Error: " << name << " dimensions don't match." << endl;
     }
+}
+
+/* State Space Functions */
+void MDP::setStateSpace(vec lb, vec ub, vec eta){
+    setSpaceHelper(state_space, dim_x, ss_lb, ss_ub, ss_eta,
+                   state_space_size, lb, ub, eta, "State space");
 }
 
 mat MDP::getStateSpace(){
@@ -188,39 +145,18 @@ mat MDP::getStateSpace(){
 }
 
 void MDP::saveStateSpace(){
-    if (state_space.empty()){
-        cout << "State space is empty, can't save file." << endl;
-    }else{
-        state_space.save("ss.h5",hdf5_binary);
-        cout << "saved in ss.h5." << endl;
-    }
+    IMPaCT_IO::saveData(state_space, "ss.h5", "State space");
 }
 
 void MDP::loadStateSpace(string filename){
-    bool ok = state_space.load(filename);
-    if (ok == false){
-        cout << "Issue loading state_space!" << endl;
-    }else{
-        state_space_size = state_space.n_rows;
-        cout << "State space loaded" << endl;
-    }
+    IMPaCT_IO::loadData(state_space, filename, "state_space");
+    state_space_size = state_space.n_rows;
 }
 
 /* Input Space Functions */
-
-/// Getters and Setters for Input Space
 void MDP::setInputSpace(vec lb, vec ub, vec eta){
-    if (lb.size() == dim_u && ub.size() == dim_u && eta.size() == dim_u){
-        cout << "Input space is of correct dimension, saving input space." << endl;
-        get_spaceU(input_space, is_idx, dim_u, lb, ub, eta);
-        input_space_size = input_space.n_rows;
-        cout << "Input space size: " << input_space_size << endl;
-        is_lb = lb;
-        is_ub = ub;
-        is_eta = eta;
-    }else{
-        cout << "Error: input space dimensions don't match." << endl;
-    }
+    setSpaceHelper(input_space, dim_u, is_lb, is_ub, is_eta,
+                   input_space_size, lb, ub, eta, "Input space");
 }
 
 mat MDP::getInputSpace(){
@@ -228,61 +164,31 @@ mat MDP::getInputSpace(){
 }
 
 void MDP::saveInputSpace(){
-    if (input_space.empty()){
-        cout << "Input space is empty, can't save file." << endl;
-    }else{
-        input_space.save("is.h5",hdf5_binary);
-        cout << "saved in is.h5." << endl;
-    }
+    IMPaCT_IO::saveData(input_space, "is.h5", "Input space");
 }
 
 void MDP::loadInputSpace(string filename){
-    bool ok = input_space.load(filename);
-    if (ok == false){
-        cout << "Issue loading input space!" << endl;
-    }else{
-        input_space_size = input_space.n_rows;
-        cout << "input space loaded" << endl;
-    }
+    IMPaCT_IO::loadData(input_space, filename, "input space");
+    input_space_size = input_space.n_rows;
 }
 
 /* Disturb Space Functions*/
-
-///Getters and Setters for Disturb Space
 void MDP::setDisturbSpace(vec lb, vec ub, vec eta){
-    if (lb.size() == dim_w && ub.size() == dim_w && eta.size() == dim_w){
-        cout << "Disturb space is of correct dimension, saving disturb space." << endl;
-        get_spaceU(disturb_space, ws_idx, dim_w, lb, ub, eta);
-        disturb_space_size = disturb_space.n_rows;
-        cout << "Disturb space size: " << disturb_space_size << endl;
-        ws_lb = lb;
-        ws_ub = ub;
-        ws_eta = eta;
-    }else{
-        cout << "Error: disturb space dimensions don't match." << endl;
-    }
+    setSpaceHelper(disturb_space, dim_w, ws_lb, ws_ub, ws_eta,
+                   disturb_space_size, lb, ub, eta, "Disturb space");
 }
+
 mat MDP::getDisturbSpace(){
     return disturb_space;
 }
 
 void MDP::saveDisturbSpace(){
-    if (disturb_space.empty()){
-        cout << "Disturb space is empty, can't save file." << endl;
-    }else{
-        disturb_space.save("ws.h5",hdf5_binary);
-        cout << "saved in ws.h5." << endl;
-    }
+    IMPaCT_IO::saveData(disturb_space, "ws.h5", "Disturb space");
 }
 
 void MDP::loadDisturbSpace(string filename){
-    bool ok = disturb_space.load(filename);
-    if (ok == false){
-        cout << "Issue loading disturb space!" << endl;
-    }else{
-        disturb_space_size = disturb_space.n_rows;
-        cout << "loaded disturbance space successfully." << endl;
-    }
+    IMPaCT_IO::loadData(disturb_space, filename, "disturb space");
+    disturb_space_size = disturb_space.n_rows;
 }
 
 /* Target Space Functions */
@@ -311,21 +217,11 @@ mat MDP::getTargetSpace(){
 }
 
 void MDP::saveTargetSpace(){
-    if (target_space.empty()){
-        cout << "Target space is empty, can't save file." << endl;
-    }else{
-        target_space.save("ts.h5",hdf5_binary);
-        cout << "saved in ts.h5." << endl;
-    }
+    IMPaCT_IO::saveData(target_space, "ts.h5", "Target space");
 }
 
 void MDP::loadTargetSpace(string filename){
-    bool ok = target_space.load(filename);
-    if (ok == false){
-        cout << "Issue loading target space!" << endl;
-    }else{
-        cout << "loaded target space" << endl;
-    }
+    IMPaCT_IO::loadData(target_space, filename, "target space");
 }
 
 /* Avoid Space Functions*/
@@ -333,7 +229,7 @@ void MDP::loadTargetSpace(string filename){
 ///Getters and Setters for Avoid Space
 void MDP::setAvoidSpace(const function<bool(const vec&)>& separate_condition, bool remove){
     if (state_space.empty()){
-        cout << "State space is empty, can't create target." << endl;
+        cout << "State space is empty, can't create avoid region." << endl;
     }else if(remove){
         cout << "Setting avoid region... ";
         separate(state_space, separate_condition, avoid_space);
@@ -354,21 +250,11 @@ mat MDP::getAvoidSpace(){
 }
 
 void MDP::saveAvoidSpace(){
-    if (avoid_space.empty()){
-        cout << "Avoid space is empty, can't save file." << endl;
-    }else{
-        avoid_space.save("as.h5",hdf5_binary);
-        cout << "saved in as.h5." << endl;
-    }
+    IMPaCT_IO::saveData(avoid_space, "as.h5", "Avoid space");
 }
 
 void MDP::loadAvoidSpace(string filename){
-    bool ok = avoid_space.load(filename);
-    if (ok == false){
-        cout << "Issue loading avoid space!" << endl;
-    }else{
-        cout << "loaded avoid space" << endl;
-    }
+    IMPaCT_IO::loadData(avoid_space, filename, "avoid space");
 }
 
 /* Joint Target and Avoid Space Functions */
@@ -386,7 +272,9 @@ void MDP::setTargetAvoidSpace(const function<bool(const vec&)>& target_condition
         cout << "Avoid space size: " << avoid_space.n_rows << endl;
         cout << "Target space size: " << target_space.n_rows << endl;
     }else{
-        filter.zeros(state_space_size);
+        if(filter.is_vec()){
+            filter.zeros(state_space_size);
+        }
         filterTargetAvoid(state_space, target_condition, avoid_condition);
     }
 }
@@ -409,7 +297,6 @@ void MDP::setDynamics(const function<vec(const vec&, const vec&)> d){
     }
 }
 void MDP::setDynamics(const function<vec(const vec&)> d){
-    dynamics1 = d;
     if(dim_x != 0 && dim_u == 0 && dim_w == 0){
         dynamics1 = d;
     }else{
@@ -421,7 +308,7 @@ void MDP::setDynamics(const function<vec(const vec&)> d){
 void MDP::setNoise(NoiseType n, bool ind){
     noise = n;
     if(ind != true){
-        cout<<"Poor noise choise set, for offdiagonal noise you need to choose a number of monte carlo samples and include this as an additional function parameter: setNoise(NoiseType n, bool ind, size_t monte_carlo_samples)."<<endl;
+        cout<<"Poor noise choice set, for offdiagonal noise you need to choose a number of monte carlo samples and include this as an additional function parameter: setNoise(NoiseType n, bool ind, size_t monte_carlo_samples)."<<endl;
         
     }
     diagonal = ind;
@@ -519,53 +406,26 @@ void MDP::filterTargetAvoid(mat& base_space, const function<bool(const vec&)>& t
 }
 
 /* Load and Save Transition Matrices */
-///Save minimal transition matrix
 void MDP::saveTransitionMatrix(){
-    if (TransitionM.empty()){
-        cout << "Transition Matrix is empty, can't save file." << endl;
-    }else{
-        TransitionM.save("tm.h5", hdf5_binary);
-    }
+    IMPaCT_IO::saveData(TransitionM, "tm.h5", "Transition Matrix");
 }
 
-///Load minimal transition matrix
 void MDP::loadTransitionMatrix(string filename){
-    bool ok = TransitionM.load(filename);
-    if (ok == false){
-        cout << "Issue loading transition matrix!" << endl;
-    }
+    IMPaCT_IO::loadData(TransitionM, filename, "transition matrix");
 }
 
-///Save maximal target transition vector
 void MDP::saveTargetTransitionVector(){
-    if (TargetM.empty()){
-        cout << "Target Transition Vector is empty, can't save file." << endl;
-    }else{
-        TargetM.save("ttm.h5", hdf5_binary);
-    }
+    IMPaCT_IO::saveData(TargetM, "ttm.h5", "Target Transition Vector");
 }
 
-///Load maximal target transition vector
 void MDP::loadTargetTransitionVector(string filename){
-    bool ok = TargetM.load(filename);
-    if (ok == false){
-        cout << "Issue loading target transition Vector!" << endl;
-    }
+    IMPaCT_IO::loadData(TargetM, filename, "target transition vector");
 }
 
-///Save maximal avoid transition vector
 void MDP::saveAvoidTransitionVector(){
-    if (AvoidM.empty()){
-        cout << "Avoid Transition Vector is empty, can't save file." << endl;
-    }else{
-        AvoidM.save("atm.h5", hdf5_binary);
-    }
+    IMPaCT_IO::saveData(AvoidM, "atm.h5", "Avoid Transition Vector");
 }
 
-///Load maximal avoid transition vector
 void MDP::loadAvoidTransitionVector(string filename){
-    bool ok = AvoidM.load(filename);
-    if (ok == false){
-        cout << "Issue loading avoid transition Vector!" << endl;
-    }
+    IMPaCT_IO::loadData(AvoidM, filename, "avoid transition vector");
 }

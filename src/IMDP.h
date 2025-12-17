@@ -29,7 +29,16 @@ protected:
     
     ///Algorithm used for nonlinear optimization
     nlopt::algorithm algo = nlopt::LN_SBPLX;
-    
+
+    // Internal implementation helpers for controller synthesis
+    void infiniteHorizonControllerImpl(bool IMDP_lower, bool is_reach);
+    void finiteHorizonControllerImpl(bool IMDP_lower, size_t timeHorizon, bool is_reach);
+
+    // Internal implementation helpers for transition abstractions
+    void transitionMatrixImpl(mat& output, bool is_min);
+    void targetTransitionVectorImpl(vec& output, bool is_min);
+    void avoidTransitionVectorImpl(vec& output, bool is_min);
+
     /* IMDP Public Functions*/
 public:
     /// Inherit functions from parent

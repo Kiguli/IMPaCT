@@ -1,4 +1,5 @@
 #include "IMDP.h"
+#include "IO_utils.h"
 #include <iostream>
 #include <vector>
 #include <functional>
@@ -14,128 +15,52 @@
 using namespace std;
 using namespace arma;
 
-
-///Save minimal target transition vector
-void IMDP::saveMinTargetTransitionVector(){
-    if (minTargetM.empty()){
-        cout << "Min Target Transition Vector is empty, can't save file." << endl;
-    }else{
-        minTargetM.save("minttm.h5", hdf5_binary);
-    }
-}
-
-///Load minimal target transition vector
-void IMDP::loadMinTargetTransitionVector(string filename){
-    bool ok = minTargetM.load(filename);
-    if (ok == false){
-        cout << "Issue loading minimum target transition Vector!" << endl;
-    }
-}
-
-///Save minimal avoid transition vector
-void IMDP::saveMinAvoidTransitionVector(){
-    if (minAvoidM.empty()){
-        cout << "Min Avoid Transition Vector is empty, can't save file." << endl;
-    }else{
-        minAvoidM.save("minatm.h5", hdf5_binary);
-    }
-}
-
-///Load minimal avoid transition vector
-void IMDP::loadMinAvoidTransitionVector(string filename){
-    bool ok = minAvoidM.load(filename);
-    if (ok == false){
-        cout << "Issue loading minimum avoid transition Vector!" << endl;
-    }
-}
-
-///Save minimal transition matrix
-void IMDP::saveMinTransitionMatrix(){
-    if (minTransitionM.empty()){
-        cout << "Min Transition Matrix is empty, can't save file." << endl;
-    }else{
-        minTransitionM.save("mintm.h5", hdf5_binary);
-    }
-}
-
-///Load minimal transition matrix
-void IMDP::loadMinTransitionMatrix(string filename){
-    bool ok = minTransitionM.load(filename);
-    if (ok == false){
-        cout << "Issue loading minimum transition matrix!" << endl;
-    }
-}
-
-///Save maximal target transition vector
-void IMDP::saveMaxTargetTransitionVector(){
-    if (maxTargetM.empty()){
-        cout << "Max Target Transition Vector is empty, can't save file." << endl;
-    }else{
-        maxTargetM.save("maxttm.h5", hdf5_binary);
-    }
-}
-
-///Load maximal target transition vector
-void IMDP::loadMaxTargetTransitionVector(string filename){
-    bool ok = maxTargetM.load(filename);
-    if (ok == false){
-        cout << "Issue loading maximum target transition Vector!" << endl;
-    }
-}
-
-///Save maximal avoid transition vector
-void IMDP::saveMaxAvoidTransitionVector(){
-    if (maxAvoidM.empty()){
-        cout << "Max Avoid Transition Vector is empty, can't save file." << endl;
-    }else{
-        maxAvoidM.save("maxatm.h5", hdf5_binary);
-    }
-}
-
-///Load maximal avoid transition vector
-void IMDP::loadMaxAvoidTransitionVector(string filename){
-    bool ok = maxAvoidM.load(filename);
-    if (ok == false){
-        cout << "Issue loading maximum avoid transition Vector!" << endl;
-    }
-}
-
-///Save maximal transition matrix
-void IMDP::saveMaxTransitionMatrix(){
-    if (maxTransitionM.empty()){
-        cout << "Max Transition Matrix is empty, can't save file." << endl;
-    }else{
-        maxTransitionM.save("maxtm.h5", hdf5_binary);
-    }
-}
-
-///Load maximal transition matrix
-void IMDP::loadMaxTransitionMatrix(string filename){
-    bool ok = maxTransitionM.load(filename);
-    if (ok == false){
-        cout << "Issue loading maximum transition matrix!" << endl;
-    }
-}
-
-///Save Controller
-void IMDP::saveController(){
-    if (controller.empty()){
-        cout << "Controller is empty, can't save file." << endl;
-    }else{
-        controller.save("controller.h5", hdf5_binary);
-    }
-}
-
-/// Load Controller
-void IMDP::loadController(string filename){
-    bool ok = controller.load(filename);
-    if (ok == false){
-        cout << "Issue loading controller!" << endl;
-    }
-}
-
 /// Destructor
 IMDP::~IMDP(){
+}
+
+/// Save/Load functions using IO_utils.h
+void IMDP::saveMinTargetTransitionVector(){
+    IMPaCT_IO::saveData(minTargetM, "minttm.h5", "Min Target Transition Vector");
+}
+void IMDP::loadMinTargetTransitionVector(string filename){
+    IMPaCT_IO::loadData(minTargetM, filename, "minimum target transition Vector");
+}
+void IMDP::saveMinAvoidTransitionVector(){
+    IMPaCT_IO::saveData(minAvoidM, "minatm.h5", "Min Avoid Transition Vector");
+}
+void IMDP::loadMinAvoidTransitionVector(string filename){
+    IMPaCT_IO::loadData(minAvoidM, filename, "minimum avoid transition Vector");
+}
+void IMDP::saveMinTransitionMatrix(){
+    IMPaCT_IO::saveData(minTransitionM, "mintm.h5", "Min Transition Matrix");
+}
+void IMDP::loadMinTransitionMatrix(string filename){
+    IMPaCT_IO::loadData(minTransitionM, filename, "minimum transition matrix");
+}
+void IMDP::saveMaxTargetTransitionVector(){
+    IMPaCT_IO::saveData(maxTargetM, "maxttm.h5", "Max Target Transition Vector");
+}
+void IMDP::loadMaxTargetTransitionVector(string filename){
+    IMPaCT_IO::loadData(maxTargetM, filename, "maximum target transition Vector");
+}
+void IMDP::saveMaxAvoidTransitionVector(){
+    IMPaCT_IO::saveData(maxAvoidM, "maxatm.h5", "Max Avoid Transition Vector");
+}
+void IMDP::loadMaxAvoidTransitionVector(string filename){
+    IMPaCT_IO::loadData(maxAvoidM, filename, "maximum avoid transition Vector");
+}
+void IMDP::saveMaxTransitionMatrix(){
+    IMPaCT_IO::saveData(maxTransitionM, "maxtm.h5", "Max Transition Matrix");
+}
+void IMDP::loadMaxTransitionMatrix(string filename){
+    IMPaCT_IO::loadData(maxTransitionM, filename, "maximum transition matrix");
+}
+void IMDP::saveController(){
+    IMPaCT_IO::saveData(controller, "controller.h5", "Controller");
+}
+void IMDP::loadController(string filename){
+    IMPaCT_IO::loadData(controller, filename, "controller");
 }
 
 /// Sorted Implementation of infinite horizon reachability
@@ -158,25 +83,7 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
 
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(first1);
-
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second < b.second;
-                });
-
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first1, true);
 
                 //Get difference between max and min for incrementing values
                 mat diffT = maxTransitionM-minTransitionM;
@@ -318,25 +225,7 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
 
 
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(second1);
-
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second > b.second;
-                });
-
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second1, false);
 
                 //Get difference between max and min for incrementing values
                 mat diffT = tempTmax-tempTmin;
@@ -461,31 +350,13 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
                 
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(first1);
-                
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-                
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second > b.second;
-                });
-                
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
-                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first1, false);
+
                 //Get difference between max and min for incrementing values
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffR = maxTargetM - minTargetM;
                 vec diffA = maxAvoidM - minAvoidM;
-                
+
                 sycl::queue queue;
                 {
                     // Create a SYCL buffer to store the space
@@ -500,7 +371,7 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                     sycl::buffer<double> bufdTT(diffR.memptr(),diffR.n_rows);
                     sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
                     sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
-                    
+
                     // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                     queue.submit([&](sycl::handler& cgh) {
                         auto accsort = bufsort.get_access<sycl::access::mode::read>(cgh);
@@ -619,26 +490,8 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
                 
                 
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(second1);
-                
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-                
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second < b.second;
-                });
-                
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
-                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second1, true);
+
                 //Get difference between max and min for incrementing values
                 mat diffT = tempTmax-tempTmin;
                 vec diffR = tempTTmax - tempTTmin;
@@ -768,31 +621,13 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
                 
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(first1);
-                
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-                
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second < b.second;
-                });
-                
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
-                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first1, true);
+
                 //Get difference between max and min for incrementing values
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffR = maxTargetM - minTargetM;
                 vec diffA = maxAvoidM - minAvoidM;
-                
+
                 sycl::queue queue;
                 {
                     // Create a SYCL buffer to store the space
@@ -936,26 +771,8 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
                 
                 
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(second1);
-                
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-                
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second > b.second;
-                });
-                
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
-                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second1, false);
+
                 //Get difference between max and min for incrementing values
                 mat diffT = tempTmax-tempTmin;
                 vec diffR = tempTTmax - tempTTmin;
@@ -1081,26 +898,8 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
                 
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(first1);
-                
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-                
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second > b.second;
-                });
-                
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
-                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first1, false);
+
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffR = maxTargetM - minTargetM;
                 vec diffA = maxAvoidM - minAvoidM;
@@ -1247,26 +1046,8 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
                 
                 
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(second1);
-                
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-                
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second < b.second;
-                });
-                
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
-                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second1, true);
+
                 mat diffT = tempTmax-tempTmin;
                 vec diffR = tempTTmax - tempTTmin;
                 vec diffA = tempATmax - tempATmin;
@@ -1397,31 +1178,13 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
                 
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(first1);
-                
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-                
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second < b.second;
-                });
-                
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
-                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first1, true);
+
                 //Get difference between max and min for incrementing values
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffR = maxTargetM - minTargetM;
                 vec diffA = maxAvoidM - minAvoidM;
-                
+
                 sycl::queue queue;
                 {
                     // Create a SYCL buffer to store the space
@@ -1544,26 +1307,8 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
                 
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(second1);
-                
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-                
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second > b.second;
-                });
-                
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
-                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second1, false);
+
                 //Get difference between max and min for incrementing values
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffR = maxTargetM - minTargetM;
@@ -1698,26 +1443,8 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
                 
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(first1);
-                
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-                
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second > b.second;
-                });
-                
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
-                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first1, false);
+
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffR = maxTargetM - minTargetM;
                 vec diffA = maxAvoidM - minAvoidM;
@@ -1844,26 +1571,8 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
                 
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(second1);
-                
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-                
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second < b.second;
-                });
-                
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
-                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second1, true);
+
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffR = maxTargetM - minTargetM;
                 vec diffA = maxAvoidM - minAvoidM;
@@ -2003,31 +1712,13 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
                 
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(first1);
-                
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-                
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second < b.second;
-                });
-                
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
-                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first1, true);
+
                 //Get difference between max and min for incrementing values
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffR = maxTargetM - minTargetM;
                 vec diffA = maxAvoidM - minAvoidM;
-                
+
                 sycl::queue queue;
                 {
                     // Create a SYCL buffer to store the space
@@ -2180,26 +1871,8 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
                 
                 
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(second1);
-                
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-                
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second > b.second;
-                });
-                
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
-                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second1, false);
+
                 //Get difference between max and min for incrementing values
                 mat diffT = tempTmax-tempTmin;
                 vec diffR = tempTTmax - tempTTmin;
@@ -2334,26 +2007,8 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
                 
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(first1);
-                
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-                
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second > b.second;
-                });
-                
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
-                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first1, false);
+
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffR = maxTargetM - minTargetM;
                 vec diffA = maxAvoidM - minAvoidM;
@@ -2508,26 +2163,8 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
                 
                 
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(second1);
-                
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-                
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second < b.second;
-                });
-                
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
-                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second1, true);
+
                 mat diffT = tempTmax-tempTmin;
                 vec diffR = tempTTmax - tempTTmin;
                 vec diffA = tempATmax - tempATmin;
@@ -2669,26 +2306,8 @@ void IMDP::finiteHorizonReachControllerSorted(bool IMDP_lower, size_t timeHorizo
             while (k < timeHorizon) {
                 cout << "." << flush;
                 
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(first0);
-                
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-                
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second < b.second;
-                });
-                
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
-                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first0, true);
+
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffR = maxTargetM - minTargetM;
                 vec diffA = maxAvoidM - minAvoidM;
@@ -2801,26 +2420,8 @@ void IMDP::finiteHorizonReachControllerSorted(bool IMDP_lower, size_t timeHorizo
             cout << "Matrix Fixed" << endl;
             while (k < timeHorizon) {
                 cout << "." << flush;
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(second0);
-                
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-                
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second > b.second;
-                });
-                
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
-                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second0, false);
+
                 mat diffT = tempTmax-tempTmin;
                 vec diffR = tempTTmax - tempTTmin;
                 vec diffA = tempATmax - tempATmin;
@@ -2919,26 +2520,8 @@ void IMDP::finiteHorizonReachControllerSorted(bool IMDP_lower, size_t timeHorizo
             while (k < timeHorizon) {
             cout << "." << flush;
                 
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(first0);
-                
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-                
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second > b.second;
-                });
-                
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
-                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first0, false);
+
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffR = maxTargetM - minTargetM;
                 vec diffA = maxAvoidM - minAvoidM;
@@ -3053,26 +2636,8 @@ void IMDP::finiteHorizonReachControllerSorted(bool IMDP_lower, size_t timeHorizo
                 cout << "." << flush;
                 
                 
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(second0);
-                
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-                
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second < b.second;
-                });
-                
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
-                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second0, true);
+
                 mat diffT = tempTmax-tempTmin;
                 vec diffR = tempTTmax - tempTTmin;
                 vec diffA = tempATmax - tempATmin;
@@ -3175,26 +2740,8 @@ void IMDP::finiteHorizonReachControllerSorted(bool IMDP_lower, size_t timeHorizo
             while (k < timeHorizon) {
                 cout << "." << flush;
                 
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(first0);
-                
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-                
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second < b.second;
-                });
-                
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
-                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first0, true);
+
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffR = maxTargetM - minTargetM;
                 vec diffA = maxAvoidM - minAvoidM;
@@ -3292,26 +2839,8 @@ void IMDP::finiteHorizonReachControllerSorted(bool IMDP_lower, size_t timeHorizo
             while (k < timeHorizon) {
                 cout << "." << flush;
                 
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(second0);
-                
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-                
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second > b.second;
-                });
-                
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
-                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second0, false);
+
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffR = maxTargetM - minTargetM;
                 vec diffA = maxAvoidM - minAvoidM;
@@ -3417,26 +2946,8 @@ void IMDP::finiteHorizonReachControllerSorted(bool IMDP_lower, size_t timeHorizo
             while (k<timeHorizon) {
                 cout << "." << flush;
                 
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(first0);
-                
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-                
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second > b.second;
-                });
-                
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
-                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first0, false);
+
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffR = maxTargetM - minTargetM;
                 vec diffA = maxAvoidM - minAvoidM;
@@ -3527,26 +3038,8 @@ void IMDP::finiteHorizonReachControllerSorted(bool IMDP_lower, size_t timeHorizo
             while (k<timeHorizon) {
                 cout << "." << flush;
                 
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(second0);
-                
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-                
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second < b.second;
-                });
-                
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
-                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second0, true);
+
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffR = maxTargetM - minTargetM;
                 vec diffA = maxAvoidM - minAvoidM;
@@ -3653,26 +3146,8 @@ void IMDP::finiteHorizonReachControllerSorted(bool IMDP_lower, size_t timeHorizo
             while (k < timeHorizon) {
             cout << "." << flush;
                 
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(first0);
-                
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-                
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second < b.second;
-                });
-                
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
-                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first0, true);
+
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffR = maxTargetM - minTargetM;
                 vec diffA = maxAvoidM - minAvoidM;
@@ -3797,26 +3272,8 @@ void IMDP::finiteHorizonReachControllerSorted(bool IMDP_lower, size_t timeHorizo
             while (k < timeHorizon) {
                 cout << "." << flush;
                 
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(second0);
-                
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-                
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second > b.second;
-                });
-                
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
-                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second0, false);
+
                 //Get difference between max and min for incrementing values
                 mat diffT = tempTmax-tempTmin;
                 vec diffR = tempTTmax - tempTTmin;
@@ -3917,26 +3374,8 @@ void IMDP::finiteHorizonReachControllerSorted(bool IMDP_lower, size_t timeHorizo
             while (k < timeHorizon) {
                 cout << "." << flush;
                 
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(first0);
-                
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-                
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second > b.second;
-                });
-                
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
-                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first0, false);
+
                 //Get difference between max and min for incrementing values
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffR = maxTargetM - minTargetM;
@@ -4059,26 +3498,8 @@ void IMDP::finiteHorizonReachControllerSorted(bool IMDP_lower, size_t timeHorizo
                 
                 cout << "." << flush;
                 
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(second0);
-                
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-                
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second < b.second;
-                });
-                
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
-                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second0, true);
+
                 mat diffT = tempTmax-tempTmin;
                 vec diffR = tempTTmax - tempTTmin;
                 vec diffA = tempATmax - tempATmin;
@@ -4187,26 +3608,8 @@ void IMDP::finiteHorizonReachControllerSorted(bool IMDP_lower, size_t timeHorizo
             while (k < timeHorizon) {
                 cout << "." << flush;
                 
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(first0);
-                
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-                
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second < b.second;
-                });
-                
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
-                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first0, true);
+
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffR = maxTargetM - minTargetM;
                 vec diffA = maxAvoidM - minAvoidM;
@@ -4336,26 +3739,8 @@ void IMDP::finiteHorizonReachControllerSorted(bool IMDP_lower, size_t timeHorizo
             cout << "Matrix Fixed" << endl;
             while (k < timeHorizon) {
                 cout << "." << flush;
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(second0);
-                
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-                
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second > b.second;
-                });
-                
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
-                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second0, false);
+
                 mat diffT = tempTmax-tempTmin;
                 vec diffR = tempTTmax - tempTTmin;
                 vec diffA = tempATmax - tempATmin;
@@ -4460,26 +3845,8 @@ void IMDP::finiteHorizonReachControllerSorted(bool IMDP_lower, size_t timeHorizo
             while (k < timeHorizon) {
             cout << "." << endl; 
                 
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(first0);
-                
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-                
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second > b.second;
-                });
-                
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
-                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first0, false);
+
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffR = maxTargetM - minTargetM;
                 vec diffA = maxAvoidM - minAvoidM;
@@ -4620,26 +3987,8 @@ void IMDP::finiteHorizonReachControllerSorted(bool IMDP_lower, size_t timeHorizo
             while (k<timeHorizon) {
                 cout << "." << flush;
                 
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(second0);
-                
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-                
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second < b.second;
-                });
-                
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
-                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second0, true);
+
                 mat diffT = tempTmax-tempTmin;
                 vec diffR = tempTTmax - tempTTmin;
                 vec diffA = tempATmax - tempATmin;
@@ -4765,26 +4114,8 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
                 
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(first1);
-                
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-                
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second > b.second;
-                });
-                
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
-                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first1, false);
+
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffA = maxAvoidM - minAvoidM;
                 
@@ -4904,26 +4235,8 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
                 
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(second1);
-                
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-                
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second < b.second;
-                });
-                
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
-                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second1, true);
+
                 mat diffT = tempTmax-tempTmin;
                 vec diffA = tempATmax - tempATmin;
                 
@@ -5037,26 +4350,8 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
                 
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(first1);
-                
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-                
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second < b.second;
-                });
-                
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
-                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first1, true);
+
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffA = maxAvoidM - minAvoidM;
                 
@@ -5180,26 +4475,8 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
                 
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(second1);
-                
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-                
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second > b.second;
-                });
-                
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
-                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second1, false);
+
                 mat diffT = tempTmax-tempTmin;
                 vec diffA = tempATmax - tempATmin;
                 
@@ -5314,26 +4591,8 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
                 
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(first1);
-                
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-                
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second > b.second;
-                });
-                
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
-                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first1, false);
+
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffA = maxAvoidM - minAvoidM;
                 
@@ -5465,26 +4724,8 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
                 
                 
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(second1);
-                
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-                
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second < b.second;
-                });
-                
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
-                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second1, true);
+
                 mat diffT = tempTmax-tempTmin;
                 vec diffA = tempATmax - tempATmin;
                 
@@ -5602,26 +4843,8 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
                 
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(first1);
-                
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-                
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second < b.second;
-                });
-                
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
-                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first1, true);
+
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffA = maxAvoidM - minAvoidM;
                 
@@ -5757,26 +4980,8 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
                 
                 
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(second1);
-                
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-                
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second > b.second;
-                });
-                
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
-                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second1, false);
+
                 mat diffT = tempTmax-tempTmin;
                 vec diffA = tempATmax - tempATmin;
                 
@@ -5896,26 +5101,8 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
                 
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(first1);
-                
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-                
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second > b.second;
-                });
-                
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
-                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first1, false);
+
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffA = maxAvoidM - minAvoidM;
                 
@@ -6029,26 +5216,8 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
                 
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(second1);
-                
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-                
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second < b.second;
-                });
-                
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
-                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second1, true);
+
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffA = maxAvoidM - minAvoidM;
                 
@@ -6169,26 +5338,8 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
                 
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(first1);
-                
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-                
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second < b.second;
-                });
-                
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
-                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first1, true);
+
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffA = maxAvoidM - minAvoidM;
                 
@@ -6302,26 +5453,8 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
                 
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(second1);
-                
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-                
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second > b.second;
-                });
-                
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
-                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second1, false);
+
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffA = maxAvoidM - minAvoidM;
                 
@@ -6447,26 +5580,8 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
                 
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(first1);
-                
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-                
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second > b.second;
-                });
-                
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
-                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first1, false);
+
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffA = maxAvoidM - minAvoidM;
                 
@@ -6608,26 +5723,8 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
                 
                 
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(second1);
-                
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-                
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second < b.second;
-                });
-                
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
-                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second1, true);
+
                 mat diffT = tempTmax-tempTmin;
                 vec diffA = tempATmax - tempATmin;
                 
@@ -6754,26 +5851,8 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
                 
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(first1);
-                
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-                
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second < b.second;
-                });
-                
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
-                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first1, true);
+
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffA = maxAvoidM - minAvoidM;
                 
@@ -6918,26 +5997,8 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
 
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(second1);
-                
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-                
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second > b.second;
-                });
-                
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
-                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second1, false);
+
                 mat diffT = tempTmax-tempTmin;
                 vec diffA = tempATmax - tempATmin;
                 
@@ -7065,26 +6126,8 @@ void IMDP::finiteHorizonSafeControllerSorted(bool IMDP_lower, size_t timeHorizon
             cout << "first loop iterations: " << endl;
             while (k < timeHorizon) {
                 cout << "." << flush;
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(first1);
-                
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-                
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second > b.second;
-                });
-                
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
-                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first1, false);
+
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffA = maxAvoidM - minAvoidM;
                 
@@ -7168,26 +6211,8 @@ void IMDP::finiteHorizonSafeControllerSorted(bool IMDP_lower, size_t timeHorizon
             cout << "Matrix Fixed" << endl;
             while (k < timeHorizon) {
                 cout << "." << flush;
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(second1);
-                
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-                
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second < b.second;
-                });
-                
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
-                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second1, true);
+
                 mat diffT = tempTmax-tempTmin;
                 vec diffA = tempATmax - tempATmin;
                 
@@ -7273,26 +6298,8 @@ void IMDP::finiteHorizonSafeControllerSorted(bool IMDP_lower, size_t timeHorizon
             cout << "first loop iterations: " << endl;
             while (k < timeHorizon) {
                 cout << "." << flush;
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(first1);
-                
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-                
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second < b.second;
-                });
-                
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
-                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first1, true);
+
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffA = maxAvoidM - minAvoidM;
                 
@@ -7388,26 +6395,8 @@ void IMDP::finiteHorizonSafeControllerSorted(bool IMDP_lower, size_t timeHorizon
             cout << "Matrix Fixed" << endl;
             while (k < timeHorizon) {
                 cout << "." << flush;
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(second1);
-                
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-                
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second > b.second;
-                });
-                
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
-                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second1, false);
+
                 mat diffT = tempTmax-tempTmin;
                 vec diffA = tempATmax - tempATmin;
                 
@@ -7487,26 +6476,8 @@ void IMDP::finiteHorizonSafeControllerSorted(bool IMDP_lower, size_t timeHorizon
             cout << "first loop iterations: " << endl;
             while (k < timeHorizon) {
                 cout << "." << flush;
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(first1);
-                
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-                
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second > b.second;
-                });
-                
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
-                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first1, false);
+
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffA = maxAvoidM - minAvoidM;
                 
@@ -7610,26 +6581,8 @@ void IMDP::finiteHorizonSafeControllerSorted(bool IMDP_lower, size_t timeHorizon
             while (k <timeHorizon) {
                 cout << "." << flush;
                 
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(second1);
-                
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-                
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second < b.second;
-                });
-                
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
-                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second1, true);
+
                 mat diffT = tempTmax-tempTmin;
                 vec diffA = tempATmax - tempATmin;
                 
@@ -7711,26 +6664,8 @@ void IMDP::finiteHorizonSafeControllerSorted(bool IMDP_lower, size_t timeHorizon
             cout << "first loop iterations: " << endl;
             while (k < timeHorizon) {
                 cout << "." << flush;
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(first1);
-                
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-                
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second < b.second;
-                });
-                
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
-                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first1, true);
+
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffA = maxAvoidM - minAvoidM;
                 
@@ -7834,26 +6769,8 @@ void IMDP::finiteHorizonSafeControllerSorted(bool IMDP_lower, size_t timeHorizon
             while (k<timeHorizon) {
                 cout << "." << flush;
                 
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(second1);
-                
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-                
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second > b.second;
-                });
-                
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
-                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second1, false);
+
                 mat diffT = tempTmax-tempTmin;
                 vec diffA = tempATmax - tempATmin;
                 
@@ -7938,26 +6855,8 @@ void IMDP::finiteHorizonSafeControllerSorted(bool IMDP_lower, size_t timeHorizon
             cout << "first loop iterations: " << endl;
             while (k<timeHorizon) {
                 cout << "." << flush;
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(first1);
-                
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-                
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second > b.second;
-                });
-                
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
-                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first1, false);
+
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffA = maxAvoidM - minAvoidM;
                 
@@ -8038,26 +6937,8 @@ void IMDP::finiteHorizonSafeControllerSorted(bool IMDP_lower, size_t timeHorizon
             cout << "second loop iterations: " << endl;
             while (k < timeHorizon) {
                 cout << "." << flush;
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(second1);
-                
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-                
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second < b.second;
-                });
-                
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
-                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second1, true);
+
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffA = maxAvoidM - minAvoidM;
                 
@@ -8146,26 +7027,8 @@ void IMDP::finiteHorizonSafeControllerSorted(bool IMDP_lower, size_t timeHorizon
             cout << "first loop iterations: " << endl;
             while (k<timeHorizon) {
                 cout << "." << flush;
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(first1);
-                
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-                
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second < b.second;
-                });
-                
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
-                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first1, true);
+
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffA = maxAvoidM - minAvoidM;
                 
@@ -8248,26 +7111,8 @@ void IMDP::finiteHorizonSafeControllerSorted(bool IMDP_lower, size_t timeHorizon
             cout << "second loop iterations: " << endl;
             while (k<timeHorizon) {
                 cout << "." << flush;
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(second1);
-                
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-                
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second > b.second;
-                });
-                
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
-                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second1, false);
+
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffA = maxAvoidM - minAvoidM;
                 
@@ -8355,26 +7200,8 @@ void IMDP::finiteHorizonSafeControllerSorted(bool IMDP_lower, size_t timeHorizon
             cout << "first loop iterations: " << endl;
             while (k<timeHorizon) {
                 cout << "." << flush;
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(first1);
-                
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-                
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second > b.second;
-                });
-                
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
-                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first1, false);
+
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffA = maxAvoidM - minAvoidM;
                 
@@ -8474,26 +7301,8 @@ void IMDP::finiteHorizonSafeControllerSorted(bool IMDP_lower, size_t timeHorizon
             cout << "Matrix Fixed" << endl;
             while (k<timeHorizon) {
                 cout << "." << flush;
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(second1);
-                
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-                
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second < b.second;
-                });
-                
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
-                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second1, true);
+
                 mat diffT = tempTmax-tempTmin;
                 vec diffA = tempATmax - tempATmin;
                 
@@ -8586,26 +7395,8 @@ void IMDP::finiteHorizonSafeControllerSorted(bool IMDP_lower, size_t timeHorizon
             cout << "first loop iterations: " << endl;
             while (k<timeHorizon) {
                 cout << "." << flush;
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(first1);
-                
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-                
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second < b.second;
-                });
-                
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
-                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first1, true);
+
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffA = maxAvoidM - minAvoidM;
                 
@@ -8718,26 +7509,8 @@ void IMDP::finiteHorizonSafeControllerSorted(bool IMDP_lower, size_t timeHorizon
             cout << "Matrix Fixed" << endl;
             while (k<timeHorizon) {
                 cout << "." << flush;
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(second1);
-                
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-                
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second > b.second;
-                });
-                
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
-                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second1, false);
+
                 mat diffT = tempTmax-tempTmin;
                 vec diffA = tempATmax - tempATmin;
                 
@@ -8836,25 +7609,7 @@ void IMDP::finiteHorizonReachControllerSortedStoreMDP(bool IMDP_lower, size_t ti
             while (k < timeHorizon) {
                 cout << "." << flush;
 
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(first0);
-
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second < b.second;
-                });
-
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first0, true);
 
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffR = maxTargetM - minTargetM;
@@ -8999,25 +7754,7 @@ void IMDP::finiteHorizonReachControllerSortedStoreMDP(bool IMDP_lower, size_t ti
             cout << "Matrix Fixed" << endl;
             while (k < timeHorizon) {
                 cout << "." << flush;
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(second0);
-
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second > b.second;
-                });
-
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second0, false);
 
                 mat diffT = tempTmax-tempTmin;
                 vec diffR = tempTTmax - tempTTmin;
@@ -9117,25 +7854,7 @@ void IMDP::finiteHorizonReachControllerSortedStoreMDP(bool IMDP_lower, size_t ti
             while (k < timeHorizon) {
             cout << "." << flush;
 
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(first0);
-
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second > b.second;
-                });
-
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first0, false);
 
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffR = maxTargetM - minTargetM;
@@ -9275,26 +7994,7 @@ void IMDP::finiteHorizonReachControllerSortedStoreMDP(bool IMDP_lower, size_t ti
             while (k < timeHorizon) {
                 cout << "." << flush;
 
-
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(second0);
-
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second < b.second;
-                });
-
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second0, true);
 
                 mat diffT = tempTmax-tempTmin;
                 vec diffR = tempTTmax - tempTTmin;
@@ -9398,25 +8098,7 @@ void IMDP::finiteHorizonReachControllerSortedStoreMDP(bool IMDP_lower, size_t ti
             while (k < timeHorizon) {
                 cout << "." << flush;
 
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(first0);
-
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second < b.second;
-                });
-
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first0, true);
 
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffR = maxTargetM - minTargetM;
@@ -9532,25 +8214,7 @@ void IMDP::finiteHorizonReachControllerSortedStoreMDP(bool IMDP_lower, size_t ti
             while (k < timeHorizon) {
                 cout << "." << flush;
 
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(second0);
-
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second > b.second;
-                });
-
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second0, false);
 
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffR = maxTargetM - minTargetM;
@@ -9657,25 +8321,7 @@ void IMDP::finiteHorizonReachControllerSortedStoreMDP(bool IMDP_lower, size_t ti
             while (k<timeHorizon) {
                 cout << "." << flush;
 
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(first0);
-
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second > b.second;
-                });
-
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first0, false);
 
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffR = maxTargetM - minTargetM;
@@ -9782,25 +8428,7 @@ void IMDP::finiteHorizonReachControllerSortedStoreMDP(bool IMDP_lower, size_t ti
             while (k<timeHorizon) {
                 cout << "." << flush;
 
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(second0);
-
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second < b.second;
-                });
-
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second0, true);
 
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffR = maxTargetM - minTargetM;
@@ -9908,25 +8536,7 @@ void IMDP::finiteHorizonReachControllerSortedStoreMDP(bool IMDP_lower, size_t ti
             while (k < timeHorizon) {
             cout << "." << flush;
 
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(first0);
-
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second < b.second;
-                });
-
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first0, true);
 
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffR = maxTargetM - minTargetM;
@@ -10082,25 +8692,7 @@ void IMDP::finiteHorizonReachControllerSortedStoreMDP(bool IMDP_lower, size_t ti
             while (k < timeHorizon) {
                 cout << "." << flush;
 
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(second0);
-
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second > b.second;
-                });
-
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second0, false);
 
                 //Get difference between max and min for incrementing values
                 mat diffT = tempTmax-tempTmin;
@@ -10201,27 +8793,7 @@ void IMDP::finiteHorizonReachControllerSortedStoreMDP(bool IMDP_lower, size_t ti
             cout << "first loop iterations: " << endl;
             while (k < timeHorizon) {
                 cout << "." << flush;
-
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(first0);
-
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second > b.second;
-                });
-
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
-
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first0, false);
                 //Get difference between max and min for incrementing values
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffR = maxTargetM - minTargetM;
@@ -10357,29 +8929,8 @@ void IMDP::finiteHorizonReachControllerSortedStoreMDP(bool IMDP_lower, size_t ti
 
             cout << "Matrix Fixed" << endl;
             while (k<timeHorizon) {
-
                 cout << "." << flush;
-
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(second0);
-
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second < b.second;
-                });
-
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
-
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second0, true);
                 mat diffT = tempTmax-tempTmin;
                 vec diffR = tempTTmax - tempTTmin;
                 vec diffA = tempATmax - tempATmin;
@@ -10488,25 +9039,7 @@ void IMDP::finiteHorizonReachControllerSortedStoreMDP(bool IMDP_lower, size_t ti
             while (k < timeHorizon) {
                 cout << "." << flush;
 
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(first0);
-
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second < b.second;
-                });
-
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first0, true);
 
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffR = maxTargetM - minTargetM;
@@ -10653,25 +9186,7 @@ void IMDP::finiteHorizonReachControllerSortedStoreMDP(bool IMDP_lower, size_t ti
             cout << "Matrix Fixed" << endl;
             while (k < timeHorizon) {
                 cout << "." << flush;
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(second0);
-
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second > b.second;
-                });
-
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second0, false);
 
                 mat diffT = tempTmax-tempTmin;
                 vec diffR = tempTTmax - tempTTmin;
@@ -10777,25 +9292,7 @@ void IMDP::finiteHorizonReachControllerSortedStoreMDP(bool IMDP_lower, size_t ti
             while (k < timeHorizon) {
             cout << "." << endl;
 
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(first0);
-
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second > b.second;
-                });
-
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first0, false);
 
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffR = maxTargetM - minTargetM;
@@ -10936,27 +9433,7 @@ void IMDP::finiteHorizonReachControllerSortedStoreMDP(bool IMDP_lower, size_t ti
             cout << "Matrix Fixed" << endl;
             while (k<timeHorizon) {
                 cout << "." << flush;
-
-                std::vector<double> original_values = arma::conv_to < std::vector<double> >::from(second0);
-
-                // Create a vector of pairs containing the original values and their indices
-                std::vector<std::pair<int, double>> indexed_values;
-                for (int i = 0; i < original_values.size(); ++i) {
-                    indexed_values.push_back(std::make_pair(i, original_values[i]));
-                }
-
-                // Sort the vector based on the values
-                std::sort(indexed_values.begin(), indexed_values.end(),
-                          [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
-                    return a.second < b.second;
-                });
-
-                // Extract the sorted indices
-                std::vector<int> sorted_indices;
-                for (const auto& pair : indexed_values) {
-                    sorted_indices.push_back(pair.first);
-                }
-
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second0, true);
                 mat diffT = tempTmax-tempTmin;
                 vec diffR = tempTTmax - tempTTmin;
                 vec diffA = tempATmax - tempATmin;

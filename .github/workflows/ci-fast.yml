@@ -1,0 +1,153 @@
+name: Fast CI - Smoke Tests
+
+on:
+  push:
+    branches: ["*"]
+    paths-ignore: ["**.md", "docs/**"]
+  pull_request:
+    branches: ["main", "develop"]
+    paths-ignore: ["**.md", "docs/**"]
+
+jobs:
+  build-docker:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: false
+          load: true
+          tags: impact:ci-${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Save Docker image
+        run: |
+          docker save impact:ci-${{ github.sha }} -o impact-image.tar
+
+      - name: Upload Docker image
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-image
+          path: impact-image.tar
+          retention-days: 1
+
+  smoke-test:
+    name: "Smoke Test: ${{ matrix.example }}"
+    runs-on: ubuntu-latest
+    needs: build-docker
+
+    strategy:
+      fail-fast: false
+      matrix:
+        example:
+          - ex_2Drobot-R-U
+          - ex_2Drobot-R-D
+          - ex_4DBAS-S
+
+    steps:
+      - name: Download Docker image
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-image
+
+      - name: Load Docker image
+        run: |
+          docker load -i impact-image.tar
+
+      - name: Compile and run example
+        id: test
+        timeout-minutes: 10
+        run: |
+          # Determine executable name
+          case "${{ matrix.example }}" in
+            *robot*)   EXEC="robot2D" ;;
+            *BAS*)     EXEC="BAS4D" ;;
+            *vehicle*) EXEC="vehicle3D" ;;
+            *room3D*)  EXEC="room3D" ;;
+            *room5D*)  EXEC="room5D" ;;
+            *load*)    EXEC="load" ;;
+            *)         EXEC="" ;;
+          esac
+
+          # Create output directory
+          mkdir -p outputs
+
+          # Run in Docker
+          docker run --rm \
+            -v $(pwd)/outputs:/outputs \
+            impact:ci-${{ github.sha }} \
+            -c "
+              cd /app/examples/${{ matrix.example }} && \
+              echo '=== Compiling ===' && \
+              make && \
+              echo '=== Running ===' && \
+              if [ -n '$EXEC' ]; then
+                ./$EXEC
+              else
+                # Find executable
+                FOUND_EXEC=\$(ls | grep -v '\\.' | head -n 1)
+                ./\$FOUND_EXEC
+              fi && \
+              echo '=== Copying outputs ===' && \
+              cp *.h5 /outputs/ 2>/dev/null || echo 'No HDF5 files found'
+            "
+
+          # Check if outputs were generated
+          H5_COUNT=$(ls outputs/*.h5 2>/dev/null | wc -l)
+          echo "output_count=$H5_COUNT" >> $GITHUB_OUTPUT
+          if [ "$H5_COUNT" -gt 0 ]; then
+            echo "✅ Generated $H5_COUNT HDF5 files"
+            echo "success=true" >> $GITHUB_OUTPUT
+          else
+            echo "❌ No HDF5 files generated"
+            echo "success=false" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+        continue-on-error: true
+
+      - name: Upload outputs
+        if: steps.test.outputs.success == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: outputs-${{ matrix.example }}
+          path: outputs/*.h5
+          retention-days: 7
+
+      - name: Report status
+        if: always()
+        run: |
+          echo "## Test Results: ${{ matrix.example }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.test.outputs.success }}" = "true" ]; then
+            echo "✅ **Test passed** - Generated ${{ steps.test.outputs.output_count }} HDF5 files" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Test failed**" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  summary:
+    name: Test Summary
+    runs-on: ubuntu-latest
+    needs: smoke-test
+    if: always()
+
+    steps:
+      - name: Check results
+        run: |
+          echo "## Smoke Test Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "All smoke tests completed using Docker." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Tested examples:" >> $GITHUB_STEP_SUMMARY
+          echo "- ex_2Drobot-R-U" >> $GITHUB_STEP_SUMMARY
+          echo "- ex_2Drobot-R-D" >> $GITHUB_STEP_SUMMARY
+          echo "- ex_4DBAS-S" >> $GITHUB_STEP_SUMMARY
