@@ -2,7 +2,7 @@ Note: some new features are being added at the moment, there may be some bugs ca
 
 # IMPaCT Software Tool
 
-[![DOI](https://zenodo.org/badge/739478882.svg)](https://zenodo.org/doi/10.5281/zenodo.11085097) [![Create and publish a Docker image](https://github.com/Kiguli/IMPaCT/actions/workflows/docker.yml/badge.svg)](https://github.com/Kiguli/IMPaCT/actions/workflows/docker.yml)[![CC BY 4.0][cc-by-shield]][cc-by]
+[![DOI](https://zenodo.org/badge/739478882.svg)](https://zenodo.org/doi/10.5281/zenodo.11085097) [![Smoke Tests](https://github.com/Kiguli/IMPaCT/actions/workflows/ci-fast.yml/badge.svg)](https://github.com/Kiguli/IMPaCT/actions/workflows/ci-fast.yml)[![Comp Tests](https://github.com/Kiguli/IMPaCT/actions/workflows/ci-comprehensive.yml/badge.svg)](https://github.com/Kiguli/IMPaCT/actions/workflows/ci-comprehensive.yml)[![CC BY 4.0][cc-by-shield]][cc-by]
 
 **IMPaCT**: <ins>**I**</ins>nterval <ins>**M**</ins>DP <ins>**Pa**</ins>rallel Construction for <ins>**C**</ins>ontroller Synthesis of Large-Scale S<ins>**T**</ins>ochastic Systems.
 
