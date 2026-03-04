@@ -1,0 +1,111 @@
+/* Custom styles for IMPaCT documentation */
+
+/* === Code Blocks === */
+pre {
+    font-size: 0.85em;
+    border-left: 3px solid var(--color-brand-primary);
+    border-radius: 0 4px 4px 0;
+}
+
+code.literal {
+    padding: 1px 4px;
+}
+
+/* === Section headings === */
+.content h2 {
+    padding-left: 0.6rem;
+    border-left: 3px solid var(--color-brand-primary);
+}
+
+/* === Card styling === */
+.sd-card {
+    transition: box-shadow 0.2s ease, transform 0.15s ease;
+    border-top: 2px solid transparent;
+}
+
+.sd-card:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+    transform: translateY(-2px);
+    border-top-color: var(--color-brand-primary);
+}
+
+/* === Performance tables === */
+table.docutils td:last-child {
+    font-weight: 600;
+    color: var(--color-brand-primary);
+}
+
+table.docutils tbody tr:nth-child(even) {
+    background-color: var(--color-background-secondary);
+}
+
+table.docutils thead th {
+    background-color: var(--color-brand-primary);
+    color: white;
+    font-weight: 600;
+}
+
+/* === Admonition accents === */
+.admonition.note {
+    border-left-color: var(--color-brand-primary);
+}
+
+.admonition.warning {
+    border-left-color: #ff9800;
+}
+
+.admonition.tip {
+    border-left-color: #4caf50;
+}
+
+/* === Horizontal rules === */
+hr {
+    margin: 2.5rem 0;
+    border: none;
+    border-top: 2px solid var(--color-brand-primary);
+    opacity: 0.2;
+}
+
+/* === Hero accent bar === */
+.page-content > .content > section:first-child > p:first-of-type {
+    font-size: 1.15em;
+    color: var(--color-foreground-secondary);
+}
+
+/* === Badge polish === */
+.sd-badge {
+    font-weight: 600;
+    letter-spacing: 0.02em;
+}
+
+/* === Scrollbar === */
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--color-brand-primary);
+    border-radius: 4px;
+    opacity: 0.5;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    opacity: 0.8;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--color-background-secondary);
+}
+
+/* === Dark mode adjustments === */
+body[data-theme="dark"] table.docutils td:last-child {
+    color: var(--color-brand-content);
+}
+
+body[data-theme="dark"] table.docutils thead th {
+    background-color: #0d3b66;
+}
+
+body[data-theme="dark"] .sd-card:hover {
+    border-top-color: var(--color-brand-content);
+}
