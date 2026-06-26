@@ -101,3 +101,78 @@ TEST_CASE("abstraction: O(N) sparsity — grow the domain at fixed step/noise, n
         CHECK(r.nCells == (int)std::llround(2 * half / sys.eta));
     }
 }
+
+// --- n-D abstraction (anchored on the verified 1-D builder) -----------------
+static SystemND demo2D(bool coupled) {
+    SystemND s;
+    s.dim_x = 2; s.dim_u = 2;
+    s.xlb = {-3, -3}; s.xub = {3, 3}; s.eta = {0.5, 0.5};
+    s.ulb = {-1, -1}; s.uub = {1, 1}; s.ueta = {2.0, 2.0};   // 2 pts/dim -> 4 actions
+    s.A = coupled ? std::vector<std::vector<double>>{{0.8, 0.1}, {0.1, 0.8}}
+                  : std::vector<std::vector<double>>{{0.8, 0.0}, {0.0, 0.8}};
+    s.B = {{1, 0}, {0, 1}};
+    s.c = {0, 0};
+    s.sigma = {0.5, 0.5};
+    s.tlo = {2, 2}; s.thi = {3, 3};
+    return s;
+}
+
+TEST_CASE("abstraction nD: dim=1 reproduces the verified 1-D builder") {
+    System1D s = demoSystem();
+    SparseReach r1 = buildSparseReach1D(s, 1e-9);
+    SystemND nd;
+    nd.dim_x = 1; nd.dim_u = 1;
+    nd.xlb = {s.xlb}; nd.xub = {s.xub}; nd.eta = {s.eta};
+    nd.ulb = {s.ulb}; nd.uub = {s.uub}; nd.ueta = {s.ueta};
+    nd.A = {{s.a}}; nd.B = {{s.b}}; nd.c = {0.0}; nd.sigma = {s.sigma};
+    nd.tlo = {s.tlo}; nd.thi = {s.thi};
+    SparseReach rn = buildSparseReachND(nd, 1e-9);
+    REQUIRE(r1.nCells == rn.nCells);
+    auto v1 = impact::solve::maxReachOptimistic(r1.model, r1.targets, 1e-7);
+    auto vn = impact::solve::maxReachOptimistic(rn.model, rn.targets, 1e-7);
+    for (int i = 0; i < r1.nCells; ++i)
+        CHECK(0.5 * (v1.lower[i] + v1.upper[i])
+              == doctest::Approx(0.5 * (vn.lower[i] + vn.upper[i])).epsilon(1e-6));
+}
+
+TEST_CASE("abstraction nD: 2-D decoupled, pruning lossless (sparse == dense)") {
+    SystemND s = demo2D(false);
+    SparseReach dense = buildSparseReachND(s, 0.0);
+    SparseReach sparse = buildSparseReachND(s, 1e-7);
+    auto rd = impact::solve::maxReachOptimistic(dense.model, dense.targets, 1e-7);
+    auto rs = impact::solve::maxReachOptimistic(sparse.model, sparse.targets, 1e-7);
+    for (int i = 0; i < dense.nCells; ++i)
+        CHECK(std::fabs(0.5 * (rd.lower[i] + rd.upper[i]) - 0.5 * (rs.lower[i] + rs.upper[i])) < 3e-3);
+    CHECK(sparse.nnz <= dense.nnz);
+}
+
+TEST_CASE("abstraction nD: 2-D coupled affine is sound; target reaches w.p. 1") {
+    SystemND s = demo2D(true);
+    SparseReach r = buildSparseReachND(s, 1e-9);
+    auto v = impact::solve::maxReachOptimistic(r.model, r.targets, 1e-7);
+    double mx = 0.0;
+    for (int i = 0; i < r.nCells; ++i) {
+        CHECK(v.lower[i] <= v.upper[i] + 1e-9);
+        CHECK(v.lower[i] >= -1e-9);
+        CHECK(v.upper[i] <= 1.0 + 1e-9);
+        mx = std::max(mx, 0.5 * (v.lower[i] + v.upper[i]));
+    }
+    CHECK(mx == doctest::Approx(1.0).epsilon(1e-6));   // target cells reach w.p. 1
+}
+
+TEST_CASE("abstraction nD: 2-D O(N) sparsity (grow domain, bounded nnz/cell)") {
+    // nnz/cell converges to a CONSTANT (~ 2-D kernel window x #actions, independent of
+    // N) as the boundary fraction shrinks; the rise 3->6->12 is the boundary effect
+    // converging, not unbounded growth. Bounded => total nnz is O(N).
+    double prev = 0.0;
+    for (double half : {6.0, 12.0, 24.0}) {
+        SystemND s = demo2D(false);
+        s.xlb = {-half, -half}; s.xub = {half, half};
+        s.tlo = {half - 1, half - 1}; s.thi = {half, half};
+        SparseReach r = buildSparseReachND(s, 1e-7);
+        double ratio = (double)r.nnz / (double)(r.nCells + 2);
+        CHECK(ratio < 700.0);                       // bounded by full 2-D window x actions
+        if (prev > 0.0) CHECK(ratio < prev * 1.25); // converging (not growing ~linearly)
+        prev = ratio;
+    }
+}

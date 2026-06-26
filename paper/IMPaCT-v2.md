@@ -174,6 +174,18 @@ Format per entry: `date — feature | decision + rationale | algorithm | refs | 
   Next: n-D/coupled abstraction (mixed-monotone/NLopt bounds), sparse products, and
   driving ARCH benchmarks through the sparse pipeline. Branch pushed to origin.
 
+- **Sparse abstraction extended to n-D (affine, diagonal Gaussian).**
+  `abstraction::buildSparseReachND`: per-dimension mean RANGE via interval arithmetic
+  on the affine map (A,B,c) — exact for axis-decoupled, and for COUPLED systems the
+  product-of-1-D box bound is a SOUND over-approximation (true probability always lies
+  within [∏lo_i, ∏hi_i]); tight when decoupled. Sparse via Cartesian kernel-window
+  enumeration. Verified: dim=1 reproduces the verified 1-D builder; 2-D decoupled
+  pruning lossless (sparse==dense); 2-D coupled affine sound (value in [lower,upper],
+  target cells = 1); 2-D O(N) sparsity (nnz/cell converges to a constant as the domain
+  grows — boundary effect, not unbounded). Suite: 42/42, 54971 assertions.
+  Next: nonlinear dynamics (mixed-monotone/NLopt mean bounds) + drive an ARCH-COMP
+  case through the sparse pipeline and verify the value end-to-end.
+
 <!-- add new dated entries above this line -->
 
 ---

@@ -69,6 +69,27 @@ namespace abstraction {
     // (mass folded into SINK); prune=0 keeps every cell (a dense-equivalent build).
     SparseReach buildSparseReach1D(const System1D& sys, double prune);
 
+    // --- n-D sparse reach abstraction (affine dynamics, diagonal Gaussian) --------
+    // x'_i = sum_j A[i][j] x_j + sum_k B[i][k] u_k + c[i] + N(0, sigma_i^2).
+    // The per-dimension mean RANGE over a source cell is computed exactly by interval
+    // arithmetic on the affine map (handles COUPLED systems). The box transition
+    // bound is the product of per-dimension 1-D bounds: this is EXACT when dynamics
+    // are axis-decoupled (A diagonal) and a SOUND over-approximation otherwise (the
+    // true probability always lies within [prod lo_i, prod hi_i]). Only cells inside
+    // the per-dimension kernel window are stored (sparse).
+    struct SystemND {
+        int dim_x = 0, dim_u = 0;
+        std::vector<double> xlb, xub, eta;       // size dim_x
+        std::vector<double> ulb, uub, ueta;      // size dim_u
+        std::vector<std::vector<double>> A;      // dim_x x dim_x
+        std::vector<std::vector<double>> B;      // dim_x x dim_u
+        std::vector<double> c;                   // dim_x (default 0)
+        std::vector<double> sigma;               // dim_x
+        std::vector<double> tlo, thi;            // dim_x target box (absorbing)
+    };
+
+    SparseReach buildSparseReachND(const SystemND& sys, double prune);
+
 } // namespace abstraction
 } // namespace impact
 
