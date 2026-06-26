@@ -20,6 +20,7 @@
 // ============================================================================
 
 #include <vector>
+#include <functional>
 #include "solve.h"
 
 namespace impact {
@@ -92,6 +93,42 @@ namespace abstraction {
     };
 
     SparseReach buildSparseReachND(const SystemND& sys, double prune);
+
+    // --- General (nonlinear) sparse reach abstraction ----------------------------
+    // Decouples the dynamics from the gridding: the caller supplies a SOUND
+    // per-dimension mean enclosure of f_i over a source cell under a fixed input.
+    // For nonlinear f this is typically built with interval arithmetic
+    // (`abstraction::Ival`) or mixed-monotone bounds (Dutreix-Coogan). Soundness of
+    // the resulting IMDP follows from the enclosure being sound (true mean in range).
+    struct GridSpec {
+        int dim_x = 0, dim_u = 0;
+        std::vector<double> xlb, xub, eta;   // dim_x
+        std::vector<double> ulb, uub, ueta;  // dim_u
+        std::vector<double> sigma;           // dim_x (diagonal Gaussian)
+        std::vector<double> tlo, thi;        // dim_x target box
+    };
+
+    // (cellLo, cellHi, u) -> per-dimension [muLo, muHi] enclosing f over the cell.
+    using MeanBoundFn = std::function<void(const std::vector<double>& cellLo,
+                                           const std::vector<double>& cellHi,
+                                           const std::vector<double>& u,
+                                           std::vector<double>& muLo,
+                                           std::vector<double>& muHi)>;
+
+    SparseReach buildSparseReachGeneral(const GridSpec& g, const MeanBoundFn& mean, double prune);
+
+    // Minimal interval-arithmetic type for writing sound nonlinear mean bounds.
+    struct Ival {
+        double lo, hi;
+        Ival(double l, double h) : lo(l), hi(h) {}
+        explicit Ival(double v) : lo(v), hi(v) {}
+    };
+    Ival operator+(const Ival& a, const Ival& b);
+    Ival operator-(const Ival& a, const Ival& b);
+    Ival operator*(const Ival& a, const Ival& b);
+    Ival operator+(const Ival& a, double s);
+    Ival operator*(double s, const Ival& a);
+    Ival isquare(const Ival& a);     // [a]^2, tight (handles intervals straddling 0)
 
 } // namespace abstraction
 } // namespace impact

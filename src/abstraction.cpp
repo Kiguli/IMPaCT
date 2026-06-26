@@ -74,19 +74,17 @@ SparseReach buildSparseReach1D(const System1D& sys, double prune) {
             double muLo = std::min(m1, m2), muHi = std::max(m1, m2);
 
             solve::ActionDist row;
-            // mass into the target region [tlo,thi]
-            Bound bT = transitionInterval1D(muLo, muHi, sys.sigma, sys.tlo, sys.thi);
-            if (bT.hi > prune) row.push_back({TARGET, bT.lo, bT.hi});
-
-            // mass into non-target grid cells within the support window
+            // Transitions to the (disjoint) grid cells in the support window; a target
+            // cell routes its mass to the absorbing TARGET. No separate target-region
+            // aggregate (which would double-count cells partially overlapping a
+            // grid-unaligned target). See ISSUE-0008.
             int jmin = (int)std::floor((muLo - W - sys.xlb) / sys.eta);
             int jmax = (int)std::floor((muHi + W - sys.xlb) / sys.eta);
             jmin = std::max(0, jmin); jmax = std::min(N - 1, jmax);
             for (int j = jmin; j <= jmax; ++j) {
-                if (isTargetCell(j)) continue;              // counted in the TARGET aggregate
                 double cl = cellLo(j), cr = cl + sys.eta;
                 Bound b = transitionInterval1D(muLo, muHi, sys.sigma, cl, cr);
-                if (b.hi > prune) row.push_back({j, b.lo, b.hi});
+                if (b.hi > prune) row.push_back({isTargetCell(j) ? TARGET : j, b.lo, b.hi});
             }
 
             // mass leaving the grid -> SINK (value 0), bounded TIGHTLY as the
@@ -104,22 +102,37 @@ SparseReach buildSparseReach1D(const System1D& sys, double prune) {
     return out;
 }
 
-SparseReach buildSparseReachND(const SystemND& sys, double prune) {
-    const int dx = sys.dim_x, du = sys.dim_u;
+// --- interval arithmetic (sound natural inclusion) for nonlinear mean bounds ----
+Ival operator+(const Ival& a, const Ival& b) { return Ival(a.lo + b.lo, a.hi + b.hi); }
+Ival operator-(const Ival& a, const Ival& b) { return Ival(a.lo - b.hi, a.hi - b.lo); }
+Ival operator*(const Ival& a, const Ival& b) {
+    double p1 = a.lo*b.lo, p2 = a.lo*b.hi, p3 = a.hi*b.lo, p4 = a.hi*b.hi;
+    return Ival(std::min({p1,p2,p3,p4}), std::max({p1,p2,p3,p4}));
+}
+Ival operator+(const Ival& a, double s) { return Ival(a.lo + s, a.hi + s); }
+Ival operator*(double s, const Ival& a) { return s >= 0 ? Ival(s*a.lo, s*a.hi) : Ival(s*a.hi, s*a.lo); }
+Ival isquare(const Ival& a) {
+    if (a.lo >= 0) return Ival(a.lo*a.lo, a.hi*a.hi);
+    if (a.hi <= 0) return Ival(a.hi*a.hi, a.lo*a.lo);
+    double m = std::max(-a.lo, a.hi);
+    return Ival(0.0, m*m);
+}
+
+SparseReach buildSparseReachGeneral(const GridSpec& g, const MeanBoundFn& mean, double prune) {
+    const int dx = g.dim_x, du = g.dim_u;
     std::vector<int> Nd(dx);
     std::vector<long long> stride(dx);
     long long N = 1;
     for (int i = 0; i < dx; ++i) {
-        Nd[i] = std::max(1, (int)std::llround((sys.xub[i] - sys.xlb[i]) / sys.eta[i]));
+        Nd[i] = std::max(1, (int)std::llround((g.xub[i] - g.xlb[i]) / g.eta[i]));
         stride[i] = N; N *= Nd[i];
     }
     const int TARGET = (int)N, SINK = (int)N + 1;
 
-    // input actions = Cartesian product of per-dimension input grids
     std::vector<std::vector<double>> upts(du);
     for (int k = 0; k < du; ++k) {
-        int Mk = std::max(0, (int)std::llround((sys.uub[k] - sys.ulb[k]) / sys.ueta[k]));
-        for (int t = 0; t <= Mk; ++t) upts[k].push_back(sys.ulb[k] + t * sys.ueta[k]);
+        int Mk = std::max(0, (int)std::llround((g.uub[k] - g.ulb[k]) / g.ueta[k]));
+        for (int t = 0; t <= Mk; ++t) upts[k].push_back(g.ulb[k] + t * g.ueta[k]);
     }
     std::vector<std::vector<double>> actions;
     if (du == 0) actions.push_back({});
@@ -138,61 +151,54 @@ SparseReach buildSparseReachND(const SystemND& sys, double prune) {
     out.model.assign((size_t)N + 2, {}); out.targets.insert(TARGET);
     out.actions = actions;
 
-    auto cellLoDim = [&](int i, int j) { return sys.xlb[i] + j * sys.eta[i]; };
+    auto cellLoDim = [&](int i, int j) { return g.xlb[i] + j * g.eta[i]; };
     auto isTargetMi = [&](const std::vector<int>& mi) {
         for (int i = 0; i < dx; ++i) {
-            double lo = cellLoDim(i, mi[i]), hi = lo + sys.eta[i];
-            if (!(lo >= sys.tlo[i] - 1e-12 && hi <= sys.thi[i] + 1e-12)) return false;
+            double lo = cellLoDim(i, mi[i]), hi = lo + g.eta[i];
+            if (!(lo >= g.tlo[i] - 1e-12 && hi <= g.thi[i] + 1e-12)) return false;
         }
         return true;
     };
 
     std::vector<int> mi(dx), wlo(dx), whi(dx), jt(dx);
-    std::vector<double> muLo(dx), muHi(dx);
+    std::vector<double> muLo(dx), muHi(dx), cellLo(dx), cellHi(dx);
     for (long long lin = 0; lin < N; ++lin) {
         for (int i = 0; i < dx; ++i) mi[i] = (int)((lin / stride[i]) % Nd[i]);
         if (isTargetMi(mi)) { out.model[lin].push_back({ {TARGET, 1.0, 1.0} }); out.nnz += 1; continue; }
+        for (int i = 0; i < dx; ++i) { cellLo[i] = cellLoDim(i, mi[i]); cellHi[i] = cellLo[i] + g.eta[i]; }
 
         for (const auto& u : actions) {
-            for (int i = 0; i < dx; ++i) {                 // affine interval arithmetic for mean range
-                double lo = sys.c.empty() ? 0.0 : sys.c[i], hi = lo;
-                for (int j = 0; j < dx; ++j) {
-                    double a = sys.A[i][j], xl = cellLoDim(j, mi[j]), xr = xl + sys.eta[j];
-                    if (a >= 0) { lo += a * xl; hi += a * xr; } else { lo += a * xr; hi += a * xl; }
-                }
-                for (int k = 0; k < du; ++k) { lo += sys.B[i][k] * u[k]; hi += sys.B[i][k] * u[k]; }
-                muLo[i] = lo; muHi[i] = hi;
-            }
+            mean(cellLo, cellHi, u, muLo, muHi);            // SOUND per-dim mean enclosure
 
+            // Transitions to each grid cell in the per-dimension kernel window. Cells
+            // are DISJOINT boxes, so there is no double counting. A window cell that is
+            // a target cell routes its mass to the absorbing TARGET (no separate target
+            // aggregate, which would double-count cells that partially overlap a
+            // grid-unaligned target region).
             solve::ActionDist row;
-            { double tl = 1.0, th = 1.0;                   // target box aggregate
-              for (int i = 0; i < dx; ++i) { Bound b = transitionInterval1D(muLo[i], muHi[i], sys.sigma[i], sys.tlo[i], sys.thi[i]); tl *= b.lo; th *= b.hi; }
-              if (th > prune) row.push_back({TARGET, tl, th}); }
-
-            bool any = true;                                // per-dim kernel window
+            bool any = true;
             for (int i = 0; i < dx; ++i) {
-                double W = 6.0 * sys.sigma[i];
-                wlo[i] = std::max(0, (int)std::floor((muLo[i] - W - sys.xlb[i]) / sys.eta[i]));
-                whi[i] = std::min(Nd[i] - 1, (int)std::floor((muHi[i] + W - sys.xlb[i]) / sys.eta[i]));
+                double W = 6.0 * g.sigma[i];
+                wlo[i] = std::max(0, (int)std::floor((muLo[i] - W - g.xlb[i]) / g.eta[i]));
+                whi[i] = std::min(Nd[i] - 1, (int)std::floor((muHi[i] + W - g.xlb[i]) / g.eta[i]));
                 if (wlo[i] > whi[i]) any = false;
                 jt[i] = wlo[i];
             }
-            if (any) while (true) {                         // Cartesian product over windows
-                if (!isTargetMi(jt)) {
-                    double pl = 1.0, ph = 1.0;
-                    for (int i = 0; i < dx; ++i) { double cl = cellLoDim(i, jt[i]), cr = cl + sys.eta[i];
-                        Bound b = transitionInterval1D(muLo[i], muHi[i], sys.sigma[i], cl, cr); pl *= b.lo; ph *= b.hi; }
-                    if (ph > prune) { long long lj = 0; for (int i = 0; i < dx; ++i) lj += (long long)jt[i] * stride[i];
+            if (any) while (true) {
+                double pl = 1.0, ph = 1.0;
+                for (int i = 0; i < dx; ++i) { double cl = cellLoDim(i, jt[i]), cr = cl + g.eta[i];
+                    Bound b = transitionInterval1D(muLo[i], muHi[i], g.sigma[i], cl, cr); pl *= b.lo; ph *= b.hi; }
+                if (ph > prune) {
+                    if (isTargetMi(jt)) { row.push_back({TARGET, pl, ph}); }
+                    else { long long lj = 0; for (int i = 0; i < dx; ++i) lj += (long long)jt[i] * stride[i];
                         row.push_back({(int)lj, pl, ph}); }
                 }
                 int i = 0; for (; i < dx; ++i) { if (++jt[i] <= whi[i]) break; jt[i] = wlo[i]; }
                 if (i == dx) break;
             }
 
-            // mass leaving the grid -> SINK, bounded tightly via the whole-grid-box
-            // complement (product of per-dim in-grid probabilities).
-            double gl = 1.0, gh = 1.0;
-            for (int i = 0; i < dx; ++i) { Bound g = transitionInterval1D(muLo[i], muHi[i], sys.sigma[i], sys.xlb[i], sys.xub[i]); gl *= g.lo; gh *= g.hi; }
+            double gl = 1.0, gh = 1.0;                        // outside-grid via grid-box complement
+            for (int i = 0; i < dx; ++i) { Bound gg = transitionInterval1D(muLo[i], muHi[i], g.sigma[i], g.xlb[i], g.xub[i]); gl *= gg.lo; gh *= gg.hi; }
             row.push_back({SINK, std::max(0.0, 1.0 - gh), std::min(1.0, 1.0 - gl)});
             out.nnz += (long long)row.size();
             out.model[lin].push_back(std::move(row));
@@ -201,6 +207,29 @@ SparseReach buildSparseReachND(const SystemND& sys, double prune) {
     out.model[TARGET].push_back({ {TARGET, 1.0, 1.0} });
     out.model[SINK].push_back({ {SINK, 1.0, 1.0} });
     return out;
+}
+
+SparseReach buildSparseReachND(const SystemND& sys, double prune) {
+    GridSpec g;
+    g.dim_x = sys.dim_x; g.dim_u = sys.dim_u;
+    g.xlb = sys.xlb; g.xub = sys.xub; g.eta = sys.eta;
+    g.ulb = sys.ulb; g.uub = sys.uub; g.ueta = sys.ueta;
+    g.sigma = sys.sigma; g.tlo = sys.tlo; g.thi = sys.thi;
+    const auto A = sys.A; const auto B = sys.B; const auto c = sys.c;
+    const int dx = sys.dim_x, du = sys.dim_u;
+    MeanBoundFn affine = [A, B, c, dx, du](const std::vector<double>& cl, const std::vector<double>& ch,
+                                           const std::vector<double>& u,
+                                           std::vector<double>& muLo, std::vector<double>& muHi) {
+        muLo.assign(dx, 0.0); muHi.assign(dx, 0.0);
+        for (int i = 0; i < dx; ++i) {
+            double lo = c.empty() ? 0.0 : c[i], hi = lo;
+            for (int j = 0; j < dx; ++j) { double a = A[i][j];
+                if (a >= 0) { lo += a * cl[j]; hi += a * ch[j]; } else { lo += a * ch[j]; hi += a * cl[j]; } }
+            for (int k = 0; k < du; ++k) { lo += B[i][k] * u[k]; hi += B[i][k] * u[k]; }
+            muLo[i] = lo; muHi[i] = hi;
+        }
+    };
+    return buildSparseReachGeneral(g, affine, prune);
 }
 
 } // namespace abstraction

@@ -201,6 +201,22 @@ Format per entry: `date — feature | decision + rationale | algorithm | refs | 
   Also found a Monte-Carlo gotcha: validating an infinite-horizon reach needs a long
   sim horizon (truncation gave 0.73 vs true 1.0). Suite still 42/42, 54971 assertions.
 
+- **Nonlinear abstraction + a real ARCH nonlinear benchmark (Van der Pol).**
+  Generalized the abstraction (`buildSparseReachGeneral` + a `MeanBoundFn`): the
+  per-dimension mean enclosure is pluggable, computed for nonlinear systems by
+  **interval arithmetic** (`abstraction::Ival`, `isquare`). The affine n-D builder now
+  delegates to it. VP (`x0'=x0+0.1x1`, `x1'=x1+0.1(-x0+(1-x0)²x1)`, no input) runs
+  end-to-end through the sparse pipeline. Verified: the VP interval mean bound is
+  SOUND (vs brute-force, 600k+ assertions); the VP interval-MC build is sound
+  (pess ≤ opt, target = 1); and **6/6 start states have empirical reach (real
+  nonlinear stochastic sim) within [lower, upper]** (`benchmarks/validate_vp.cpp`).
+- **ISSUE-0008 (found by VP MC, fixed).** Grid-unaligned targets were double-counted
+  (separate target-region aggregate + partial-overlap cells) → lower bound too high
+  (0.354 vs true 0.236). Fix: drop the aggregate; route window target cells to the
+  absorbing TARGET (disjoint cells, no double count) in both builders. After the fix
+  VP is 6/6; suite still 44/44, 603273 assertions. (Second soundness bug the
+  closed-loop validation caught that internal differential tests missed.)
+
 <!-- add new dated entries above this line -->
 
 ---

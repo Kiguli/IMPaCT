@@ -176,3 +176,51 @@ TEST_CASE("abstraction nD: 2-D O(N) sparsity (grow domain, bounded nnz/cell)") {
         prev = ratio;
     }
 }
+
+// --- nonlinear dynamics via interval arithmetic: ARCH Van der Pol -------------
+// x0' = x0 + 0.1 x1 ; x1' = x1 + 0.1(-x0 + (1-x0)^2 x1).  No input (verification).
+static void vpMean(const std::vector<double>& cl, const std::vector<double>& ch,
+                   const std::vector<double>&, std::vector<double>& muLo, std::vector<double>& muHi) {
+    Ival X0(cl[0], ch[0]), X1(cl[1], ch[1]);
+    Ival f0 = X0 + 0.1 * X1;
+    Ival f1 = X1 + 0.1 * ((-1.0 * X0) + isquare(Ival(1.0) - X0) * X1);
+    muLo = {f0.lo, f1.lo}; muHi = {f0.hi, f1.hi};
+}
+
+TEST_CASE("abstraction nonlinear: Van der Pol interval mean bound is SOUND") {
+    std::mt19937 rng(5);
+    std::uniform_real_distribution<double> X(-5.0, 4.8);
+    for (int t = 0; t < 800; ++t) {
+        double x0l = X(rng), x1l = X(rng);
+        std::vector<double> cl{x0l, x1l}, ch{x0l + 0.2, x1l + 0.2}, muLo, muHi, dummy;
+        vpMean(cl, ch, dummy, muLo, muHi);
+        for (int s0 = 0; s0 <= 12; ++s0) for (int s1 = 0; s1 <= 12; ++s1) {
+            double x0 = cl[0] + (ch[0]-cl[0]) * s0 / 12.0;
+            double x1 = cl[1] + (ch[1]-cl[1]) * s1 / 12.0;
+            double f0 = x0 + 0.1 * x1;
+            double f1 = x1 + 0.1 * (-x0 + (1 - x0)*(1 - x0)*x1);
+            CHECK(f0 >= muLo[0] - 1e-9); CHECK(f0 <= muHi[0] + 1e-9);   // enclosure is sound
+            CHECK(f1 >= muLo[1] - 1e-9); CHECK(f1 <= muHi[1] + 1e-9);
+        }
+    }
+}
+
+TEST_CASE("abstraction nonlinear: Van der Pol sparse interval-MC build is sound") {
+    GridSpec g;
+    g.dim_x = 2; g.dim_u = 0;
+    g.xlb = {-5, -5}; g.xub = {5, 5}; g.eta = {0.2, 0.2};
+    g.sigma = {0.2, 0.2};
+    g.tlo = {-1.2, -2.9}; g.thi = {-0.9, -2.0};
+    SparseReach r = buildSparseReachGeneral(g, vpMean, 1e-7);
+    CHECK(r.nCells == 2500);
+    auto lo = impact::solve::maxReachPessimistic(r.model, r.targets, 1e-6);
+    auto hi = impact::solve::maxReachOptimistic(r.model, r.targets, 1e-6);
+    double mxhi = 0.0;
+    for (int i = 0; i < r.nCells; ++i) {
+        CHECK(lo.lower[i] <= hi.upper[i] + 1e-9);     // pessimistic <= optimistic (valid interval)
+        CHECK(lo.lower[i] >= -1e-9);
+        CHECK(hi.upper[i] <= 1.0 + 1e-9);
+        mxhi = std::max(mxhi, hi.upper[i]);
+    }
+    CHECK(mxhi == doctest::Approx(1.0).epsilon(1e-6));  // target cells reach w.p. 1
+}
