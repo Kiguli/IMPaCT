@@ -418,6 +418,20 @@ Format per entry: `date — feature | decision + rationale | algorithm | refs | 
     a Workflow (4 readers → reconcile → 3 adversarial refuters, 368k tokens) caught
     both the retraction and the real bugs that a single pass missed.
 
+- **Stretch: PCTL / CTL model checking on IMDPs** (`src/pctl.{h,cpp}`). State
+  subformulas are state sets (compose bottom-up); each path operator returns a sound
+  robust probability interval via the verified solver. Added `next` (X), `until`
+  (φ U ψ = constrained reach: ¬φ∧¬ψ states made absorbing-dead), `boundedUntil`
+  (φ U^{≤k} ψ = exact finite-horizon DP), pessimistic (robust) + optimistic, with
+  Finally=reach / Globally=safety reused. Threshold verdicts `check`/`satStates`
+  return Sat/Unsat/Unknown soundly over `[lower,upper]`. CTL sugar: `EF` (∃ positive
+  reach), `AG` (robust almost-sure stay). TDD (`test_pctl.cpp`): X/until/bounded hand
+  cases, until==reach when φ=all, bounded→unbounded convergence, and a **600-model
+  differential** of bounded-until vs an explicit finite-horizon DP on random point
+  MDPs. Scope: controller-Pmax flavour (Pmin/adversarial-controller future). Refs:
+  Hansson-Jonsson (FAC 1994); Baier-Katoen Ch.10; Puggelli et al. (CAV 2013, interval
+  PCTL) — all verified in References.bib. Suite: **91 cases / 640,900 assertions green.**
+
 <!-- add new dated entries above this line -->
 
 ---

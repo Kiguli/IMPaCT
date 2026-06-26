@@ -51,4 +51,7 @@
 // PRISM-language front-end (subset) -> io::Problem (user-requested input style).
 #include "../../src/prism.h"
 
+// PCTL / CTL model checking on Interval MDPs (logics beyond LTL).
+#include "../../src/pctl.h"
+
 #endif // IMPACT_TEST_CONTRACTS_H

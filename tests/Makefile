@@ -26,7 +26,8 @@ IMPL_SRCS := ../src/omaximization.cpp \
              ../src/abstraction.cpp \
              ../src/omega.cpp \
              ../src/imdp_io.cpp \
-             ../src/prism.cpp
+             ../src/prism.cpp \
+             ../src/pctl.cpp
 
 TEST_SRCS := unit/test_main.cpp \
              unit/test_omaximization.cpp \
@@ -38,7 +39,8 @@ TEST_SRCS := unit/test_main.cpp \
              unit/test_omega.cpp \
              unit/test_safety.cpp \
              unit/test_imdp_io.cpp \
-             unit/test_prism.cpp
+             unit/test_prism.cpp \
+             unit/test_pctl.cpp
 
 BIN := run_tests
 

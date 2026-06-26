@@ -88,6 +88,22 @@ forward to Phase 3+.
 - **Logics beyond LTL**: **STL** (signal temporal logic) and **CTL** (and CTL*/PCTL)
   in addition to LTL/LTLf — selectable specification front-ends.
 
+## Big-machine verification queue (needs the SYCL/Armadillo/GLPK toolchain — Windows/Linux)
+These changes are made and reasoned but NOT compile-verified in the current
+environment; verify on a machine with AdaptiveCpp + Armadillo + GLPK + HDF5:
+1. **ISSUE-0012** — v1 inner-solve unification (public controllers → O-maximization
+   `*Sorted`). Compile-verify the examples still run and match the old LP outputs;
+   then DELETE the dead GLPK LP implementations and drop the GLPK dependency.
+2. **ISSUE-0013** — finite-horizon safety `Sorted` UPPER-bound kernel fixes
+   (over-count; uninitialized `temp1`; missing base term; missing avoid-residual
+   block). Verify `finiteHorizonSafeController` upper bounds against the LP path,
+   the v2 `solve::maxSafety*`, and the cross-tool `.imdp` safety references, and that
+   they bracket a Monte-Carlo estimate. If verification fails, hold back ONLY the
+   finite-safety redirect (keep it on the LP path) until fixed.
+3. **Live peer comparisons** — install IntervalMDP.jl / PRISM / Storm and run the
+   `benchmarks/crosstool` models side-by-side, dropping measured values into the
+   `.ref.json` `checks` (they must match the analytic references already there).
+
 ## Guardrails (apply to every addition)
 - Verified references only; differential/brute-force oracles for every algorithm.
 - No machine-dependent correctness crutches (e.g., `maxStates` is a safety valve, not a
