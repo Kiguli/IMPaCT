@@ -86,6 +86,22 @@ bool includes(const Zone& outer, const Zone& inner) {
     return true;
 }
 
+void extrapolate(Zone& z, const std::vector<long long>& kmax) {
+    canonicalize(z);
+    const int N = z.n + 1;
+    for (int i = 0; i < N; ++i)
+        for (int j = 0; j < N; ++j) {
+            if (i == j) continue;
+            if (z.m[i][j].isInf()) continue;
+            if (z.m[i][j].c > kmax[i]) {                     // x_i - x_j above i's max constant -> forget
+                z.m[i][j] = Bound::inf();
+            } else if (z.m[i][j].c < -kmax[j]) {             // below -(j's max constant) -> relax to (< -kmax[j])
+                z.m[i][j] = Bound::lt(-kmax[j]);
+            }
+        }
+    canonicalize(z);
+}
+
 bool contains(const Zone& z, const std::vector<double>& val) {
     auto x = [&](int idx) -> double { return idx == 0 ? 0.0 : val[idx - 1]; };
     for (int i = 0; i <= z.n; ++i)

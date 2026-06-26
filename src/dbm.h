@@ -69,6 +69,13 @@ namespace dbm {
     // Membership: does the clock valuation (size n, for clocks 1..n) lie in the zone?
     bool contains(const Zone& z, const std::vector<double>& val);
 
+    // Classic maximal-constant extrapolation Extra_M (Behrmann-Bouyer-Larsen-Pelanek,
+    // "Lower and upper bounds in zone-based abstractions of timed automata", 2006):
+    // bounds above a clock's maximal constant are forgotten, guaranteeing finitely
+    // many zones (termination of zone-graph reachability). kmax has size n+1 with
+    // kmax[0]=0 and kmax[i] = the largest constant clock i is compared against.
+    void extrapolate(Zone& z, const std::vector<long long>& kmax);
+
 } // namespace dbm
 } // namespace impact
 

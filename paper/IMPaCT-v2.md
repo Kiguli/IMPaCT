@@ -464,6 +464,22 @@ Format per entry: `date — feature | decision + rationale | algorithm | refs | 
   automata + regions); Bengtsson-Yi (2004, DBM/zone algorithms); the PTA target is
   Kwiatkowska-Norman-Segala-Sproston (TCS 2002). Suite: **105 cases / 643,035 green.**
 
+- **Stretch: timed-automaton zone-graph reachability** (`src/ta.{h,cpp}` + DBM
+  `extrapolate`). A timed automaton (locations with clock invariants; edges with
+  clock guards and resets) is model-checked for location reachability by forward
+  exploration of symbolic states (location, zone): delay within the invariant, take
+  an edge (intersect guard, reset clocks), delay within the target invariant;
+  termination via maximal-constant extrapolation (`dbm::extrapolate`, Behrmann et al.
+  2006) + zone inclusion. Convenience clock-constraint builders (`clkLe/Lt/Ge/Gt`).
+  TDD (`test_ta.cpp`): timing-feasible vs invariant-blocked reachability, sequential
+  resets, two-clock coupling under delay (x,y rise together so x≥2 forces y≥2), and
+  termination on a resetting self-loop (finite zone graph, no cap hit). The
+  probabilistic-TA step adds edge distributions so the zone graph becomes a finite
+  (I)MDP for the verified reach/PCTL solvers — the timed↔stochastic integration
+  point. Refs (verified): Alur-Dill (TCS 1994), Bengtsson-Yi (2004),
+  Behrmann-Bouyer-Larsen-Pelanek (2006), KNSS (TCS 2002, PTA).
+  Suite: **110 cases / 643,044 assertions green.**
+
 <!-- add new dated entries above this line -->
 
 ---

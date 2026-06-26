@@ -60,4 +60,7 @@
 // DBM zone abstraction for timed automata (stretch model).
 #include "../../src/dbm.h"
 
+// Timed-automaton zone-graph reachability (stretch model).
+#include "../../src/ta.h"
+
 #endif // IMPACT_TEST_CONTRACTS_H
