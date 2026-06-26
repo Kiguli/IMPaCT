@@ -48,4 +48,7 @@
 // Explicit (interval) MDP exchange format (cross-tool benchmarking).
 #include "../../src/imdp_io.h"
 
+// PRISM-language front-end (subset) -> io::Problem (user-requested input style).
+#include "../../src/prism.h"
+
 #endif // IMPACT_TEST_CONTRACTS_H

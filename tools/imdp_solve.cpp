@@ -24,6 +24,7 @@
 //   result  prop=reach  bound=pess  state=0  lower=0.399999  upper=0.400001  iters=37
 // ============================================================================
 #include "../src/imdp_io.h"
+#include "../src/prism.h"
 #include "../src/solve.h"
 
 #include <iostream>
@@ -35,7 +36,7 @@ using namespace impact;
 
 static void usage() {
     std::cerr <<
-      "usage: imdp_solve MODEL.imdp reach|safety LABEL "
+      "usage: imdp_solve MODEL(.imdp|.prism) reach|safety LABEL "
       "[--bound pess|opt|both] [--eps E] [--method ovi|mec] [--state S]\n";
 }
 
@@ -67,9 +68,14 @@ int main(int argc, char** argv) {
         } else { std::cerr << "unknown option: " << a << "\n"; usage(); return 2; }
     }
 
+    auto endsWith = [](const std::string& s, const std::string& suf) {
+        return s.size() >= suf.size() && s.compare(s.size() - suf.size(), suf.size(), suf) == 0;
+    };
+    const bool isPrism = endsWith(path, ".prism") || endsWith(path, ".pm") || endsWith(path, ".nm");
+
     io::Problem p;
     try {
-        p = io::parseFile(path);
+        p = isPrism ? prism::parseFile(path) : io::parseFile(path);
     } catch (const std::exception& e) {
         std::cerr << "parse error: " << e.what() << "\n";
         return 1;

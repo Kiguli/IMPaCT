@@ -25,6 +25,10 @@ they are added (their measured numbers must equal the same references).
 
 - `models/*.imdp` — shared models in the neutral explicit format (`src/imdp_io.h`):
   `states N` / `init s` / `label NAME s...` / `tran s a to:lo:hi ...`.
+- `models/*.prism` — models in the PRISM-language subset (`src/prism.h`); the CLI
+  detects `.prism` by extension and parses them into the same `io::Problem`, so a
+  PRISM model and the equivalent `.imdp` model solve identically (see
+  `choice.prism` vs `choice_interval.imdp`).
 - `models/*.ref.json` — reference values + provenance for each model.
 - `compare.py` — runs `tools/imdp_solve` on every model and checks IMPaCT's sound
   interval `[lower, upper]` brackets the reference **and** the midpoint matches it
@@ -41,8 +45,9 @@ c++ -std=c++17 -O2 tools/imdp_solve.cpp \
 python3 benchmarks/crosstool/compare.py -v   # exit 0 iff all checks pass
 ```
 
-Current status: **10/10 checks pass** across 4 models (point chain reach, point
-safety, interval fork, interval controller-choice).
+Current status: **12/12 checks pass** across 5 models (point chain reach, point
+safety, interval fork, interval controller-choice, and the same choice model
+written in PRISM-language input — confirming front-end equivalence).
 
 ## Adding live peers later
 

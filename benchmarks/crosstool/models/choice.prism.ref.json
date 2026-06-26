@@ -1,0 +1,8 @@
+{
+  "model": "choice.prism",
+  "description": "PRISM-language input (subset): controller choice, interval nature. Identical model to choice_interval.imdp.",
+  "provenance": "Same exact reference as choice_interval.imdp (pess 0.4 / opt 0.5). Confirms the PRISM front-end and the explicit .imdp front-end produce identical robust values through one solver path.",
+  "checks": [
+    {"prop": "reach", "label": "target", "state": 0, "pess": 0.4, "opt": 0.5, "tol": 1e-4}
+  ]
+}

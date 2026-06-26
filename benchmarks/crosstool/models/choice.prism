@@ -1,0 +1,12 @@
+// PRISM-style input: same controller-choice IMDP as choice_interval.imdp.
+// Demonstrates the PRISM front-end feeding the shared cross-tool harness.
+mdp
+const int N = 2;
+module choice
+  x : [0..N] init 0;
+  [] x=0 -> [0.5,0.7]:(x'=1) + [0.3,0.5]:(x'=2);   // action A
+  [] x=0 -> 0.6:(x'=x+1) + 0.4:(x'=2);             // action B
+  [] x=1 -> 1:(x'=1);
+  [] x=2 -> 1:(x'=2);
+endmodule
+label "target" = x=2;

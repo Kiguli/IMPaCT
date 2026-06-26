@@ -245,6 +245,40 @@ Format per entry: `date — feature | decision + rationale | algorithm | refs | 
 - **Consolidated CAV paper draft** at `paper/draft.md` (algorithms + verified
   citations + verification methodology incl. the MC-found bugs + experimental results).
 
+### 2026-06-26
+- **Cross-tool benchmarking (reference-values mode)** — user request: run the
+  benchmarks we should be able to solve side-by-side against IntervalMDP.jl /
+  PRISM / Storm and check we get the *same outputs* (times may differ). Built on
+  a tool-neutral exchange format so no peer install is needed yet (user chose
+  "reference values only, defer installs").
+  - **`src/imdp_io.{h,cpp}`** — explicit `.imdp` format (`states` / `init` /
+    `label` / `tran s a to:lo:hi ...`) + parser/writer. Point MDPs use lo==hi.
+    Round-trip + parse-then-solve contracts (`test_imdp_io.cpp`).
+  - **`tools/imdp_solve.cpp`** — CLI runner (pure std C++, no SYCL): reads a
+    model + property, prints machine-parseable `result\tlower=..\tupper=..` lines.
+  - **`benchmarks/crosstool/`** — shared models + sibling `.ref.json` carrying
+    INDEPENDENTLY-COMPUTED reference values with provenance (point MDPs: exact
+    linear solve; interval MDPs: closed-form O-maximization / action×extremal-
+    nature enumeration — exactly the robust semantics IntervalMDP.jl computes).
+    `compare.py` checks IMPaCT's sound `[lower,upper]` brackets each reference AND
+    the midpoint matches within tol, both senses. **12/12 checks pass.** Design:
+    references are data, so a peer's measured numbers later slot into the same
+    `.ref.json` with zero harness change; discrepancies become `issues/` entries.
+- **PRISM input-style support** (user extension). **`src/prism.{h,cpp}`** parses a
+  documented PRISM-language *subset* (single bounded int var: `mdp`/`const int`/
+  `module..endmodule`, `x:[lo..hi] init i`, guarded commands `[a] x=K -> p:(x'=E)
+  + ...` with point OR interval `[lo,hi]` probabilities and updates in {int, x,
+  x±int}, `label "n" = x=K | ...`) into the *same* `io::Problem`, so PRISM models
+  feed the identical solver/CLI/harness. `test_prism.cpp` (immutable contracts):
+  point chain → exact 0.25, interval fork → [0.4,0.6], const + controller-choice
+  + `x'=x+1` + disjunctive label, and **a PRISM model and the equivalent `.imdp`
+  model solve identically**. The CLI detects `.prism`/`.pm`/`.nm` by extension;
+  `choice.prism` added to the crosstool suite confirms front-end equivalence
+  end-to-end. Design decision: subset, single-variable, no synchronization/
+  formulas/rewards yet (documented future work) — keeps state index = var value,
+  TDD-clean. Refs: PRISM (Kwiatkowska-Norman-Parker, CAV 2011).
+  Suite after both: **64 cases / 606,532 assertions green.**
+
 <!-- add new dated entries above this line -->
 
 ---
