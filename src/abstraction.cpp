@@ -44,6 +44,32 @@ Bound transitionInterval1DUniform(double muLo, double muHi, double W, double a, 
     return {lo, hi};
 }
 
+double triangularCdf(double z, double W) {
+    if (z <= -W) return 0.0;
+    if (z >=  W) return 1.0;
+    if (z < 0.0) return 0.5 * (W + z) * (W + z) / (W * W);
+    return 1.0 - 0.5 * (W - z) * (W - z) / (W * W);
+}
+
+double laplaceCdf(double z, double b) {
+    if (z < 0.0) return 0.5 * std::exp(z / b);
+    return 1.0 - 0.5 * std::exp(-z / b);
+}
+
+Bound transitionInterval1DGeneric(const std::function<double(double)>& F,
+                                  double muLo, double muHi, double a, double b) {
+    if (muHi < muLo) std::swap(muLo, muHi);
+    auto mass = [&](double mu) { double m = F(b - mu) - F(a - mu); return m < 0.0 ? 0.0 : m; };
+    const double center = 0.5 * (a + b);
+    const double muMax = std::min(std::max(center, muLo), muHi);     // box centred on mean -> max
+    double hi = mass(muMax);
+    double lo = std::min(mass(muLo), mass(muHi));                    // unimodal -> min at an endpoint
+    lo = std::max(0.0, std::min(1.0, lo));
+    hi = std::max(0.0, std::min(1.0, hi));
+    if (lo > hi) lo = hi;
+    return {lo, hi};
+}
+
 Bound transitionIntervalBox(const std::vector<double>& muLo,
                             const std::vector<double>& muHi,
                             const std::vector<double>& sigma,

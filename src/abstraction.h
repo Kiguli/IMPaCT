@@ -53,6 +53,24 @@ namespace abstraction {
     // Lahijanian et al. (IEEE TAC 2015); mixed-monotone bounds, Dutreix-Coogan.
     Bound transitionInterval1DUniform(double muLo, double muHi, double W, double a, double b);
 
+    // --- Pluggable noise types (extensible to "as many as possible") -------------
+    // Symmetric, unimodal additive-noise CDFs F(z) = P(w <= z), for use with the
+    // generic kernel below. More can be added the same way (logistic, raised-cosine…).
+    double triangularCdf(double z, double W);   // triangular density on [-W, W]
+    double laplaceCdf(double z, double b);       // Laplace(0, b) (heavy-tailed)
+
+    // Generic 1-D transition mass interval for ANY symmetric, unimodal additive
+    // disturbance with CDF F: next = mu + w, so mass in [a,b] = F(b-mu) - F(a-mu),
+    // minimized/maximized over the source-cell mean range mu in [muLo, muHi]. For a
+    // symmetric unimodal density this mass is unimodal in mu with its peak when the
+    // box is centred on the mean, so max is at clamp((a+b)/2, muLo, muHi) and min at
+    // an endpoint — the same structure as the Gaussian/uniform kernels (which remain
+    // as fast specializations). Requires muLo<=muHi, a<=b. Sound for symmetric
+    // unimodal noise. (For bounded-support noise this yields the forced/sink-free
+    // transitions that make robust ω-regular non-trivial — ISSUE-0011.)
+    Bound transitionInterval1DGeneric(const std::function<double(double)>& noiseCdf,
+                                      double muLo, double muHi, double a, double b);
+
     // Axis-decoupled n-D box bound = product of per-dimension 1-D bounds.
     Bound transitionIntervalBox(const std::vector<double>& muLo,
                                 const std::vector<double>& muHi,

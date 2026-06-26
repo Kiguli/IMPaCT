@@ -71,6 +71,55 @@ TEST_CASE("abstraction kernel: uniform-bounded mass is forced (lo>0) when box fu
     CHECK(none.hi == doctest::Approx(0.0));
 }
 
+TEST_CASE("abstraction kernel: noise CDFs are valid (monotone, normalized)") {
+    // triangular on [-W,W]
+    CHECK(triangularCdf(-1.0, 1.0) == doctest::Approx(0.0));
+    CHECK(triangularCdf( 0.0, 1.0) == doctest::Approx(0.5));
+    CHECK(triangularCdf( 1.0, 1.0) == doctest::Approx(1.0));
+    CHECK(triangularCdf(-2.0, 1.0) == doctest::Approx(0.0));   // clamped
+    CHECK(triangularCdf( 2.0, 1.0) == doctest::Approx(1.0));
+    // Laplace symmetric about 0
+    CHECK(laplaceCdf(0.0, 0.5) == doctest::Approx(0.5));
+    CHECK(laplaceCdf(-1.0, 0.5) == doctest::Approx(1.0 - laplaceCdf(1.0, 0.5)));
+    // monotonicity (sample)
+    double prev = -1;
+    for (double z = -3; z <= 3; z += 0.25) { double c = laplaceCdf(z, 0.7); CHECK(c >= prev - 1e-12); prev = c; }
+}
+
+TEST_CASE("abstraction kernel: generic-with-Gaussian-CDF matches the Gaussian specialization") {
+    std::mt19937 rng(31);
+    std::uniform_real_distribution<double> U(-3, 3), Wd(0.2, 2.0), S(0.2, 1.2), Md(-3, 3);
+    for (int t = 0; t < 800; ++t) {
+        double a = U(rng), b = a + Wd(rng), sigma = S(rng), m1 = Md(rng), m2 = m1 + Wd(rng);
+        Bound spec = transitionInterval1D(m1, m2, sigma, a, b);
+        Bound gen  = transitionInterval1DGeneric([&](double z){ return normalCdf(z / sigma); }, m1, m2, a, b);
+        CHECK(gen.lo == doctest::Approx(spec.lo).epsilon(1e-9));
+        CHECK(gen.hi == doctest::Approx(spec.hi).epsilon(1e-9));
+    }
+}
+
+TEST_CASE("abstraction kernel: generic triangular & Laplace match brute-force over mean range") {
+    std::mt19937 rng(37);
+    std::uniform_real_distribution<double> U(-3, 3), Wbox(0.2, 2.0), Wd(0.3, 2.0), Bd(0.2, 1.5), Md(-3, 3);
+    for (int t = 0; t < 1200; ++t) {
+        double a = U(rng), b = a + Wbox(rng), m1 = Md(rng), m2 = m1 + Wbox(rng);
+        double W = Wd(rng), bb = Bd(rng);
+        for (int which = 0; which < 2; ++which) {
+            std::function<double(double)> F = (which == 0)
+                ? std::function<double(double)>([&](double z){ return triangularCdf(z, W); })
+                : std::function<double(double)>([&](double z){ return laplaceCdf(z, bb); });
+            Bound bd = transitionInterval1DGeneric(F, m1, m2, a, b);
+            auto mass = [&](double mu){ double m = F(b-mu)-F(a-mu); return m < 0 ? 0.0 : m; };
+            double bmin = 2, bmax = -1; const int K = 3000;
+            for (int s = 0; s <= K; ++s) { double mu = m1 + (m2-m1)*s/K; double mm = mass(mu); bmin = std::min(bmin, mm); bmax = std::max(bmax, mm); }
+            CHECK(bd.lo == doctest::Approx(bmin).epsilon(3e-3));
+            CHECK(bd.hi >= bmax - 3e-3);
+            CHECK(bd.hi <= bmax + 3e-3);
+            CHECK(bd.lo <= bd.hi + 1e-12);
+        }
+    }
+}
+
 TEST_CASE("abstraction kernel: box bound == product of 1-D bounds") {
     std::vector<double> muLo{-1, 0.5}, muHi{0.2, 1.0}, sig{0.4, 0.6}, aLo{-0.5, 0.0}, aHi{0.5, 1.5};
     Bound box = transitionIntervalBox(muLo, muHi, sig, aLo, aHi);

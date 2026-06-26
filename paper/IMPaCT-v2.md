@@ -373,6 +373,18 @@ Format per entry: `date — feature | decision + rationale | algorithm | refs | 
   (Sorted-path `//TODO` error stubs). Edits are mechanical signature-preserving
   redirects, NOT compile-verified here (no SYCL/GLPK toolchain in this environment).
 
+- **More noise types (user request a).** Added a pluggable noise interface:
+  `abstraction::transitionInterval1DGeneric(noiseCdf, ...)` computes the 1-D
+  transition mass interval for ANY symmetric, unimodal additive disturbance from its
+  CDF (mass = F(b-mu) - F(a-mu), unimodal in mu ⇒ max at the box centre, min at an
+  endpoint — the same structure as the Gaussian/uniform specializations, which stay
+  as fast paths). Added `triangularCdf` (bounded support, so it also yields the
+  sink-free transitions needed for non-trivial robust ω-regular) and `laplaceCdf`
+  (heavy-tailed). TDD: generic-with-Gaussian-CDF matches the Gaussian specialization
+  to 1e-9, and triangular/Laplace match brute-force mu-scans (≈29k assertions); CDF
+  validity (monotone/normalized/symmetric) checked. New noise models now drop in by
+  supplying a CDF. Suite: **83 cases / 638,804 assertions green.**
+
 <!-- add new dated entries above this line -->
 
 ---
