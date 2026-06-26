@@ -312,6 +312,17 @@ Format per entry: `date — feature | decision + rationale | algorithm | refs | 
   Tests: deterministic 3-cycle patrol of two regions → 1; a robust-vs-optimistic
   contrast where nature can deny one region via a lo=0 edge (pessimistic 0,
   optimistic 1). Suite: **73 cases / 618,555 assertions green.**
+- **Persistence / co-Büchi — F G p (reach-then-stay)** (`omega::maxPersistence
+  {Optimistic,Pessimistic}`): the reach-then-stay objective (an ARCH benchmark
+  family). Value = reach the largest sub-region of p the controller can remain in
+  forever — robustClosure (may-support ⊆ region, robust) or optimisticClosure
+  (nature can contain all mass, cooperative) — then it stays in p forever. Reuses
+  the validated robust-closure + reachability machinery. Tests: reach-then-stay → 1;
+  a robust-vs-optimistic contrast where nature leaks out of p via a lo=0 edge
+  (pessimistic 0.5, optimistic 1); F G false → 0 / F G true → 1.
+  With this, IMPaCT now covers the three core ω-regular acceptance types robustly:
+  Büchi (recurrence GF), generalized Büchi (patrol ⋀GF), co-Büchi (persistence FG).
+  Suite: **76 cases / 618,562 assertions green.**
 
 <!-- add new dated entries above this line -->
 

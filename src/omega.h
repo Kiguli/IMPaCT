@@ -69,6 +69,18 @@ namespace omega {
     solve::IntervalResult maxGenBuchiPessimistic(const solve::IMDPModel& m,
                                   const std::vector<std::set<int>>& accSets, double eps);
 
+    // Persistence / co-Büchi: "F G p" — eventually always inside `pStates` (the
+    // reach-then-stay objective). The value is robust/optimistic reachability of the
+    // largest sub-region of `pStates` the controller can remain in forever: the
+    // greatest W ⊆ pStates where every state has an action that keeps the play in W
+    // for all nature (pessimistic, may-support ⊆ W) or for some nature (optimistic,
+    // nature can contain all mass in W). Once W is reached the controller stays in p
+    // forever, so F G p = reach W. The robust analogue of robust safety/invariance.
+    solve::IntervalResult maxPersistenceOptimistic(const solve::IMDPModel& m,
+                                  const std::set<int>& pStates, double eps);
+    solve::IntervalResult maxPersistencePessimistic(const solve::IMDPModel& m,
+                                  const std::set<int>& pStates, double eps);
+
 } // namespace omega
 } // namespace impact
 

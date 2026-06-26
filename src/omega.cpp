@@ -124,6 +124,25 @@ std::set<int> natureAttractor(const solve::IMDPModel& m,
     return A;
 }
 
+// optimisticClosure(X): greatest subset of X in which every state has an action
+// whose interval distribution can be resolved with ALL mass inside the subset
+// (natureCanContain) — i.e. cooperative nature can keep the play inside forever.
+// (The optimistic analogue of robustClosure, which instead needs may-support ⊆ X.)
+std::set<int> optimisticClosure(const solve::IMDPModel& m, std::set<int> X) {
+    bool changed = true;
+    while (changed) {
+        changed = false;
+        for (auto it = X.begin(); it != X.end(); ) {
+            bool hasStaying = false;
+            for (const solve::ActionDist& act : m[*it])
+                if (natureCanContain(act, X)) { hasStaying = true; break; }
+            if (!hasStaying) { it = X.erase(it); changed = true; }
+            else ++it;
+        }
+    }
+    return X;
+}
+
 } // namespace
 
 std::vector<int> robustBuchiWinningStates(const solve::IMDPModel& m,
@@ -227,6 +246,29 @@ solve::IntervalResult maxGenBuchiOptimistic(const solve::IMDPModel& m,
 solve::IntervalResult maxGenBuchiPessimistic(const solve::IMDPModel& m,
                               const std::vector<std::set<int>>& accSets, double eps) {
     return maxGenBuchi(m, accSets, eps, /*optimistic=*/false);
+}
+
+namespace {
+solve::IntervalResult zeros(std::size_t n) {
+    solve::IntervalResult r; r.lower.assign(n, 0.0); r.upper.assign(n, 0.0); r.iterations = 0;
+    return r;
+}
+} // namespace
+
+solve::IntervalResult maxPersistencePessimistic(const solve::IMDPModel& m,
+                              const std::set<int>& pStates, double eps) {
+    // Largest sub-region of p the controller can stay in forever for ALL nature,
+    // then reach it robustly. (F G p = reach-then-stay.)
+    std::set<int> W = robustClosure(m, pStates);
+    if (W.empty()) return zeros(m.size());          // F G p unsatisfiable -> 0
+    return solve::maxReachPessimistic(m, W, eps);
+}
+
+solve::IntervalResult maxPersistenceOptimistic(const solve::IMDPModel& m,
+                              const std::set<int>& pStates, double eps) {
+    std::set<int> W = optimisticClosure(m, pStates);
+    if (W.empty()) return zeros(m.size());
+    return solve::maxReachOptimistic(m, W, eps);
 }
 
 } // namespace omega

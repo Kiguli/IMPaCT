@@ -15,6 +15,8 @@ using impact::omega::maxBuchiOptimistic;
 using impact::omega::maxBuchiPessimistic;
 using impact::omega::maxGenBuchiOptimistic;
 using impact::omega::maxGenBuchiPessimistic;
+using impact::omega::maxPersistenceOptimistic;
+using impact::omega::maxPersistencePessimistic;
 using impact::omega::acceptingMECStates;
 using impact::omega::robustBuchiWinningStates;
 
@@ -200,6 +202,43 @@ TEST_CASE("genbuchi: empty conjunction is vacuously true -> 1") {
     IMDPModel m = { /*0*/ {{ {0,1,1} }} };
     auto g = maxGenBuchiPessimistic(m, {}, EPS);
     CHECK(0.5*(g.lower[0]+g.upper[0]) == doctest::Approx(1.0).epsilon(1e-6));
+}
+
+// ---- Persistence / co-Büchi : F G p (reach-then-stay) -----------------------
+
+TEST_CASE("persistence: reach-then-stay achievable -> 1") {
+    // 0(¬p) -> 1(p) -> 2(p, safe sink). p = {1,2}. From 0 reach p-invariant region.
+    IMDPModel m = {
+        /*0*/ {{ {1,1,1} }},
+        /*1*/ {{ {2,1,1} }},
+        /*2*/ {{ {2,1,1} }},
+    };
+    auto r = maxPersistencePessimistic(m, {1, 2}, EPS);
+    for (int s = 0; s < 3; ++s)
+        CHECK(0.5*(r.lower[s]+r.upper[s]) == doctest::Approx(1.0).epsilon(1e-6));
+}
+
+TEST_CASE("persistence: nature can leak out of p each step -> robust 0.5, optimistic 1") {
+    // p = {0,1} (indices). 1 is a safe p-sink. At 0 nature sends >=0.5 to 1 (stay) and
+    // <=0.5 to 2 (¬p sink). Robust: 0 cannot stay in p (2 has hi>0) -> invariant region
+    // {1}; reach {1} from 0 = 0.5. Optimistic: nature keeps mass in p -> stay from 0 -> 1.
+    IMDPModel m = {
+        /*0 (p)     */ {{ {1,0.5,1.0}, {2,0.0,0.5} }},
+        /*1 (p sink)*/ {{ {1,1,1} }},
+        /*2 (¬p sink)*/ {{ {2,1,1} }},
+    };
+    auto rp = maxPersistencePessimistic(m, {0, 1}, EPS);
+    auto ro = maxPersistenceOptimistic (m, {0, 1}, EPS);
+    CHECK(0.5*(rp.lower[0]+rp.upper[0]) == doctest::Approx(0.5).epsilon(1e-3));
+    CHECK(0.5*(ro.lower[0]+ro.upper[0]) == doctest::Approx(1.0).epsilon(1e-6));
+}
+
+TEST_CASE("persistence: F G false = 0 ; F G true = 1") {
+    IMDPModel m = { /*0*/ {{ {1,0.5,0.5}, {0,0.5,0.5} }}, /*1*/ {{ {1,1,1} }} };
+    auto rf = maxPersistencePessimistic(m, {}, EPS);          // F G false
+    CHECK(0.5*(rf.lower[0]+rf.upper[0]) == doctest::Approx(0.0).epsilon(1e-6));
+    auto rt = maxPersistencePessimistic(m, {0, 1}, EPS);      // F G true
+    CHECK(0.5*(rt.lower[0]+rt.upper[0]) == doctest::Approx(1.0).epsilon(1e-6));
 }
 
 // ---- Independent brute-force oracle for the robust a.s.-Büchi region --------
