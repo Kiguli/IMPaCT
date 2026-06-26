@@ -42,4 +42,7 @@
 // Sparse interval-MDP abstraction of continuous systems (scalability / ISSUE-0006).
 #include "../../src/abstraction.h"
 
+// Phase 3 — omega-regular (Büchi) synthesis via accepting-MEC reachability.
+#include "../../src/omega.h"
+
 #endif // IMPACT_TEST_CONTRACTS_H

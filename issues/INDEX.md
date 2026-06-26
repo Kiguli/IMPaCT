@@ -13,4 +13,5 @@ See [`README.md`](README.md) for conventions and the literature-counterexample p
 | [0004](0004-ltlf-dfa-and-product.md) | Phase 2 — LTLf→DFA (done) + IMDP×DFA product + co-safe reachability | open | medium | enhancement, phase-2 |
 | [0005](0005-ltlf-dfa-state-explosion.md) | LTLf→DFA state explosion from syntactic normalization | resolved | high | correctness, bug |
 
-_Last updated: 2026-06-25_
+
+| [0009](0009-robust-accepting-ec.md) | Robust accepting end components use optimistic support-MEC structure | open | medium | robust-ec, omega-regular |

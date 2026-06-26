@@ -23,7 +23,8 @@ IMPL_SRCS := ../src/omaximization.cpp \
              ../src/solve.cpp \
              ../src/ltl.cpp \
              ../src/product.cpp \
-             ../src/abstraction.cpp
+             ../src/abstraction.cpp \
+             ../src/omega.cpp
 
 TEST_SRCS := unit/test_main.cpp \
              unit/test_omaximization.cpp \
@@ -31,7 +32,8 @@ TEST_SRCS := unit/test_main.cpp \
              unit/test_interval_iteration.cpp \
              unit/test_ltl_dfa.cpp \
              unit/test_product.cpp \
-             unit/test_abstraction.cpp
+             unit/test_abstraction.cpp \
+             unit/test_omega.cpp
 
 BIN := run_tests
 
