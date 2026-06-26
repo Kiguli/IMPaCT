@@ -174,5 +174,60 @@ solve::IntervalResult maxBuchiPessimistic(const solve::IMDPModel& m,
     return solve::maxReachPessimistic(m, tgt, eps);
 }
 
+// Round-robin degeneralization of generalized Büchi into a single Büchi objective.
+// Product state = s*k + c (c = which set we are currently waiting to see). The
+// counter advances c -> (c+1) mod k when the current IMDP state is in F_c, and the
+// product state (s, k-1) with s in F_{k-1} is the single Büchi-accepting class
+// (one full round of all sets completed). With k=1 this is exactly the input model
+// and accepting set, so maxGenBuchi* reduces to maxBuchi*.
+namespace {
+solve::IntervalResult maxGenBuchi(const solve::IMDPModel& m,
+                                  const std::vector<std::set<int>>& F,
+                                  double eps, bool optimistic) {
+    const int n = (int)m.size();
+    solve::IntervalResult out;
+    out.lower.assign(n, 0.0);
+    out.upper.assign(n, 0.0);
+    out.iterations = 0;
+    if (F.empty()) {                      // vacuously true: every infinite path accepts
+        out.lower.assign(n, 1.0);
+        out.upper.assign(n, 1.0);
+        return out;
+    }
+    const int k = (int)F.size();
+    auto idx = [&](int s, int c) { return s * k + c; };
+    solve::IMDPModel pm((std::size_t)n * k);
+    std::set<int> acc;
+    for (int s = 0; s < n; ++s) {
+        for (int c = 0; c < k; ++c) {
+            const bool inFc = F[c].count(s) > 0;
+            const int cadv = inFc ? (c + 1) % k : c;
+            for (const solve::ActionDist& act : m[s]) {
+                solve::ActionDist pa;
+                pa.reserve(act.size());
+                for (const solve::Interval& iv : act)
+                    pa.push_back({idx(iv.to, cadv), iv.lo, iv.hi});
+                pm[idx(s, c)].push_back(std::move(pa));
+            }
+            if (inFc && c == k - 1) acc.insert(idx(s, c));   // completed a full round
+        }
+    }
+    solve::IntervalResult r = optimistic ? maxBuchiOptimistic(pm, acc, eps)
+                                         : maxBuchiPessimistic(pm, acc, eps);
+    out.iterations = r.iterations;
+    for (int s = 0; s < n; ++s) { out.lower[s] = r.lower[idx(s, 0)]; out.upper[s] = r.upper[idx(s, 0)]; }
+    return out;
+}
+} // namespace
+
+solve::IntervalResult maxGenBuchiOptimistic(const solve::IMDPModel& m,
+                              const std::vector<std::set<int>>& accSets, double eps) {
+    return maxGenBuchi(m, accSets, eps, /*optimistic=*/true);
+}
+solve::IntervalResult maxGenBuchiPessimistic(const solve::IMDPModel& m,
+                              const std::vector<std::set<int>>& accSets, double eps) {
+    return maxGenBuchi(m, accSets, eps, /*optimistic=*/false);
+}
+
 } // namespace omega
 } // namespace impact

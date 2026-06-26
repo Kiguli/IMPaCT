@@ -13,6 +13,8 @@
 using namespace impact::solve;
 using impact::omega::maxBuchiOptimistic;
 using impact::omega::maxBuchiPessimistic;
+using impact::omega::maxGenBuchiOptimistic;
+using impact::omega::maxGenBuchiPessimistic;
 using impact::omega::acceptingMECStates;
 using impact::omega::robustBuchiWinningStates;
 
@@ -151,6 +153,53 @@ TEST_CASE("buchi: pessimistic == optimistic on point MDPs (no nature choice)") {
     auto bp = maxBuchiPessimistic(m, {1}, EPS);
     for (int s = 0; s < 3; ++s)
         CHECK(0.5*(bo.lower[s]+bo.upper[s]) == doctest::Approx(0.5*(bp.lower[s]+bp.upper[s])).epsilon(1e-4));
+}
+
+// ---- Generalized Büchi / patrol (visit several regions infinitely often) ----
+
+TEST_CASE("genbuchi: one set reduces to ordinary Büchi") {
+    IMDPModel m = {
+        /*0*/ {{ {1,0.5,0.5}, {2,0.5,0.5} }},
+        /*1*/ {{ {1,1,1} }},
+        /*2*/ {{ {2,1,1} }},
+    };
+    auto g = maxGenBuchiPessimistic(m, {{1}}, EPS);
+    auto b = maxBuchiPessimistic(m, {1}, EPS);
+    for (int s = 0; s < 3; ++s)
+        CHECK(0.5*(g.lower[s]+g.upper[s]) == doctest::Approx(0.5*(b.lower[s]+b.upper[s])).epsilon(1e-6));
+}
+
+TEST_CASE("genbuchi patrol: deterministic 3-cycle visits both regions i.o. -> 1") {
+    // 0->1->2->0 forced cycle. Patrol {0} and {2}: both visited every lap -> value 1.
+    IMDPModel m = {
+        /*0*/ {{ {1,1,1} }},
+        /*1*/ {{ {2,1,1} }},
+        /*2*/ {{ {0,1,1} }},
+    };
+    auto g = maxGenBuchiPessimistic(m, {{0}, {2}}, EPS);
+    for (int s = 0; s < 3; ++s)
+        CHECK(0.5*(g.lower[s]+g.upper[s]) == doctest::Approx(1.0).epsilon(1e-6));
+}
+
+TEST_CASE("genbuchi patrol: nature can deny one region -> robust 0 but optimistic 1") {
+    // 0->1 (forced); at 1 nature may divert to 2 (lo=0) or back to 0 (lo>0). 2->0.
+    // Patrol {0} and {2}: robustly nature sets P(1->2)=0 forever -> never visits 2 -> 0.
+    // Optimistically nature routes through 2 -> both i.o. -> 1.
+    IMDPModel m = {
+        /*0*/ {{ {1,1,1} }},
+        /*1*/ {{ {0,0.5,1.0}, {2,0.0,0.5} }},
+        /*2*/ {{ {0,1,1} }},
+    };
+    auto gp = maxGenBuchiPessimistic(m, {{0}, {2}}, EPS);
+    auto go = maxGenBuchiOptimistic (m, {{0}, {2}}, EPS);
+    CHECK(0.5*(gp.lower[0]+gp.upper[0]) == doctest::Approx(0.0).epsilon(1e-6));
+    CHECK(0.5*(go.lower[0]+go.upper[0]) == doctest::Approx(1.0).epsilon(1e-6));
+}
+
+TEST_CASE("genbuchi: empty conjunction is vacuously true -> 1") {
+    IMDPModel m = { /*0*/ {{ {0,1,1} }} };
+    auto g = maxGenBuchiPessimistic(m, {}, EPS);
+    CHECK(0.5*(g.lower[0]+g.upper[0]) == doctest::Approx(1.0).epsilon(1e-6));
 }
 
 // ---- Independent brute-force oracle for the robust a.s.-Büchi region --------

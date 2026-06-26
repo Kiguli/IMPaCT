@@ -304,6 +304,14 @@ Format per entry: `date — feature | decision + rationale | algorithm | refs | 
     cooperates); pessimistic path uses the robust region. Refs: Chatterjee-Henzinger
     (graph games); Dutreix-Coogan permanent components; Asadi et al. (qualitative).
   Suite: **69 cases / 618,546 assertions green.**
+- **Generalized Büchi / patrol** (`omega::maxGenBuchi{Optimistic,Pessimistic}`):
+  "visit each of several regions infinitely often" (conjunction of GF), the headline
+  ω-regular spec no stochastic-category tool solves. Standard round-robin
+  degeneralization (counter product, state = s*k+c) into the validated robust Büchi
+  solver; reduces exactly to maxBuchi* for one set, vacuously true for none.
+  Tests: deterministic 3-cycle patrol of two regions → 1; a robust-vs-optimistic
+  contrast where nature can deny one region via a lo=0 edge (pessimistic 0,
+  optimistic 1). Suite: **73 cases / 618,555 assertions green.**
 
 <!-- add new dated entries above this line -->
 

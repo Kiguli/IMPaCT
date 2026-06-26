@@ -58,6 +58,17 @@ namespace omega {
     solve::IntervalResult maxBuchiPessimistic(const solve::IMDPModel& m,
                                               const std::set<int>& accepting, double eps);
 
+    // Generalized Büchi ("patrol"): visit EACH set in `accSets` infinitely often
+    // (the conjunction of GF over the sets). Degeneralized to a single Büchi
+    // objective via a round-robin counter product (state = s*k + c), then solved
+    // with the Büchi solver above. The returned IntervalResult is indexed by the
+    // ORIGINAL IMDP states (value taken at counter 0). With one set this equals
+    // maxBuchi*; with zero sets the objective is vacuously true (value 1).
+    solve::IntervalResult maxGenBuchiOptimistic(const solve::IMDPModel& m,
+                                  const std::vector<std::set<int>>& accSets, double eps);
+    solve::IntervalResult maxGenBuchiPessimistic(const solve::IMDPModel& m,
+                                  const std::vector<std::set<int>>& accSets, double eps);
+
 } // namespace omega
 } // namespace impact
 
