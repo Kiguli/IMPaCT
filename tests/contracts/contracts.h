@@ -54,4 +54,7 @@
 // PCTL / CTL model checking on Interval MDPs (logics beyond LTL).
 #include "../../src/pctl.h"
 
+// Bounded STL on Interval-MDP abstractions (logics beyond LTL).
+#include "../../src/stl.h"
+
 #endif // IMPACT_TEST_CONTRACTS_H

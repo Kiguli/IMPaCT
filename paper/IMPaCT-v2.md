@@ -432,6 +432,22 @@ Format per entry: `date — feature | decision + rationale | algorithm | refs | 
   Hansson-Jonsson (FAC 1994); Baier-Katoen Ch.10; Puggelli et al. (CAV 2013, interval
   PCTL) — all verified in References.bib. Suite: **91 cases / 640,900 assertions green.**
 
+- **Stretch: bounded STL on IMDP abstractions** (`src/stl.{h,cpp}`). Probabilistic
+  (robust) satisfaction of bounded Signal Temporal Logic over the discretized signal.
+  STL's defining pieces: (i) `predicateCells` maps a real atomic predicate μ(x)≥0 to
+  the grid cells whose centre satisfies it (the signal→abstraction bridge); (ii)
+  time-bounded operators `F_[a,b]`, `G_[a,b]`, `φ U_[0,b] ψ` by EXACT finite-horizon
+  DP — F/U reuse the verified `pctl::boundedUntil`, `G_[0,b]` is a finite-horizon
+  bounded-safety DP, and the windowed `[a,b]` forms compose `a` steps of free robust
+  evolution with the `[0,b-a]` operator. Pessimistic (robust) + optimistic.
+  TDD (`test_stl.cpp`): 1-D/2-D predicate→cell mapping, F_[0,b]=bounded reach,
+  G_[0,b] hand cases + robust-vs-optimistic invariance, windowed F_[a,b], and a
+  500-model differential of G_[0,b] vs explicit finite-horizon DP. Algorithm→paper
+  links (all verified in References.bib): STL syntax/semantics = Maler-Nickovic
+  (FORMATS 2004); probabilistic STL for control = Sadigh-Kapoor (RSS 2016);
+  finite-horizon bounded operators = Baier-Katoen Ch.10. Spatial-robustness STL
+  (single-trace) noted as future work. Suite: **98 cases / 642,650 assertions green.**
+
 <!-- add new dated entries above this line -->
 
 ---
