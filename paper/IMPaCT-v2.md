@@ -385,6 +385,21 @@ Format per entry: `date — feature | decision + rationale | algorithm | refs | 
   validity (monotone/normalized/symmetric) checked. New noise models now drop in by
   supplying a CDF. Suite: **83 cases / 638,804 assertions green.**
 
+- **Phase 4 — web app: small-model IMDP + satisfaction-probability visualization
+  (user request).** `tools/imdp_solve` gained a `--json` mode emitting the full model
+  structure (states/init/labels/edges) + per-state `[lower,upper]` values for the
+  chosen property/sense. `webapp/` is a dependency-free app: a stdlib-Python backend
+  (`server.py`) that serves the front-end and shells to the verified CLI on
+  `POST /api/solve`, and a self-contained SVG front-end (`static/`) that draws the
+  IMDP (circular layout, no CDN) with each state **heat-mapped by its robust/
+  optimistic satisfaction probability** (initial state highlighted, labelled states
+  starred, edges showing `[lo,hi]` on hover). Works for every property (reach/safety/
+  buchi/persist/patrol) in `.imdp` or PRISM input, with a configurable state cap so
+  the view stays legible for the small models it targets. The C++ core is untouched
+  (thin shell over the CLI, so the picture always reflects the exact synthesis).
+  Tested end-to-end (HTTP 200 + correct values/errors); the richer Vue/Flask/Docker
+  build from the plan layers on the same `/api/solve` contract later.
+
 <!-- add new dated entries above this line -->
 
 ---

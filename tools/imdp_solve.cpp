@@ -63,6 +63,7 @@ int main(int argc, char** argv) {
     solve::Method method = solve::Method::OptimisticVI;
     bool methodSet = false;
     int stateArg = -1;  // -1 => use model init
+    bool jsonOut = false;  // emit full model structure + per-state values (for the web app)
 
     for (int i = 4; i < argc; ++i) {
         std::string a = argv[i];
@@ -73,6 +74,7 @@ int main(int argc, char** argv) {
         if      (a == "--bound")  bound = need("--bound");
         else if (a == "--eps")    eps = std::stod(need("--eps"));
         else if (a == "--state")  stateArg = std::stoi(need("--state"));
+        else if (a == "--json")   jsonOut = true;
         else if (a == "--method") {
             std::string m = need("--method");
             method = (m == "mec") ? solve::Method::MECCollapse : solve::Method::OptimisticVI;
@@ -105,34 +107,34 @@ int main(int argc, char** argv) {
     const int s = (stateArg >= 0) ? stateArg : p.init;
     if (s < 0 || s >= p.nStates) { std::cerr << "state out of range\n"; return 1; }
 
-    auto solveOne = [&](const std::string& which) -> int {
+    // Compute the property value vector for one sense ("pess"/"opt"). Throws on a
+    // bad property name; lets both the text and JSON outputs share one dispatch.
+    auto compute = [&](const std::string& which) -> solve::IntervalResult {
         const bool pess = (which == "pess");
+        if (prop == "reach")
+            return pess ? (methodSet ? solve::maxReachPessimistic(p.model, states, eps, method)
+                                     : solve::maxReachPessimistic(p.model, states, eps))
+                        : (methodSet ? solve::maxReachOptimistic(p.model, states, eps, method)
+                                     : solve::maxReachOptimistic(p.model, states, eps));
+        if (prop == "safety")
+            return pess ? solve::maxSafetyPessimistic(p.model, states, eps)
+                        : solve::maxSafetyOptimistic(p.model, states, eps);
+        if (prop == "buchi")
+            return pess ? omega::maxBuchiPessimistic(p.model, states, eps)
+                        : omega::maxBuchiOptimistic(p.model, states, eps);
+        if (prop == "persist")
+            return pess ? omega::maxPersistencePessimistic(p.model, states, eps)
+                        : omega::maxPersistenceOptimistic(p.model, states, eps);
+        if (prop == "patrol")
+            return pess ? omega::maxGenBuchiPessimistic(p.model, accSets, eps)
+                        : omega::maxGenBuchiOptimistic(p.model, accSets, eps);
+        throw std::runtime_error("unknown property '" + prop + "'");
+    };
+
+    auto solveOne = [&](const std::string& which) -> int {
         solve::IntervalResult r;
-        try {
-            if (prop == "reach") {
-                r = pess
-                  ? (methodSet ? solve::maxReachPessimistic(p.model, states, eps, method)
-                               : solve::maxReachPessimistic(p.model, states, eps))
-                  : (methodSet ? solve::maxReachOptimistic(p.model, states, eps, method)
-                               : solve::maxReachOptimistic(p.model, states, eps));
-            } else if (prop == "safety") {
-                r = pess ? solve::maxSafetyPessimistic(p.model, states, eps)
-                         : solve::maxSafetyOptimistic(p.model, states, eps);
-            } else if (prop == "buchi") {
-                r = pess ? omega::maxBuchiPessimistic(p.model, states, eps)
-                         : omega::maxBuchiOptimistic(p.model, states, eps);
-            } else if (prop == "persist") {
-                r = pess ? omega::maxPersistencePessimistic(p.model, states, eps)
-                         : omega::maxPersistenceOptimistic(p.model, states, eps);
-            } else if (prop == "patrol") {
-                r = pess ? omega::maxGenBuchiPessimistic(p.model, accSets, eps)
-                         : omega::maxGenBuchiOptimistic(p.model, accSets, eps);
-            } else {
-                std::cerr << "unknown property '" << prop << "'\n"; return 1;
-            }
-        } catch (const std::exception& e) {
-            std::cerr << "solve error: " << e.what() << "\n"; return 1;
-        }
+        try { r = compute(which); }
+        catch (const std::exception& e) { std::cerr << "solve error: " << e.what() << "\n"; return 1; }
         std::cout.precision(10);
         std::cout << "result\tprop=" << prop << "\tbound=" << which
                   << "\tstate=" << s
@@ -141,6 +143,56 @@ int main(int argc, char** argv) {
                   << "\titers=" << r.iterations << "\n";
         return 0;
     };
+
+    // JSON mode: emit the full model structure (states/init/labels/edges) + per-state
+    // [lower,upper] values for the requested bound(s). Consumed by the web app to
+    // draw the IMDP and overlay satisfaction probabilities (small/state-capped models).
+    if (jsonOut) {
+        std::vector<std::string> senses = (bound == "both")
+            ? std::vector<std::string>{"pess", "opt"} : std::vector<std::string>{bound};
+        std::map<std::string, solve::IntervalResult> res;
+        try { for (const auto& w : senses) res[w] = compute(w); }
+        catch (const std::exception& e) { std::cerr << "solve error: " << e.what() << "\n"; return 1; }
+
+        std::cout.precision(10);
+        std::cout << "{\n";
+        std::cout << "  \"nStates\": " << p.nStates << ",\n";
+        std::cout << "  \"init\": " << p.init << ",\n";
+        std::cout << "  \"prop\": \"" << prop << "\", \"label\": \"" << label << "\",\n";
+        // labels
+        std::cout << "  \"labels\": {";
+        bool firstL = true;
+        for (const auto& kv : p.labels) {
+            std::cout << (firstL ? "" : ", ") << "\"" << kv.first << "\": [";
+            bool f2 = true; for (int st : kv.second) { std::cout << (f2 ? "" : ",") << st; f2 = false; }
+            std::cout << "]"; firstL = false;
+        }
+        std::cout << "},\n";
+        // edges
+        std::cout << "  \"edges\": [";
+        bool firstE = true;
+        for (int from = 0; from < p.nStates; ++from)
+            for (size_t a = 0; a < p.model[from].size(); ++a)
+                for (const auto& iv : p.model[from][a]) {
+                    std::cout << (firstE ? "\n    " : ",\n    ")
+                              << "{\"from\":" << from << ",\"action\":" << a
+                              << ",\"to\":" << iv.to << ",\"lo\":" << iv.lo << ",\"hi\":" << iv.hi << "}";
+                    firstE = false;
+                }
+        std::cout << "\n  ],\n";
+        // values per sense
+        std::cout << "  \"values\": {";
+        bool firstS = true;
+        for (const auto& w : senses) {
+            const auto& r = res[w];
+            std::cout << (firstS ? "\n    " : ",\n    ") << "\"" << w << "\": [";
+            for (int st = 0; st < p.nStates; ++st)
+                std::cout << (st ? "," : "") << "{\"lower\":" << r.lower[st] << ",\"upper\":" << r.upper[st] << "}";
+            std::cout << "]"; firstS = false;
+        }
+        std::cout << "\n  }\n}\n";
+        return 0;
+    }
 
     if (bound == "both") {
         int rc1 = solveOne("pess");
