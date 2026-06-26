@@ -11,6 +11,10 @@
 #include "../doctest.h"
 #include "../contracts/contracts.h"
 
+#include <random>
+#include <string>
+#include <vector>
+
 using impact::ltl::Letter;
 using impact::ltl::FiniteTrace;
 using impact::ltl::compileFinite;
@@ -67,4 +71,76 @@ TEST_CASE("ltlf: Package-Delivery ordering — F(pickup & F deliver)") {
     CHECK(c.accepts({ {}, {"pickup"}, {}, {"deliver"} }));
     CHECK_FALSE(c.accepts({ {"deliver"}, {"pickup"} })); // delivered before pickup
     CHECK_FALSE(c.accepts({ {"pickup"} }));              // never delivered
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2 part 2: LTLf -> DFA. Validated DIFFERENTIALLY against the verified
+// finite-trace evaluator (acceptsFinite): for random formulas x random traces,
+// dfaAccepts must equal acceptsFinite. This is the correctness gate for the
+// tricky X/U/G/F derivatives (see ISSUE-0004).
+// ---------------------------------------------------------------------------
+using impact::ltl::DFA;
+using impact::ltl::toDFA;
+using impact::ltl::dfaAccepts;
+
+TEST_CASE("ltlf->dfa: matches evaluator on the contract formulas") {
+    std::vector<std::string> aps = {"a", "b", "pickup", "deliver"};
+    for (const std::string& f : { "F a", "a U b", "G a", "F(a & X b)", "F(pickup & F deliver)" }) {
+        auto* aut = compileFinite(f, aps);
+        DFA dfa = toDFA(aut);
+        FiniteTrace traces[] = {
+            {{"a"}}, {{}, {"a"}}, {{"a"}, {}}, {{"b"}}, {{"a"}, {"b"}},
+            {{"pickup"}, {"deliver"}}, {{"deliver"}, {"pickup"}}, {{"a","b"}, {"b"}},
+        };
+        for (const auto& t : traces) CHECK(dfaAccepts(dfa, t) == acceptsFinite(aut, t));
+        destroy(aut);
+    }
+}
+
+namespace {
+std::string rand_formula(std::mt19937& rng, int depth, const std::vector<std::string>& aps) {
+    if (depth <= 0 || (rng() % 4u) == 0u) return aps[rng() % aps.size()];
+    int c = (int)(rng() % 8u);
+    std::string x = rand_formula(rng, depth - 1, aps);
+    switch (c) {
+        case 0: return "(!" + x + ")";
+        case 1: return "(X " + x + ")";
+        case 2: return "(F " + x + ")";
+        case 3: return "(G " + x + ")";
+        default: {
+            std::string y = rand_formula(rng, depth - 1, aps);
+            const char* ops[] = {" & ", " | ", " U ", " -> "};
+            return "(" + x + ops[c - 4] + y + ")";
+        }
+    }
+}
+}
+
+TEST_CASE("ltlf->dfa: randomized differential vs evaluator (random formulas x traces)") {
+    std::mt19937 rng(20260625);
+    std::vector<std::string> aps = {"a", "b"};   // 2 APs -> 4-letter alphabet (keeps DFA build fast)
+    int checked = 0, built = 0;
+    for (int fi = 0; fi < 300; ++fi) {
+        std::string f = rand_formula(rng, 2 + (int)(rng() % 2u), aps);  // depth 2-3
+        impact::ltl::Automaton* aut = nullptr;
+        try { aut = compileFinite(f, aps); } catch (...) { continue; }
+        DFA dfa;
+        try { dfa = toDFA(aut); }                            // skip pathological blow-ups
+        catch (...) { destroy(aut); continue; }
+        ++built;
+        for (int ti = 0; ti < 20; ++ti) {
+            int len = 1 + (int)(rng() % 5u);                // non-empty traces (evaluator domain)
+            FiniteTrace tr;
+            for (int k = 0; k < len; ++k) {
+                Letter L;
+                for (const std::string& p : aps) if (rng() & 1u) L.insert(p);
+                tr.push_back(L);
+            }
+            CHECK(dfaAccepts(dfa, tr) == acceptsFinite(aut, tr));
+            ++checked;
+        }
+        destroy(aut);
+    }
+    CHECK(built > 40);
+    CHECK(checked > 800);
 }

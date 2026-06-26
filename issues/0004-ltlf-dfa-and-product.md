@@ -41,4 +41,8 @@ bottleneck.
    probability vs oracle/SySCoRe on a small instance.
 
 ## Status
-Open — next Phase 2 step.
+In progress. Step (2) DONE: `ltl::toDFA` builds a finite minimal DFA via semantic
+(truth-table-over-anchors) canonicalization, validated differentially against the
+evaluator (see ISSUE-0005 for the explosion bug that motivated the semantic
+approach). Remaining: the `impact::product` contract (IMDP×DFA), absorbing
+accepting states, reduction to `solve::maxReach*`, and the PD benchmark.

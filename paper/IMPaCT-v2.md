@@ -119,6 +119,18 @@ Format per entry: `date — feature | decision + rationale | algorithm | refs | 
   validated against this evaluator; Spot remains a future performance option.
   Suite after Phase 2 (part 1): 27/27 cases green (1 skipped = ISSUE-0003), 31642 assertions.
 
+- **Phase 2 (part 2) — LTLf→DFA.** `ltl::toDFA` builds the DFA by formula
+  progression (Brzozowski-style derivatives; strong-X via a Tail marker). Found &
+  fixed a real bug (ISSUE-0005): syntactic normalization lacks Boolean absorption,
+  so `(G a) U (G a)`-style formulas exploded (caught by the randomized differential
+  hanging; isolated via a generator-replay driver). Fix: **semantic
+  canonicalization** — states keyed by their truth table over the formula's anchor
+  subformulas (der is a Boolean homomorphism over anchors ⇒ finite minimal DFA).
+  Now 300 random formulas build 3–6-state DFAs instantly; `maxStates` is purely a
+  safety valve (configurable; never the dedup mechanism — per user feedback).
+  Validated by `dfaAccepts == acceptsFinite` differential on random formulas×traces.
+  Suite: 29/29 cases green, 37684 assertions, 1 skipped (ISSUE-0003).
+
 <!-- add new dated entries above this line -->
 
 ---

@@ -42,6 +42,29 @@ namespace ltl {
 
     void destroy(Automaton* a);
 
+    // --- LTLf -> DFA (formula progression / derivatives) --------------------
+    // Self-contained construction (no external dependency); validated
+    // differentially against acceptsFinite. A letter is a subset of `aps`,
+    // indexed by bit i = (aps[i] present). trans[state][letterIndex] = next state.
+    struct DFA {
+        std::vector<std::string> aps;        // ordered alphabet (formula's APs)
+        int nStates = 0;
+        int start = 0;
+        std::vector<std::vector<int>> trans; // [state][letterIndex] -> state
+        std::vector<char> accepting;         // [state]
+    };
+
+    // Build the reachable DFA for the compiled LTLf formula. THROWS
+    // std::runtime_error if the reachable state count exceeds maxStates (a guard
+    // against pathological blow-ups; co-safe specs in practice are small).
+    DFA toDFA(const Automaton* a, int maxStates = 200000);
+
+    // Map a trace letter (set of AP names) to its letter index over dfa.aps.
+    int letterIndex(const DFA& dfa, const Letter& letter);
+
+    // DFA membership (drives the product construction in Phase 2).
+    bool dfaAccepts(const DFA& dfa, const FiniteTrace& trace);
+
 } // namespace ltl
 } // namespace impact
 

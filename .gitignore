@@ -7,3 +7,4 @@ tests/run_tests
 __pycache__/
 *.pyc
 .pytest_cache/
+.docker-build.log
