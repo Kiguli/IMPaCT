@@ -1,9 +1,9 @@
 ---
 id: ISSUE-0002
 title: MEC — naive "staying-action-exists" acceptance rule is unsound
-status: under-verification
+status: resolved
 severity: low
-labels: methodology, candidate-literature-counterexample
+labels: methodology, naive-strawman
 created: 2026-06-25
 updated: 2026-06-25
 related:
@@ -43,23 +43,39 @@ MDP, states {0,1,2}: `0: a->{1,2}, b->{0}` ; `1: a->{0}` ; `2: a->{2}`.
 - The implemented algorithm recomputes SCCs under each candidate's OWN staying
   actions and accepts only single-SCC fixpoints, so it returns `{0},{2}` correctly.
 
-## Cited method (under verification)
-The standard published MEC algorithms (de Alfaro 1997; Baier-Katoen Alg. 47;
-Chatterjee-Henzinger SODA 2011 / JACM 2014) recompute SCCs under candidate-staying
-actions and are correct. A `mec-correctness-audit` workflow is confirming their
-exact structure + whether any source actually uses the naive rule.
+## Cited method (VERIFIED — primary sources read directly)
+- **Baier & Katoen, *Principles of Model Checking* (MIT Press, 2008), Algorithm 47
+  (pp. 878–879), Def. 10.116/10.117 (p. 870), Notation 10.124 (p. 876), Lemma 10.126.**
+  The algorithm recomputes the nontrivial SCCs of G_(T, A|T) — the digraph induced by
+  the CURRENT candidate restricted to its surviving (staying) actions — prunes actions
+  whose successors leave the freshly-computed SCC (`A(s) := {α | Post(s,α) ⊆ Ti}`),
+  cascades state removal via `Pre`, and accepts a candidate as a MEC only at a FIXPOINT
+  (`repeat … until MEC = MECnew`). p. 877 states explicitly: "Due to the removal of
+  actions … the strong connectivity of Ti … might be lost. We therefore have to repeat
+  the whole procedure." (= our `naive` rule's exact failure; the loop exists to avoid it.)
+- de Alfaro, PhD thesis 1997, Sec. 3.3 (End Components); Chatterjee–Henzinger,
+  JACM 61(3) 2014, Sec. 3 — same recompute-until-fixpoint structure (CH adds a faster
+  lock-step/“collapse” variant). Bibkeys: deAlfaro1997formal, ChatterjeeHenzinger2011.
 
-## Adversarial review
-`mec-correctness-audit` workflow (adversarial verifiers on the claims "our example
-refutes only a naive strawman, not the literature" and "our implementation matches
-a correct published algorithm"). Outcome to be recorded here.
+## Adversarial review / audit outcome
+`mec-correctness-audit` workflow (agents read the Baier-Katoen PDF, de Alfaro thesis,
+and CH JACM directly). Conclusion: **our example refutes ONLY the naive one-pass
+strawman, NOT any published algorithm** — Baier-Katoen's own text anticipates exactly
+this failure and the refinement loop prevents it. Our implementation
+(`src/graph_utils.cpp::mecs`) is a clean variant equivalent to Algorithm 47:
+recompute SCCs under the candidate's own staying actions; accept iff the candidate is a
+single nontrivial SCC (multi-state, or singleton with a self-loop); else refine into
+SCCs and re-process. (One of three adversarial-verdict agents hit a StructuredOutput
+retry-cap tooling failure — not a substantive refutation; the direct primary-source
+reads are conclusive.)
 
 ## Classification
-**`naive-strawman`** (expected). Will be finalized to `naive-strawman` once the
-audit confirms no published algorithm uses the naive rule; if — unexpectedly — a
-published algorithm does, this escalates to `candidate-literature-counterexample`
-and then `confirmed-...` only after the full protocol passes.
+**`naive-strawman`** — confirmed. NOT a literature counterexample. The published
+algorithms are correct and our implementation matches them.
 
-## Resolution / plan
-Implemented the correct algorithm (Phase 1b) + brute-force differential guard.
-Close as `resolved`/`naive-strawman` after the audit + dev-log wording correction.
+## Resolution
+RESOLVED. (1) Implemented the correct (published) algorithm in Phase 1b. (2) Pinned the
+trap with an explicit test + a definition-based brute-force differential test (1500
+random MDPs). (3) Audit confirms equivalence to Baier-Katoen Alg. 47 / de Alfaro / CH.
+Confidence basis: matches a proven published algorithm AND passes an independent
+definition-based oracle.

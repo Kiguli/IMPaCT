@@ -71,10 +71,21 @@ Format per entry: `date — feature | decision + rationale | algorithm | refs | 
   classified `naive-strawman` pending the audit — NOT a literature counterexample).
 - **MEC confidence**: added a definition-based brute-force MEC oracle and a
   randomized differential test (1500 random MDPs) + the explicit leaking-action
-  case; `mecs()` matches the oracle everywhere. Honest correction pending the
-  `mec-correctness-audit`: the implemented algorithm is the standard de Alfaro /
-  Baier-Katoen / Chatterjee-Henzinger MEC decomposition; earlier "counterexample
-  to the literature" wording was overstated (it refutes a naive strawman only).
+  case; `mecs()` matches the oracle everywhere.
+- **MEC audit CONFIRMED (`mec-correctness-audit` workflow; primary sources read
+  directly).** The implemented algorithm is the standard MEC decomposition:
+  **Baier-Katoen, *Principles of Model Checking*, Algorithm 47 (pp. 878–879)**;
+  de Alfaro 1997 Sec. 3.3; Chatterjee-Henzinger JACM 2014 Sec. 3 — recompute SCCs
+  under the candidate's own staying actions and accept only single-SCC fixpoints.
+  Honest correction: the earlier "counterexample to the literature" wording was
+  OVERSTATED — it refutes only a naive one-pass strawman. Baier-Katoen p. 877
+  explicitly notes action removal can break strong connectivity ("We therefore have
+  to repeat the whole procedure"), i.e. the literature anticipates exactly this trap;
+  the refinement loop exists to avoid it. ISSUE-0002 resolved as `naive-strawman`.
+  Confidence basis: matches a proven published algorithm AND passes a definition-based
+  brute-force differential (1500 random MDPs). (One adversarial-verdict sub-agent hit a
+  StructuredOutput retry-cap tooling failure — not substantive; the direct source reads
+  are conclusive.)
 
 <!-- add new dated entries above this line -->
 
