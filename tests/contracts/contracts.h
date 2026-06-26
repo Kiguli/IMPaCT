@@ -28,46 +28,10 @@
 // Phase 1b — SCC + MEC decomposition. Implemented; production interface in src/.
 #include "../../src/graph_utils.h"
 
+// Phase 1c — sound robust interval iteration. Implemented; interface in src/.
+#include "../../src/solve.h"
+
 namespace impact {
-
-// ---------------------------------------------------------------------------
-// Phase 1c — Sound robust interval iteration for reachability on an IMDP.
-// Refs: Haddad-Monmege (TCS 2018, IMDP soundness); Baier et al. (CAV 2017).
-// ---------------------------------------------------------------------------
-namespace solve {
-
-    // One successor of an action, with a probability interval [lo,hi].
-    struct Interval { int to; double lo; double hi; };
-    using ActionDist  = std::vector<Interval>;       // one prob interval per successor
-    using StateActions = std::vector<ActionDist>;    // actions available at a state
-    using IMDPModel   = std::vector<StateActions>;   // per-state action lists
-
-    struct IntervalResult {
-        std::vector<double> lower;  // sound lower bound on the value, per state
-        std::vector<double> upper;  // sound upper bound on the value, per state
-        int iterations;
-    };
-
-    // Robust max-reachability of `targets`: controller MAXIMIZES, nature picks
-    // transition probabilities within the intervals adversarially to MINIMIZE
-    // (worst-case / pessimistic). Returns sound [lower,upper] with
-    // upper[s]-lower[s] <= 2*eps for every state s.
-    //
-    // CONTRACT:
-    //   * lower[s] <= V*(s) <= upper[s] for the true robust value V* (soundness)
-    //   * target states have value 1; states that cannot reach a target under
-    //     ALL adversary choices have value 0 (requires Prob0/Prob1 + MEC handling)
-    //   * gap <= 2*eps at termination
-    IntervalResult maxReachPessimistic(const IMDPModel& m,
-                                       const std::set<int>& targets,
-                                       double eps);
-
-    // Best-case variant: controller maximizes, nature maximizes too (optimistic).
-    IntervalResult maxReachOptimistic(const IMDPModel& m,
-                                      const std::set<int>& targets,
-                                      double eps);
-
-} // namespace solve
 
 // ---------------------------------------------------------------------------
 // Phase 2 — LTL/LTLf -> automaton front-end. Tested via language membership so

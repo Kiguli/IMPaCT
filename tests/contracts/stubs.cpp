@@ -15,17 +15,9 @@
 
 namespace impact {
 
-// omax::optimize    -> src/omaximization.cpp (Phase 1a) — no stub.
-// graph::sccs/mecs  -> src/graph_utils.cpp   (Phase 1b) — no stub.
-
-namespace solve {
-    IntervalResult maxReachPessimistic(const IMDPModel&, const std::set<int>&, double) {
-        throw std::logic_error("not implemented: impact::solve::maxReachPessimistic (Phase 1c)");
-    }
-    IntervalResult maxReachOptimistic(const IMDPModel&, const std::set<int>&, double) {
-        throw std::logic_error("not implemented: impact::solve::maxReachOptimistic (Phase 1c)");
-    }
-}
+// omax::optimize     -> src/omaximization.cpp (Phase 1a) — no stub.
+// graph::sccs/mecs   -> src/graph_utils.cpp   (Phase 1b) — no stub.
+// solve::maxReach*   -> src/solve.cpp         (Phase 1c) — no stub.
 
 namespace ltl {
     struct Automaton {};  // concrete definition so the stubs link

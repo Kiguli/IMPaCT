@@ -87,6 +87,25 @@ Format per entry: `date — feature | decision + rationale | algorithm | refs | 
   StructuredOutput retry-cap tooling failure — not substantive; the direct source reads
   are conclusive.)
 
+- **Phase 1c — sound robust interval iteration.** `src/solve.{h,cpp}`:
+  `maxReach{Pessimistic,Optimistic}` = robust Bellman (omax, Sense Min/Max) +
+  **MEC collapse** (graph::mecs) for a unique fixpoint + two-sided interval
+  iteration (lower↑ from 0, upper↓ from 1, stop at gap ≤ 2·eps). Refs:
+  Haddad-Monmege (TCS 2018); Baier et al. (CAV 2017); Givan-Leach-Dean (omax).
+  All 5 interval-iteration contracts green + Model 6 (lossy-exit EC, *forces* MEC
+  collapse). Confidence: a `VI-from-below` differential oracle (independent of
+  collapse) over ~900 random MDPs — point (both senses) + optimistic intervals.
+- **ISSUE-0003 found by the differential test (genuine, important).** Pessimistic
+  (robust) interval iteration does NOT converge when nature can confine the play in
+  a state via a lo=0 leaving edge (minimal counterexample: `0:a→{0:[.5,1],1:[0,.5]}`,
+  `1→target` ⇒ V*(0)=0 but upper sticks at 1; non-unique fixpoint from a
+  nature-confinable EC the support-graph MEC misses). The upper bound stays *sound*
+  (1 ≥ 0) but the gap doesn't close. Classified `our-bug`/limitation — NOT a
+  literature counterexample (Haddad-Monmege handle it). Scope documented in
+  `src/solve.h`; counterexample pinned as a skipped contract. Proper robust-EC fix
+  is deferred to / merged with Phase 3 (robust accepting ECs use the same machinery).
+  Suite: 22/27 cases green, 31618 assertions, 1 skipped (ISSUE-0003), 5 red (Phase 2 LTLf).
+
 <!-- add new dated entries above this line -->
 
 ---
