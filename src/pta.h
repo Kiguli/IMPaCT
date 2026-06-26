@@ -57,6 +57,18 @@ namespace pta {
     // Maximum probability of reaching `targetLoc` (exact for Pmax).
     double maxReachLocation(const PTA& p, int targetLoc, double eps = 1e-7, int maxStates = 200000);
 
+    // --- Digital-clocks engine (resolves the Pmin gap, ISSUE-0014) ---------------
+    // For CLOSED, diagonal-free PTAs (non-strict guards/invariants, x-vs-constant),
+    // replacing dense clocks with bounded integers and making time-elapse an explicit
+    // "tick" action yields a finite MDP that is EXACT for BOTH minimum and maximum
+    // reachability (Kwiatkowska-Norman-Sproston, FMSD 2006). REQUIREMENT: kmax[i] must
+    // be >= every constant clock i is compared against in ANY guard OR invariant (so
+    // saturation happens strictly above all constants). This is a second, independent
+    // engine — its Pmax must agree with the zone engine (used as a cross-check).
+    SymbolicMDP buildDigital(const PTA& p, int targetLoc, int maxStates = 200000);
+    double maxReachLocationDigital(const PTA& p, int targetLoc, double eps = 1e-7, int maxStates = 200000);
+    double minReachLocationDigital(const PTA& p, int targetLoc, double eps = 1e-7, int maxStates = 200000);
+
 } // namespace pta
 } // namespace impact
 

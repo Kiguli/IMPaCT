@@ -1,7 +1,7 @@
 ---
 id: ISSUE-0014
 title: PTA forward zone-MDP computes maximum reachability exactly; minimum needs the backward/game construction
-status: open
+status: resolved
 severity: low
 labels: design-decision, timed-automata, scope
 created: 2026-06-26
@@ -28,11 +28,17 @@ the branch probabilities remain exact; extrapolation (Behrmann et al. 2006) keep
 graph finite. Empty/blocked branches and no-edge locations route to an absorbing
 deadlock sink so each action's distribution still sums to 1.
 
-## Plan
-Add Pmin via either (a) the backward zone construction of KNSW 2007, or (b) the
-digital-clocks semantics (Kwiatkowska-Norman-Sproston, "Performance analysis of PTAs
-using digital clocks") which reduces a (closed, bounded) PTA to a finite MDP exact
-for both Pmin and Pmax. Until then, `maxReachLocation` is documented as Pmax-only.
+## Resolution (2026-06-26)
+Implemented option (b): a **digital-clocks** engine (`pta::buildDigital`,
+`maxReachLocationDigital`, `minReachLocationDigital`) for closed, diagonal-free PTAs.
+Dense clocks become bounded integers (saturating above the max constant) and time
+elapse is an explicit "tick" action, giving a finite MDP that is exact for BOTH Pmin
+and Pmax (Kwiatkowska-Norman-Sproston, FMSD 2006). Pmin = 1 - maxSafety(avoid=target)
+on that MDP. REQUIREMENT: kmax[i] >= every constant clock i is compared against in any
+guard OR invariant. The zone engine remains the efficient Pmax path; the two engines
+are cross-checked (digital Pmax must equal zone Pmax) in tests/unit/test_pta.cpp,
+which also covers Pmin (invariant-forced=1, wait-out=0, lower-of-two=0.3). Both
+engines are now selectable (the "toolbox of literature approaches" principle).
 
 ## Verification
 Hand-case PTAs with known Pmax (timing-gated probabilistic edge, controller choice,

@@ -513,6 +513,16 @@ Format per entry: `date — feature | decision + rationale | algorithm | refs | 
   (Inf.&Comp. 2007), Smallwood-Sondik (1973), Kaelbling-Littman-Cassandra (1998) —
   every new algorithm linked to a verified paper, per the standing directive.
 
+- **PTA Pmin via digital clocks (resolves ISSUE-0014).** Added a second, independent
+  PTA engine (`pta::buildDigital` / `maxReachLocationDigital` / `minReachLocationDigital`)
+  for closed, diagonal-free PTAs: dense clocks → bounded integers (saturating above the
+  max constant), time elapse as an explicit "tick" action ⇒ a finite MDP exact for
+  BOTH Pmin and Pmax (Kwiatkowska-Norman-Sproston, FMSD 2006). Pmin = 1 −
+  maxSafety(avoid=target). TDD: digital Pmax cross-checks the zone engine on every
+  hand model (two independent engines agree), plus Pmin cases (invariant-forced=1,
+  wait-out=0, lower-of-two=0.3). Both engines now selectable. Suite: **121 cases /
+  643,523 assertions green.**
+
 <!-- add new dated entries above this line -->
 
 ---

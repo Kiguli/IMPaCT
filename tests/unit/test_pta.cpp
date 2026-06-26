@@ -62,6 +62,53 @@ TEST_CASE("pta: sequential edges with reset compose multiplicatively") {
     CHECK(maxReachLocation(p, 2) == doctest::Approx(0.5).epsilon(1e-4));
 }
 
+TEST_CASE("pta digital: Pmax agrees with the independent zone engine") {
+    // closed (non-strict) PTAs only. Build a few and cross-check the two engines.
+    std::vector<PTA> models;
+    { PTA p; p.nLoc=3; p.nClocks=1; p.init=0; p.invariant={{},{},{}};
+      p.edges={ {0,{clkGe(1,2)},{{0.7,{},1},{0.3,{},2}}} }; p.kmax={0,2}; models.push_back(p); }
+    { PTA p; p.nLoc=3; p.nClocks=1; p.init=0; p.invariant={{clkLe(1,1)},{},{}};
+      p.edges={ {0,{clkGe(1,2)},{{0.7,{},1},{0.3,{},2}}} }; p.kmax={0,2}; models.push_back(p); }
+    { PTA p; p.nLoc=3; p.nClocks=1; p.init=0; p.invariant={{},{},{}};
+      p.edges={ {0,{clkGe(1,1)},{{0.5,{},1},{0.5,{},2}}}, {0,{clkGe(1,1)},{{0.9,{},1},{0.1,{},2}}} };
+      p.kmax={0,1}; models.push_back(p); }
+    { PTA p; p.nLoc=4; p.nClocks=1; p.init=0; p.invariant={{},{},{},{}};
+      p.edges={ {0,{clkGe(1,1)},{{1.0,{1},1}}}, {1,{clkGe(1,1)},{{0.5,{},2},{0.5,{},3}}} };
+      p.kmax={0,1}; models.push_back(p); }
+    for (const PTA& p : models)
+        for (int tgt = 0; tgt < p.nLoc; ++tgt)
+            CHECK(maxReachLocationDigital(p, tgt) == doctest::Approx(maxReachLocation(p, tgt)).epsilon(1e-4));
+}
+
+TEST_CASE("pta digital: Pmin -- invariant forces the edge vs waiting it out") {
+    // edge to target is the only edge. With an invariant x<=2 the controller MUST
+    // take it by x=2 -> Pmin=1. Without an invariant it can wait forever -> Pmin=0.
+    PTA forced;
+    forced.nLoc = 2; forced.nClocks = 1; forced.init = 0;
+    forced.invariant = { { clkLe(1, 2) }, {} };
+    forced.edges = { { 0, { clkGe(1, 0) }, { {1.0, {}, 1} } } };
+    forced.kmax = { 0, 2 };
+    CHECK(minReachLocationDigital(forced, 1) == doctest::Approx(1.0));
+
+    PTA waitOut = forced;
+    waitOut.invariant = { {}, {} };          // no deadline -> can avoid forever
+    CHECK(minReachLocationDigital(waitOut, 1) == doctest::Approx(0.0));
+}
+
+TEST_CASE("pta digital: Pmin picks the lower-probability forced edge") {
+    // invariant x<=1 forces an edge by x=1; controller minimizes -> picks e2 (0.3).
+    PTA p;
+    p.nLoc = 3; p.nClocks = 1; p.init = 0;
+    p.invariant = { { clkLe(1, 1) }, {}, {} };
+    p.edges = {
+        { 0, { clkGe(1, 0) }, { {0.5, {}, 1}, {0.5, {}, 2} } },
+        { 0, { clkGe(1, 0) }, { {0.3, {}, 1}, {0.7, {}, 2} } },
+    };
+    p.kmax = { 0, 1 };
+    CHECK(minReachLocationDigital(p, 1) == doctest::Approx(0.3).epsilon(1e-4));
+    CHECK(maxReachLocationDigital(p, 1) == doctest::Approx(0.5).epsilon(1e-4));   // Pmax picks e1
+}
+
 TEST_CASE("pta: target == init -> 1 ; no edges -> deadlock") {
     PTA p;
     p.nLoc = 2; p.nClocks = 1; p.init = 0;
