@@ -217,6 +217,24 @@ Format per entry: `date — feature | decision + rationale | algorithm | refs | 
   VP is 6/6; suite still 44/44, 603273 assertions. (Second soundness bug the
   closed-loop validation caught that internal differential tests missed.)
 
+- **Phase 3 (step 2a) — Büchi ω-regular via accepting-MEC reachability.**
+  `src/omega.{h,cpp}`: `maxBuchi{Optimistic,Pessimistic}` reduce "visit `accepting`
+  infinitely often" to reachability of accepting MECs (de Alfaro 1997; Baier-Katoen;
+  the LDBA/GFM accepting-frontier route, Sickert CAV 2016 / Hahn TACAS 2020). Reuses
+  graph::mecs + solve. Verified (test_omega.cpp): reduction to reachability,
+  GF(true)=1, transient→0, recurrence-in-EC=0.5, pess==opt on point MDPs. ISSUE-0009
+  filed: robust (pessimistic) accepting ECs use the optimistic support-MEC structure
+  for now (sound for point/optimistic; robust path = Dutreix-Coogan/Weininger/Asadi).
+- **HEADLINE INTEGRATION — co-safe LTL over a continuous system (Package Delivery).**
+  `benchmarks/validate_cosafe.cpp` ties everything together: sparse abstraction (full
+  IMDP) → LTLf→DFA → IMDP×DFA product → robust solver → policy → Monte-Carlo. Spec
+  `F(pickup & F deliver)` on a 2-D robot; 4/4 start states have empirical co-safe
+  satisfaction (continuous closed-loop, trace evaluated by the LTLf semantics) ≥ the
+  robust lower bound. Locked into CI by an integration unit test ("F r" over the
+  abstraction == plain reachability to r-cells). Suite: 51/51, 603306 assertions.
+- ISSUE-0010 (perf, low): OVI's VI-from-below is slow on large strongly-recurrent
+  IMDPs; MECCollapse (optimistic) / robust-EC interval iteration is the fast path.
+
 <!-- add new dated entries above this line -->
 
 ---

@@ -15,3 +15,4 @@ See [`README.md`](README.md) for conventions and the literature-counterexample p
 
 
 | [0009](0009-robust-accepting-ec.md) | Robust accepting end components use optimistic support-MEC structure | open | medium | robust-ec, omega-regular |
+| [0010](0010-ovi-slow-on-recurrent.md) | OVI slow on large strongly-recurrent IMDPs (perf) | open | low | performance, solver |

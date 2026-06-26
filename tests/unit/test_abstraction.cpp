@@ -224,3 +224,39 @@ TEST_CASE("abstraction nonlinear: Van der Pol sparse interval-MC build is sound"
     }
     CHECK(mxhi == doctest::Approx(1.0).epsilon(1e-6));  // target cells reach w.p. 1
 }
+
+// --- integration: sparse abstraction + LTLf DFA + product (Phase 2 over continuous) ---
+TEST_CASE("integration: 'F region' over the abstraction == plain reachability to region cells") {
+    // Full-dynamics IMDP (empty target box) of a small 2-D affine system.
+    SystemND s = demo2D(false);
+    s.xlb = {-1, -1}; s.xub = {1, 1}; s.eta = {0.5, 0.5};   // tiny 4x4 grid -> fast
+    s.ulb = {-1, -1}; s.uub = {1, 1}; s.ueta = {2.0, 2.0};
+    s.tlo = {1e18, 1e18}; s.thi = {-1e18, -1e18};      // empty -> full IMDP
+    SparseReach ab = buildSparseReachND(s, 1e-9);
+    const int N = ab.nCells, Nd0 = (int)std::llround((s.xub[0]-s.xlb[0])/s.eta[0]);
+
+    // region R = [2,3]x[2,3]; label cells by centre; reach-target = R cells.
+    auto centre = [&](int c, double& x0, double& x1) {
+        int j0 = c % Nd0, j1 = c / Nd0;
+        x0 = s.xlb[0] + (j0+0.5)*s.eta[0]; x1 = s.xlb[1] + (j1+0.5)*s.eta[1];
+    };
+    std::vector<impact::ltl::Letter> labels(ab.model.size());
+    std::set<int> Rcells;
+    for (int c = 0; c < N; ++c) { double x0,x1; centre(c,x0,x1);
+        if (x0>=0.4&&x0<=1.0&&x1>=0.4&&x1<=1.0) { labels[c].insert("r"); Rcells.insert(c); } }
+
+    auto* aut = impact::ltl::compileFinite("F r", {"r"});
+    impact::ltl::DFA dfa = impact::ltl::toDFA(aut);
+    auto Pr = impact::product::build(ab.model, labels, dfa, 0);
+    auto vp = impact::solve::maxReachOptimistic(Pr.model, Pr.targets, 1e-7);
+    auto vr = impact::solve::maxReachOptimistic(ab.model, Rcells, 1e-7);   // plain reach to R
+
+    const int nQ = dfa.nStates;
+    for (int c = 0; c < N; ++c) {
+        int q = dfa.trans[dfa.start][impact::ltl::letterIndex(dfa, labels[c])];
+        double prod = 0.5*(vp.lower[c*nQ+q] + vp.upper[c*nQ+q]);
+        double reach = 0.5*(vr.lower[c] + vr.upper[c]);
+        CHECK(std::fabs(prod - reach) < 3e-3);   // F r  ==  reach R
+    }
+    impact::ltl::destroy(aut);
+}
