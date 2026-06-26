@@ -1,3 +1,9 @@
 .DS_Store
 docs/_build/
 docs/.venv/
+
+# v2.0 test/benchmark artifacts
+tests/run_tests
+__pycache__/
+*.pyc
+.pytest_cache/
