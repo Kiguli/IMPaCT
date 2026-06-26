@@ -1,7 +1,7 @@
 ---
 id: ISSUE-0006
 title: Dense transition matrix causes memory overflow even on "small" cases
-status: open
+status: in-progress
 severity: high
 labels: scalability, performance, tool-v1, memory
 created: 2026-06-25
@@ -30,10 +30,19 @@ abstraction vectors computed (is/ss/ts/min*/max* h5 produced), then:
 - Confirms the plan's dense→sparse concern; products (IMDP×automaton, Phase 2/3)
   multiply state count and will hit this much sooner.
 
-## Resolution / plan
-- Short term: generate goldens from a *genuinely tiny* model (few states/inputs)
-  or raise the memory cap only where the host allows.
-- Core: **sparse transition representation** (CSR-style) for transition matrices
-  and products — scheduled as the Phase 2/3 cross-cutting "sparse" task in the plan.
-  This is the right place to also reduce the (state×input)×state blow-up.
-- Keep "very small case studies only" for local/CI runs until sparse lands.
+## Resolution / progress
+- **DONE — sparse synthesis path.** The v2.0 solver works on a sparse model
+  (`solve::IMDPModel` = per-state lists of only nonzero successor intervals), so
+  synthesis memory is O(nnz), not O(states²) — same model as IntervalMDP.jl.
+- **DONE — sparse abstraction (`src/abstraction.{h,cpp}`).** Builds the sparse IMDP
+  directly for affine, axis-decoupled, diagonal-Gaussian systems (1-D end-to-end),
+  storing only kernel-window successors. Verified: kernel vs brute-force; lossless
+  pruning (sparse synthesis == dense-window synthesis); O(N) scaling
+  (`benchmarks/sparse_scaling.cpp`): 125k states ≈ 255 MB + 0.42 s vs dense ≈ 250 GB.
+  **Caveat:** the O(N) win holds with grid step + noise FIXED and the domain growing
+  (constant kernel-in-cells). Refining eta at fixed sigma widens the kernel-in-cells
+  (window ≈ 6σ/eta), giving a constant-factor (not asymptotic) saving — documented.
+- **TODO:** n-D (diagonal) and coupled dynamics (mixed-monotone / NLopt bounds, as v1);
+  sparse for IMDP×automaton products; and either refactor v1 `IMDP.cpp` to sparse or
+  drive ARCH benchmarks through the new sparse pipeline. v1's dense path is unchanged
+  for now (still OOMs); use the sparse pipeline for large runs.

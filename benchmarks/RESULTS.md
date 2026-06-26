@@ -22,7 +22,28 @@ report before publication):
 > co-safe spec collapsed into separate reach-avoid targets. Phase 2 replaces this
 > with a real DFA product (no reduction).
 
-## Baseline (v1, branch main) — TODO: fill via Docker/CI
+## v1 baseline note (ISSUE-0006)
+The v1 dense path OOMs even on the smallest shipped example: 2D-robot-RA builds a
+dense (state×input)×state matrix of 698103×1583 ≈ **8.84 GB** → killed under a 4 GB
+cap. Confirms the need for sparse storage before larger benchmarks.
+
+## Sparse abstraction scaling (v2.0, `benchmarks/sparse_scaling.cpp`)
+1-D reach IMDP, domain grown with grid step (eta=0.1) and noise (sigma=0.3) FIXED, so
+the kernel spans a constant #cells ⇒ nnz is O(N) while a dense (min+max) matrix is
+O(N²). Synthesis = optimistic VI (eps=1e-6).
+
+| domain | cells | nnz | nnz/cell | sparse (MB) | dense (MB) | synth (s) |
+|---|---|---|---|---|---|---|
+| 20 | 200 | 18,005 | 89 | 0.36 | 0.6 | 0.01 |
+| 100 | 1,000 | 99,980 | 100 | 2.0 | 16 | 0.00 |
+| 500 | 5,000 | 507,980 | 102 | 10.2 | 400 | 0.01 |
+| 2,500 | 25,000 | 2,547,980 | 102 | 51 | 10,000 | 0.08 |
+| 12,500 | 125,000 | 12,747,980 | 102 | **255** | **250,000** | 0.42 |
+
+At 125k states the sparse model is ~255 MB and synthesizes in 0.42 s, where the dense
+matrix would be ~250 GB (infeasible). This is the IntervalMDP.jl-style memory win.
+
+## Baseline (v1, branch main) — TODO: fill via Docker/CI on a tiny-enough model
 ```
 # paste run_archcomp.py output here
 ```

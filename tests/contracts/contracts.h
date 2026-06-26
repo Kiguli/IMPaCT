@@ -39,4 +39,7 @@
 // Phase 2 part 3 — IMDP x DFA product + co-safe reachability.
 #include "../../src/product.h"
 
+// Sparse interval-MDP abstraction of continuous systems (scalability / ISSUE-0006).
+#include "../../src/abstraction.h"
+
 #endif // IMPACT_TEST_CONTRACTS_H

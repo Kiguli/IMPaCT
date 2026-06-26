@@ -160,6 +160,20 @@ Format per entry: `date — feature | decision + rationale | algorithm | refs | 
   addition to LTL. Phase 3 pipelines chosen from verified literature (Dutreix-Coogan
   Rabin+permanent-WC primary; Weininger game-reduction; Asadi qualitative).
 
+- **Sparse abstraction (priority: memory / larger benchmarks, ISSUE-0006).**
+  `src/abstraction.{h,cpp}`: builds the sparse `solve::IMDPModel` directly for affine,
+  axis-decoupled, diagonal-Gaussian systems (storing only kernel-window successors) —
+  same sparse model as IntervalMDP.jl, so memory is O(nnz). Verified: the interval
+  kernel `transitionInterval1D` vs brute-force mean sampling; box == product of 1-D;
+  lossless pruning (sparse synthesis == dense-window synthesis); target-cell = 1.
+  Scaling (`benchmarks/sparse_scaling.cpp`, domain grown at fixed step/noise):
+  **125,000 states ≈ 255 MB + 0.42 s** vs a dense (min+max) matrix ≈ **250 GB** — the
+  large runs that v1's dense path OOMs on (8.84 GB on the *smallest* 2D-robot case).
+  Honest caveat recorded: O(N) holds for fixed kernel-in-cells (grow domain); refining
+  eta at fixed sigma is only a constant-factor saving. Suite: 38/38, 54375 assertions.
+  Next: n-D/coupled abstraction (mixed-monotone/NLopt bounds), sparse products, and
+  driving ARCH benchmarks through the sparse pipeline. Branch pushed to origin.
+
 <!-- add new dated entries above this line -->
 
 ---
