@@ -41,6 +41,18 @@ namespace abstraction {
     // a<=b, sigma>0.
     Bound transitionInterval1D(double muLo, double muHi, double sigma, double a, double b);
 
+    // The 1-D transition probability mass for a BOUNDED UNIFORM additive disturbance
+    // w ~ Uniform[-W, W]: next = mu + w, so the mass in [a,b] is the overlap length
+    // |[a,b] ∩ [mu-W, mu+W]| / (2W), minimized and maximized over mu in [muLo, muHi].
+    // The overlap is concave in mu (peak when the window is centred on the box), so
+    // the max is at clamp((a+b)/2, muLo, muHi) and the min at an endpoint. Requires
+    // muLo<=muHi, a<=b, W>0. Bounded support is what makes robust omega-regular
+    // synthesis non-trivial on continuous systems (a cell well inside the domain has
+    // NO leak to the absorbing sink, so genuine robust end components exist) — see
+    // ISSUE-0011. Refs: interval-MDP abstraction with bounded disturbance,
+    // Lahijanian et al. (IEEE TAC 2015); mixed-monotone bounds, Dutreix-Coogan.
+    Bound transitionInterval1DUniform(double muLo, double muHi, double W, double a, double b);
+
     // Axis-decoupled n-D box bound = product of per-dimension 1-D bounds.
     Bound transitionIntervalBox(const std::vector<double>& muLo,
                                 const std::vector<double>& muHi,

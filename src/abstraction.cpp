@@ -27,6 +27,23 @@ Bound transitionInterval1D(double muLo, double muHi, double sigma, double a, dou
     return {lo, hi};
 }
 
+Bound transitionInterval1DUniform(double muLo, double muHi, double W, double a, double b) {
+    if (muHi < muLo) std::swap(muLo, muHi);
+    auto mass = [&](double mu) {                                    // overlap of [a,b] and [mu-W,mu+W]
+        double ov = std::min(b, mu + W) - std::max(a, mu - W);
+        if (ov < 0.0) ov = 0.0;
+        return ov / (2.0 * W);
+    };
+    const double center = 0.5 * (a + b);
+    const double muMax = std::min(std::max(center, muLo), muHi);    // window centred on box -> max overlap
+    double hi = mass(muMax);
+    double lo = std::min(mass(muLo), mass(muHi));                   // concave -> min at an endpoint
+    lo = std::max(0.0, std::min(1.0, lo));
+    hi = std::max(0.0, std::min(1.0, hi));
+    if (lo > hi) lo = hi;
+    return {lo, hi};
+}
+
 Bound transitionIntervalBox(const std::vector<double>& muLo,
                             const std::vector<double>& muHi,
                             const std::vector<double>& sigma,

@@ -40,6 +40,37 @@ TEST_CASE("abstraction kernel: transitionInterval1D matches brute-force over mea
     }
 }
 
+TEST_CASE("abstraction kernel: transitionInterval1DUniform matches brute-force over mean range") {
+    std::mt19937 rng(23);
+    std::uniform_real_distribution<double> U(-3.0, 3.0), Wbox(0.2, 2.0), Wdist(0.3, 2.5), Md(-4.0, 4.0);
+    for (int t = 0; t < 1500; ++t) {
+        double a = U(rng), b = a + Wbox(rng);
+        double W = Wdist(rng);
+        double m1 = Md(rng), m2 = m1 + Wbox(rng);
+        Bound bd = transitionInterval1DUniform(m1, m2, W, a, b);
+        auto mass = [&](double mu){ double ov = std::min(b, mu+W) - std::max(a, mu-W); return ov < 0 ? 0.0 : ov/(2*W); };
+        double bmin = 2.0, bmax = -1.0;
+        const int K = 4000;
+        for (int s = 0; s <= K; ++s) { double mu = m1 + (m2-m1)*s/K; double mm = mass(mu); bmin = std::min(bmin, mm); bmax = std::max(bmax, mm); }
+        CHECK(bd.lo == doctest::Approx(bmin).epsilon(2e-3));
+        CHECK(bd.hi >= bmax - 2e-3);
+        CHECK(bd.hi <= bmax + 2e-3);
+        CHECK(bd.lo <= bd.hi + 1e-12);
+        CHECK(bd.lo >= -1e-12);
+        CHECK(bd.hi <= 1.0 + 1e-12);
+    }
+}
+
+TEST_CASE("abstraction kernel: uniform-bounded mass is forced (lo>0) when box fully covers the window") {
+    // muLo=muHi=0, W=0.5, box [-1,1] strictly contains [-W,W] -> all mass in box, lo=hi=1.
+    Bound full = transitionInterval1DUniform(0.0, 0.0, 0.5, -1.0, 1.0);
+    CHECK(full.lo == doctest::Approx(1.0));
+    CHECK(full.hi == doctest::Approx(1.0));
+    // disjoint: box far from any reachable next state -> 0.
+    Bound none = transitionInterval1DUniform(0.0, 0.0, 0.5, 5.0, 6.0);
+    CHECK(none.hi == doctest::Approx(0.0));
+}
+
 TEST_CASE("abstraction kernel: box bound == product of 1-D bounds") {
     std::vector<double> muLo{-1, 0.5}, muHi{0.2, 1.0}, sig{0.4, 0.6}, aLo{-0.5, 0.0}, aHi{0.5, 1.5};
     Bound box = transitionIntervalBox(muLo, muHi, sig, aLo, aHi);

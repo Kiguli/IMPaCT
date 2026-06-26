@@ -342,6 +342,21 @@ Format per entry: `date — feature | decision + rationale | algorithm | refs | 
     an honest scoping result: the ω-regular CONTRIBUTION is demonstrated on explicit
     IMDPs; the continuous side currently covers reach-avoid / co-safe / finite-horizon.
 
+- **Bounded-disturbance abstraction → non-trivial robust continuous ω-regular
+  (closes the ISSUE-0011 gap).** Added `abstraction::transitionInterval1DUniform`:
+  the 1-D transition mass interval for a BOUNDED uniform disturbance `w ~ U[-W,W]`
+  (overlap of the target box with the reachable window `[mu-W, mu+W]`, min/max over
+  the source-cell mean range; concave ⇒ max at the box centre, min at an endpoint).
+  TDD'd vs a fine mu-scan oracle (18k assertions) + forced-mass/disjoint edge cases.
+  With bounded support a cell well inside the domain has NO sink edge, so genuine
+  robust end components exist. `benchmarks/validate_omega_bounded.cpp`:
+  `x' = 0.9x + 0.5u + U[-0.3,0.3]`, recurrence `G F region` → robust value 1 at all
+  12 cells, and the continuous closed loop is Monte-Carlo validated (empirical
+  recurrence ≥ robust lower bound at every start). So robust ω-regular synthesis on
+  continuous systems is non-trivial once the disturbance is bounded — the
+  unbounded-Gaussian triviality (ISSUE-0011) is specific to unbounded noise.
+  Suite: **80 cases / 627,572 assertions green.**
+
 <!-- add new dated entries above this line -->
 
 ---

@@ -49,6 +49,14 @@ disturbance systems.
    optimistic (upper) and Monte-Carlo-validates that the real closed loop lies within
    the abstraction's two-sided bracket `[robust_lower, optimistic_upper]` — a sound
    soundness statement even when the robust lower bound is 0.
-4. **Future**: bounded/truncated-disturbance abstractions (e.g. reflecting boundaries
-   or a truncated noise kernel) make robust ω-regular non-trivial on continuous
-   systems; tracked for the abstraction roadmap.
+4. **Bounded disturbance closes the continuous gap (done).** Added the bounded
+   uniform-noise kernel `abstraction::transitionInterval1DUniform` (TDD vs a
+   fine mu-scan oracle, `test_abstraction.cpp`). With BOUNDED support, a cell well
+   inside the domain has its whole next-state window in-domain — NO sink edge — so
+   genuine robust end components exist. `benchmarks/validate_omega_bounded.cpp`:
+   a 1-D system `x' = 0.9x + 0.5u + Uniform[-W,W]` with recurrence `G F region`
+   gives robust value 1 at all 12 cells, and the continuous closed loop is
+   Monte-Carlo validated (empirical recurrence ≥ robust lower bound at every start).
+   So robust continuous ω-regular synthesis IS non-trivial once the disturbance is
+   bounded — the unbounded-Gaussian triviality is specific to unbounded noise.
+   Future: more bounded/truncated noise types and an n-D bounded builder.
