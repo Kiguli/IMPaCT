@@ -42,6 +42,9 @@
 // Sparse interval-MDP abstraction of continuous systems (scalability / ISSUE-0006).
 #include "../../src/abstraction.h"
 
+// 2-D continuous-system spec parser (grid-heatmap visualizer).
+#include "../../src/system_io.h"
+
 // Phase 3 — omega-regular (Büchi) synthesis via accepting-MEC reachability.
 #include "../../src/omega.h"
 

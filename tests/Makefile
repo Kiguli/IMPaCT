@@ -24,6 +24,7 @@ IMPL_SRCS := ../src/omaximization.cpp \
              ../src/ltl.cpp \
              ../src/product.cpp \
              ../src/abstraction.cpp \
+             ../src/system_io.cpp \
              ../src/omega.cpp \
              ../src/imdp_io.cpp \
              ../src/prism.cpp \
@@ -42,6 +43,7 @@ TEST_SRCS := unit/test_main.cpp \
              unit/test_ltl_dfa.cpp \
              unit/test_product.cpp \
              unit/test_abstraction.cpp \
+             unit/test_system_io.cpp \
              unit/test_omega.cpp \
              unit/test_safety.cpp \
              unit/test_imdp_io.cpp \

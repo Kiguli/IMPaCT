@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>IMPaCT — IMDP visualizer</title>
+<title>IMPaCT — visualizer</title>
 <style>
   :root { --bg:#0f1419; --panel:#1a2029; --ink:#e6edf3; --muted:#8b949e; --accent:#4493f8; --line:#30363d; }
   * { box-sizing: border-box; }
@@ -11,86 +11,81 @@
   header { padding:14px 20px; border-bottom:1px solid var(--line); display:flex; align-items:baseline; gap:12px; }
   header h1 { font-size:18px; margin:0; }
   header span { color:var(--muted); font-size:13px; }
-  .wrap { display:flex; gap:0; height:calc(100vh - 53px); }
-  .controls { width:360px; padding:18px; border-right:1px solid var(--line); overflow:auto; }
+  .wrap { display:flex; height:calc(100vh - 53px); }
+  .controls { width:380px; padding:16px 18px; border-right:1px solid var(--line); overflow:auto; }
   .controls label { display:block; margin:12px 0 4px; color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.04em; }
   textarea, select, input { width:100%; background:var(--panel); color:var(--ink); border:1px solid var(--line); border-radius:6px; padding:8px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:13px; }
-  textarea { height:230px; resize:vertical; white-space:pre; }
+  textarea { height:240px; resize:vertical; white-space:pre; }
   .row { display:flex; gap:8px; } .row > * { flex:1; }
-  button { margin-top:16px; width:100%; background:var(--accent); color:#fff; border:0; border-radius:6px; padding:10px; font-weight:600; cursor:pointer; }
-  button:disabled { opacity:.5; cursor:default; }
+  button.go { margin-top:16px; width:100%; background:var(--accent); color:#fff; border:0; border-radius:6px; padding:10px; font-weight:600; cursor:pointer; }
+  button.go:disabled { opacity:.5; cursor:default; }
   .view { flex:1; position:relative; overflow:hidden; }
   #graph { width:100%; height:100%; display:block; }
   #msg { position:absolute; top:12px; left:12px; right:12px; padding:8px 12px; border-radius:6px; background:#3d1f23; color:#ffb3ba; border:1px solid #8b3a3a; display:none; }
   .legend { position:absolute; bottom:14px; left:14px; background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-size:12px; }
   .bar { width:160px; height:12px; border-radius:3px; margin:6px 0 2px; background:linear-gradient(90deg,#d1495b,#edae49,#66a182); }
   .barlabels { display:flex; justify-content:space-between; color:var(--muted); }
+  .hint { color:var(--muted); font-size:12px; text-transform:none; letter-spacing:0; }
   .examples { display:flex; flex-wrap:wrap; gap:6px; margin:4px 0 6px; }
-  .examples button { width:auto; margin:0; padding:5px 9px; font-size:12px; font-weight:500;
-    background:var(--panel); color:var(--ink); border:1px solid var(--line); border-radius:14px; cursor:pointer; }
+  .examples button { width:auto; padding:5px 9px; font-size:12px; font-weight:500; background:var(--panel); color:var(--ink); border:1px solid var(--line); border-radius:14px; cursor:pointer; }
   .examples button:hover { border-color:var(--accent); color:var(--accent); }
-  .examples .ex-group { width:100%; color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.04em; margin-top:6px; }
-  .tabs { display:flex; flex-wrap:wrap; gap:4px; margin-bottom:12px; border-bottom:1px solid var(--line); padding-bottom:8px; }
-  .tabs button { width:auto; margin:0; padding:6px 10px; font-size:12px; font-weight:600; background:transparent; color:var(--muted); border:1px solid transparent; border-radius:6px; cursor:pointer; }
-  .tabs button:hover { color:var(--ink); }
-  .tabs button.active { background:var(--accent); color:#fff; }
+  .modes { display:flex; flex-wrap:wrap; gap:4px; margin-bottom:12px; border-bottom:1px solid var(--line); padding-bottom:8px; }
+  .modes button { padding:6px 10px; font-size:12px; font-weight:600; background:transparent; color:var(--muted); border:1px solid transparent; border-radius:6px; cursor:pointer; }
+  .modes button:hover { color:var(--ink); }
+  .modes button.active { background:var(--accent); color:#fff; }
   .info { font-size:13px; color:var(--ink); }
   .info p { margin:8px 0; } .info ul { margin:8px 0; padding-left:18px; } .info li { margin:4px 0; color:var(--muted); }
-  .info code { background:var(--bg); border:1px solid var(--line); border-radius:4px; padding:0 4px; font-size:12px; color:var(--ink); }
-  .hint { color:var(--muted); font-size:12px; margin-top:4px; }
+  .info code { background:var(--bg); border:1px solid var(--line); border-radius:4px; padding:0 4px; font-size:12px; }
 </style>
 </head>
 <body>
-<header>
-  <h1>IMPaCT</h1><span>Interval-MDP visualizer — nodes are heat-mapped by robust satisfaction probability</span>
-</header>
+<header><h1>IMPaCT</h1><span id="subtitle">visualizers for verified stochastic synthesis</span></header>
 <div class="wrap">
   <div class="controls">
-    <div class="tabs" id="tabs"></div>
-    <label>Examples <span class="hint">— click to load &amp; run (tutorial)</span></label>
+    <div class="modes" id="modes"></div>
+    <label>Examples <span class="hint">— click to load &amp; run</span></label>
     <div class="examples" id="examples"></div>
 
-   <div id="solverPanel">
-    <label>Model</label>
-    <textarea id="model" spellcheck="false"></textarea>
+    <div id="modePanel">
+      <label id="modelLabel">Model</label>
+      <textarea id="model" spellcheck="false"></textarea>
 
-    <div class="row">
-      <div><label>Format</label>
-        <select id="format"><option value="imdp">.imdp</option><option value="prism">PRISM</option></select></div>
-      <div><label>Property</label>
-        <select id="prop">
-          <option value="reach">reach (F)</option>
-          <option value="safety">safety (G)</option>
-          <option value="buchi">buchi (G F)</option>
-          <option value="persist">persist (F G)</option>
-          <option value="patrol">patrol (&amp;G F)</option>
-          <option value="next">next (X)</option>
-          <option value="until">until (U)</option>
-          <option value="ltl">LTL formula</option>
-        </select></div>
+      <div id="c_format" class="row">
+        <div><label>Format</label>
+          <select id="format"><option value="imdp">.imdp</option><option value="prism">PRISM</option></select></div>
+        <div><label>Property</label>
+          <select id="prop">
+            <option value="reach">reach (F)</option><option value="safety">safety (G)</option>
+            <option value="buchi">buchi (G F)</option><option value="persist">persist (F G)</option>
+            <option value="patrol">patrol (&amp;G F)</option><option value="next">next (X)</option>
+            <option value="until">until (U)</option><option value="ltl">LTL formula</option>
+          </select></div>
+      </div>
+      <div id="c_label"><label>Label(s) / formula <span class="hint">— a,b for patrol/until; a formula for LTL</span></label>
+        <input id="label" value="target"/></div>
+      <div id="c_bound" class="row">
+        <div><label>Bound</label>
+          <select id="bound"><option value="both">both</option><option value="pess">robust</option><option value="opt">optimistic</option></select></div>
+        <div><label>Color by</label>
+          <select id="colorby"><option value="pess">robust</option><option value="opt">optimistic</option></select></div>
+      </div>
+      <div id="c_cap"><label>Max states to render</label><input id="cap" type="number" value="60" min="2"/></div>
+      <div id="c_eps"><label>Precision &epsilon;</label><input id="eps" value="1e-6"/></div>
+      <div id="c_horizon"><label>Horizon (steps)</label><input id="horizon" type="number" value="4" min="1"/></div>
+
+      <button class="go" id="go">Run &amp; visualize</button>
+      <div class="hint" id="status" style="margin-top:8px"></div>
     </div>
-    <label>Label(s) / formula
-      <span class="hint">— comma-separated for patrol/until (a,b); an LTL formula for "LTL formula"</span></label>
-    <input id="label" value="target"/>
-    <div class="row">
-      <div><label>Bound</label>
-        <select id="bound"><option value="both">both</option><option value="pess">robust (pess)</option><option value="opt">optimistic</option></select></div>
-      <div><label>Color by</label>
-        <select id="colorby"><option value="pess">robust</option><option value="opt">optimistic</option></select></div>
-    </div>
-    <label>Max states to render</label>
-    <input id="cap" type="number" value="60" min="2"/>
-    <button id="go">Solve &amp; visualize</button>
-    <div class="hint" id="status"></div>
-   </div>
+    <div id="aboutPanel" class="info" style="display:none"></div>
   </div>
+
   <div class="view">
     <svg id="graph"></svg>
     <div id="msg"></div>
-    <div class="legend">
+    <div class="legend" id="legend">
       satisfaction probability<div class="bar"></div>
       <div class="barlabels"><span>0</span><span>0.5</span><span>1</span></div>
-      <div style="margin-top:8px;color:var(--muted)">◯ thick border = initial state · ★ = labelled state</div>
+      <div style="margin-top:8px;color:var(--muted)" id="legendNote">◯ thick border = initial · ★ = labelled</div>
     </div>
   </div>
 </div>

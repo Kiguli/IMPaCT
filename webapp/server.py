@@ -26,15 +26,25 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 HERE = os.path.dirname(os.path.abspath(__file__))
 STATIC = os.path.join(HERE, "static")
 
-def default_solver():
-    for name in ("imdp_solve", "imdp_solve.exe"):
-        cand = os.path.join(HERE, "..", "tools", name)
+def tool(name):
+    for n in (name, name + ".exe"):
+        cand = os.path.join(HERE, "..", "tools", n)
         if os.path.exists(cand):
             return os.path.abspath(cand)
-    return os.environ.get("IMPACT_SOLVE", os.path.join(HERE, "..", "tools", "imdp_solve"))
+    return os.path.abspath(os.path.join(HERE, "..", "tools", name))
 
-SOLVER = default_solver()
+SOLVER = tool("imdp_solve")
 STATE_CAP = 200          # hard safety cap for the backend (front-end caps rendering)
+
+# (endpoint, tool, file-suffix, extra-args-builder) for the model-file CLIs.
+def _grid_args(req):    return ["--eps", str(req.get("eps", 1e-6))]
+def _zone_args(req):    return [str(req.get("target", 0)), req.get("engine", "zone"), req.get("bound", "pess")]
+def _belief_args(req):  return [str(req.get("horizon", 4)), req.get("bound", "max")]
+CLI_ENDPOINTS = {
+    "/api/grid":       ("grid_heatmap",      ".sys",   _grid_args),
+    "/api/zonegraph":  ("ta_zonegraph",      ".pta",   _zone_args),
+    "/api/belieftree": ("pomdp_belieftree",  ".pomdp", _belief_args),
+}
 
 CONTENT = {".html": "text/html", ".js": "application/javascript", ".css": "text/css"}
 
@@ -60,13 +70,16 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, f.read(), CONTENT.get(ext, "application/octet-stream"))
 
     def do_POST(self):
-        if self.path != "/api/solve":
+        if self.path not in ("/api/solve",) and self.path not in CLI_ENDPOINTS:
             return self._send(404, json.dumps({"error": "not found"}))
         try:
             n = int(self.headers.get("Content-Length", 0))
             req = json.loads(self.rfile.read(n) or b"{}")
         except Exception as e:
             return self._send(400, json.dumps({"error": f"bad request: {e}"}))
+
+        if self.path in CLI_ENDPOINTS:
+            return self._run_model_cli(req)
 
         model = req.get("model", "")
         fmt = req.get("format", "imdp")            # imdp | prism
@@ -92,6 +105,30 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, json.dumps(out))
         except subprocess.TimeoutExpired:
             return self._send(504, json.dumps({"error": "solve timed out (model too large for the web demo)"}))
+        except Exception as e:
+            return self._send(500, json.dumps({"error": str(e)}))
+        finally:
+            try: os.unlink(tf.name)
+            except OSError: pass
+
+    def _run_model_cli(self, req):
+        name, suffix, argbuilder = CLI_ENDPOINTS[self.path]
+        binpath = tool(name)
+        model = req.get("model", "")
+        if not model.strip():
+            return self._send(400, json.dumps({"error": "empty model"}))
+        if not os.path.exists(binpath):
+            return self._send(500, json.dumps({"error": f"tool not built: {binpath} (see webapp/README)"}))
+        tf = tempfile.NamedTemporaryFile("w", suffix=suffix, delete=False)
+        try:
+            tf.write(model); tf.close()
+            cmd = [binpath, tf.name] + argbuilder(req)
+            p = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+            if p.returncode != 0:
+                return self._send(400, json.dumps({"error": p.stderr.strip() or "tool failed"}))
+            return self._send(200, p.stdout)   # tools already emit JSON
+        except subprocess.TimeoutExpired:
+            return self._send(504, json.dumps({"error": "timed out (model too large for the demo)"}))
         except Exception as e:
             return self._send(500, json.dumps({"error": str(e)}))
         finally:
