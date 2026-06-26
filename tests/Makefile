@@ -15,8 +15,10 @@
 CXX ?= c++
 CXXFLAGS ?= -std=c++17 -O2 -Wall -Wextra
 
-# Implementation under test. Replace with ../src/*.cpp as components are built.
-IMPL_SRCS := contracts/stubs.cpp
+# Implementation under test. Real src/*.cpp replace stubs as components land.
+IMPL_SRCS := ../src/omaximization.cpp \
+             ../src/graph_utils.cpp \
+             contracts/stubs.cpp
 
 TEST_SRCS := unit/test_main.cpp \
              unit/test_omaximization.cpp \

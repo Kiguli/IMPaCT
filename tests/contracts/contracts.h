@@ -19,65 +19,16 @@
 #include <string>
 #include <cstddef>
 
+// Phase 1a — O-maximization. Now implemented (verified extraction of IMPaCT's
+// sorted approach); the production interface lives in src/. The behavioural
+// contract (feasibility, optimality, throwing) is documented there and in
+// tests/unit/test_omaximization.cpp.
+#include "../../src/omaximization.h"
+
+// Phase 1b — SCC + MEC decomposition. Implemented; production interface in src/.
+#include "../../src/graph_utils.h"
+
 namespace impact {
-
-// ---------------------------------------------------------------------------
-// Phase 1a — O-maximization (robust inner Bellman solve over a box-interval
-// ambiguity set). Replaces the per-state GLPK LP.
-// Ref: Givan-Leach-Dean (AIJ 2000); Lahijanian-Andersson-Belta (IEEE TAC 2015).
-// ---------------------------------------------------------------------------
-namespace omax {
-
-    enum class Sense { Min, Max };
-
-    struct Result {
-        std::vector<double> p;  // optimal feasible distribution over successors
-        double value;           // dot(p, V)
-    };
-
-    // Given per-successor lower bounds `lower`, upper bounds `upper`, and a value
-    // vector `V` (all equal length n >= 1), return the distribution p in the box
-    // [lower,upper] with sum(p)=1 that minimizes (Sense::Min) or maximizes
-    // (Sense::Max) dot(p,V), and that optimal value.
-    //
-    // CONTRACT:
-    //   * p[i] in [lower[i], upper[i]] for all i (within 1e-9)
-    //   * sum(p) == 1 (within 1e-9)
-    //   * value == dot(p,V) is the true optimum (matches brute-force vertex enum)
-    //   * THROWS std::invalid_argument if sizes differ, n==0, any lower>upper,
-    //     sum(lower) > 1 + 1e-12, or sum(upper) < 1 - 1e-12 (infeasible box).
-    Result optimize(const std::vector<double>& lower,
-                    const std::vector<double>& upper,
-                    const std::vector<double>& V,
-                    Sense sense);
-
-} // namespace omax
-
-// ---------------------------------------------------------------------------
-// Phase 1b — Graph algorithms: SCC + Maximal End Component decomposition.
-// Refs: Tarjan (1972) SCC; de Alfaro (1997), Chatterjee-Henzinger (JACM 2014) MEC.
-// ---------------------------------------------------------------------------
-namespace graph {
-
-    // Plain directed graph as adjacency list: succ[u] = list of v with edge u->v.
-    using AdjList = std::vector<std::vector<int>>;
-
-    // Return the strongly connected components. Each component is a node list,
-    // sorted ascending; the outer vector is sorted by each component's min node.
-    // (Canonical ordering so tests can compare deterministically.)
-    std::vector<std::vector<int>> sccs(const AdjList& succ);
-
-    // MDP graph: g[s][a] = list of possible successor states of action a in s
-    // (the "support" graph — a transition is present iff its upper bound > 0).
-    using MDPGraph = std::vector<std::vector<std::vector<int>>>;
-
-    // Return the maximal end components. Each MEC is a sorted state list; outer
-    // vector sorted by min state. Singletons with no self-sustaining action are
-    // NOT returned (only genuine end components: a sub-MDP closed under some
-    // action choice whose induced graph is strongly connected).
-    std::vector<std::vector<int>> mecs(const MDPGraph& g);
-
-} // namespace graph
 
 // ---------------------------------------------------------------------------
 // Phase 1c — Sound robust interval iteration for reachability on an IMDP.

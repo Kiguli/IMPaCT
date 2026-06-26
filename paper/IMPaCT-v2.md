@@ -43,6 +43,26 @@ Format per entry: `date — feature | decision + rationale | algorithm | refs | 
   Two notes: IMPaCT's proceedings DOI unconfirmed (cite arXiv:2401.03555);
   Asadi AAAI-26 volume is forward-dated (preprint is safe to cite).
 
+- **Phase 1a — O-maximization VERIFIED.** Confirmed IMPaCT's existing "sorted"
+  synthesis already implements the O-maximization sort-and-assign (GPU_synthesis.cpp
+  inner loop: start at lower bounds, allocate residual in value order — avoid set
+  (value 0) → states ascending → target (value 1) — capping at interval widths).
+  Extracted the core into `src/omaximization.{h,cpp}` and validated against the
+  contract: 7 cases / 8465 assertions green, incl. a 500-instance randomized
+  differential vs independent brute-force vertex enumeration. Algorithm: Givan-
+  Leach-Dean (AIJ 2000); Lahijanian et al. (IEEE TAC 2015).
+  Also noted: the sorted loop stops on a tolerance and only *warns* about absorbing
+  states (GPU_synthesis.cpp ~L186) — motivates the Phase 1c sound interval iteration.
+  Next: refactor IMDP/GPU_synthesis to call the shared verified routine (after goldens).
+- **Phase 1b — SCC + MEC implemented.** `src/graph_utils.{h,cpp}`: iterative
+  Tarjan SCC + maximal-end-component decomposition. MEC uses the correct
+  recompute-SCC-under-candidate's-own-staying-actions fixpoint (a naive "every
+  state has a staying action" acceptance is unsound under leaking actions —
+  verified by constructing a counterexample before coding). 6 cases green.
+  Refs: Tarjan (1972); de Alfaro (1997); Chatterjee-Henzinger (JACM 2014).
+  Status after 1a+1b: 13/23 contract cases green; remaining red = Phase 1c
+  interval iteration (5) + Phase 2 LTLf (5).
+
 <!-- add new dated entries above this line -->
 
 ---

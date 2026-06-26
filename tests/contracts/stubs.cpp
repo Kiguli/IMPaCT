@@ -15,21 +15,8 @@
 
 namespace impact {
 
-namespace omax {
-    Result optimize(const std::vector<double>&, const std::vector<double>&,
-                    const std::vector<double>&, Sense) {
-        throw std::logic_error("not implemented: impact::omax::optimize (Phase 1a)");
-    }
-}
-
-namespace graph {
-    std::vector<std::vector<int>> sccs(const AdjList&) {
-        throw std::logic_error("not implemented: impact::graph::sccs (Phase 1b)");
-    }
-    std::vector<std::vector<int>> mecs(const MDPGraph&) {
-        throw std::logic_error("not implemented: impact::graph::mecs (Phase 1b)");
-    }
-}
+// omax::optimize    -> src/omaximization.cpp (Phase 1a) — no stub.
+// graph::sccs/mecs  -> src/graph_utils.cpp   (Phase 1b) — no stub.
 
 namespace solve {
     IntervalResult maxReachPessimistic(const IMDPModel&, const std::set<int>&, double) {
