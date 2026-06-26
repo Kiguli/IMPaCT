@@ -19,4 +19,6 @@ See [`README.md`](README.md) for conventions and the literature-counterexample p
 | [0011](0011-robust-infinite-horizon-unbounded-noise.md) | Infinite-horizon ω-regular value is 0 on unbounded-noise abstractions (no non-trivial ECs) | resolved | medium | design-decision, abstraction, omega-regular |
 | [0012](0012-v1-inner-solve-lp-omax-unify-and-audit.md) | Unify v1 inner-solve on O-maximization (LP names -> aliases) + v1 code audit | in-progress | medium | refactor, cleanup, performance, tool-v1 |
 | [0013](0013-finite-safe-sorted-upper-bound-bugs.md) | Bugs in the finite-horizon safety Sorted upper-bound kernels (now-live path) | in-progress | high | correctness, tool-v1, safety, needs-toolchain-verification |
-| [0014](0014-pta-zone-mdp-pmax-only.md) | PTA forward zone-MDP is exact for Pmax reachability; Pmin needs backward/game construction | open | low | design-decision, timed-automata, scope |
+| [0014](0014-pta-zone-mdp-pmax-only.md) | PTA forward zone-MDP is exact for Pmax reachability; Pmin needs backward/game construction | resolved | low | design-decision, timed-automata, scope |
+| [0015](0015-robust-interval-pomdp.md) | Robust (interval) POMDP solving — research item, transfer to the big machine | open | medium | research, pomdp, robust, needs-big-machine |
+| [0016](0016-full-ltl-ldba-external.md) | Full arbitrary-LTL -> LDBA front-end (Spot/Owl) — needs external toolchain | open | medium | enhancement, omega-regular, ltl, needs-big-machine |

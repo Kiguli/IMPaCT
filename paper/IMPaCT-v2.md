@@ -523,6 +523,22 @@ Format per entry: `date — feature | decision + rationale | algorithm | refs | 
   wait-out=0, lower-of-two=0.3). Both engines now selectable. Suite: **121 cases /
   643,523 assertions green.**
 
+- **LTL fragment dispatcher** (`src/ltlspec.{h,cpp}`) — one entry point that parses an
+  LTL formula and routes the supported fragment to the verified solvers: `F`→reach,
+  `G`→safety, `U`→until, `X`→next, `G F`→Büchi, `F G`→persistence, `⋀ G F`→patrol,
+  boolean-of-atoms→indicator (self-contained recursive-descent parser; no external
+  deps). Out-of-fragment formulas (arbitrary nested LTL) throw a clear
+  "needs LDBA (ISSUE-0016)". TDD (`test_ltlspec.cpp`): every route matches its
+  underlying solver, optimistic flavour routes too, and out-of-fragment cases throw.
+  Suite: **128 cases / 643,557 assertions green.** Ref: Pnueli (FOCS 1977, verified).
+- **Remaining-plan items recorded for the big machine / research** (per user request
+  to file issues for what can't be finalized here): **ISSUE-0015** robust (interval)
+  POMDP (research; the robust belief-update couples nature's choice with the posterior
+  — deferred rather than guessed); **ISSUE-0016** full arbitrary-LTL→LDBA via Spot/Owl
+  (external toolchain). The large native LTL fragment is delivered above; the LDBA
+  route plugs into the already-verified `omega::maxBuchiPessimistic` (robust accepting
+  ECs) once Spot/Owl is linked on the build machine.
+
 <!-- add new dated entries above this line -->
 
 ---

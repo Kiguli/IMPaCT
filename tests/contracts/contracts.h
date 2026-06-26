@@ -69,4 +69,7 @@
 // Partially observable MDPs (finite-horizon belief-state reachability).
 #include "../../src/pomdp.h"
 
+// LTL specification front-end (fragment dispatcher over the verified solvers).
+#include "../../src/ltlspec.h"
+
 #endif // IMPACT_TEST_CONTRACTS_H
