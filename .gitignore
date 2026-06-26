@@ -8,9 +8,10 @@ __pycache__/
 *.pyc
 .pytest_cache/
 .docker-build.log
-
 # partial/OOM baseline outputs
 tests/golden/
-
 # cross-tool CLI build artifact
 tools/imdp_solve
+tools/grid_heatmap
+tools/ta_zonegraph
+tools/pomdp_belieftree

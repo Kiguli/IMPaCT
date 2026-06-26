@@ -38,7 +38,7 @@ STATE_CAP = 200          # hard safety cap for the backend (front-end caps rende
 
 # (endpoint, tool, file-suffix, extra-args-builder) for the model-file CLIs.
 def _grid_args(req):    return ["--eps", str(req.get("eps", 1e-6))]
-def _zone_args(req):    return [str(req.get("target", 0)), req.get("engine", "zone"), req.get("bound", "pess")]
+def _zone_args(req):    return [str(req.get("target", "-")), req.get("engine", "zone"), req.get("bound", "pess")]
 def _belief_args(req):  return [str(req.get("horizon", 4)), req.get("bound", "max")]
 CLI_ENDPOINTS = {
     "/api/grid":       ("grid_heatmap",      ".sys",   _grid_args),

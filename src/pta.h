@@ -49,6 +49,7 @@ namespace pta {
         int init = 0;
         int nSym = 0;
         std::vector<int> locOf;     // location of each symbolic state (sink = -1)
+        std::vector<std::string> descr;  // human-readable "L<loc>: x_i∈[lo,hi]" per state
         bool hitCap = false;
     };
 

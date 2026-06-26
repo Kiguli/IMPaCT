@@ -18,6 +18,22 @@ void delayWithin(dbm::Zone& z, const std::vector<Constraint>& inv) {
     applyAll(z, inv);
 }
 
+// Human-readable per-clock interval summary of a zone, e.g. "x1∈[0,2], x2∈[1,∞)".
+std::string zoneSummary(int loc, const dbm::Zone& z) {
+    std::string s = "L" + std::to_string(loc);
+    if (loc < 0) return "sink";
+    s += ": ";
+    for (int i = 1; i <= z.n; ++i) {
+        const dbm::Bound& hi = z.m[i][0];        // x_i <= hi.c
+        const dbm::Bound& lo = z.m[0][i];        // -x_i <= lo.c  =>  x_i >= -lo.c
+        std::string l = lo.isInf() ? "0" : std::to_string(-lo.c);
+        std::string h = hi.isInf() ? "∞" : std::to_string(hi.c);
+        s += "x" + std::to_string(i) + "∈[" + l + "," + h + "]";
+        if (i < z.n) s += ", ";
+    }
+    return s;
+}
+
 // Canonical key for a symbolic state: location + the (canonical) DBM bounds.
 std::string key(int loc, const dbm::Zone& z) {
     std::string s = std::to_string(loc) + "|";
@@ -117,9 +133,11 @@ SymbolicMDP build(const PTA& p, int targetLoc, int maxStates) {
     out.nSym = N;
     out.locOf = locs;
     out.model.assign(N, {});
+    out.descr.assign(N, "");
     for (int s = 0; s < N; ++s) {
         if (s < (int)acts.size() && !acts[s].empty()) out.model[s] = acts[s];
         else out.model[s] = { { {s, 1.0, 1.0} } };          // unexpanded / sink -> absorbing
+        out.descr[s] = zoneSummary(locs[s], zones[s]);
     }
     for (int s = 0; s < N; ++s) if (locs[s] == targetLoc) out.targets.insert(s);
     out.hitCap = cap;

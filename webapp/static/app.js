@@ -126,6 +126,63 @@ const GRID_EX = [
   { name:"safety around obstacle",  model:SYS_SAFE },
 ];
 
+const PTA_PROB=`# PTA: at clock x>=2 a probabilistic edge -> 0.7 target L1 / 0.3 dead L2
+clocks 1
+init 0
+kmax 1 3
+target 1
+edge 0 | 1>=2 | 0.7 1 ; 0.3 2
+edge 2 | 1>=0 | 1.0 2`;
+const PTA_SEQ=`# PTA: L0 --(x>=1,reset)--> L1 --(x>=1)--> {0.5: target L2 / 0.5: L3}
+clocks 1
+init 0
+kmax 1 2
+target 2
+edge 0 | 1>=1 | 1.0 1 r1
+edge 1 | 1>=1 | 0.5 2 ; 0.5 3
+edge 3 | 1>=0 | 1.0 3`;
+const PTA_INV=`# PTA: invariant x<=1 blocks the x>=2 guard -> target unreachable
+clocks 1
+init 0
+kmax 1 2
+target 1
+inv 0 1<=1
+edge 0 | 1>=2 | 1.0 1`;
+const PTA_EX = [
+  { name:"probabilistic edge",   model:PTA_PROB },
+  { name:"sequential + reset",   model:PTA_SEQ },
+  { name:"invariant blocks goal",model:PTA_INV },
+];
+
+const POM_LINEAR=`# per-step 0.5 to target, no information; horizon 3 -> 0.875
+states 2
+actions 1
+obs 1
+init 0:1
+target 1
+horizon 3
+T 0 0 : 0:0.5 1:0.5
+T 0 1 : 1:1`;
+const POM_BRANCH=`# 2 observations -> branching belief tree. obs reveals state 1.
+states 3
+actions 2
+obs 2
+init 0:1
+target 2
+horizon 3
+T 0 0 : 0:0.5 1:0.5
+T 1 0 : 0:0.7 2:0.3
+T 0 1 : 2:1
+T 1 1 : 2:1
+T 0 2 : 2:1
+T 1 2 : 2:1
+O 0 1 : 1:1
+O 1 1 : 1:1`;
+const POM_EX = [
+  { name:"no info (linear)",  model:POM_LINEAR, horizon:3 },
+  { name:"branching (2 obs)", model:POM_BRANCH, horizon:3 },
+];
+
 // ===================== node-link graph (IMDP) ===============================
 function renderGraph(data, colorBy) {
   const svg=$("graph"); svg.innerHTML="";
@@ -180,6 +237,72 @@ function renderHeatmap(data) {
   $("status").textContent=`${nx}×${ny} cells · ${data.prop} · nnz=${data.nnz}`;
 }
 
+// ===================== zone graph (timed automata / PTA) ====================
+function renderZoneGraph(data) {
+  const svg=$("graph"); svg.innerHTML="";
+  const nodes=data.nodes, n=nodes.length, W=svg.clientWidth||800, H=svg.clientHeight||600, cx=W/2, cy=H/2, R=Math.min(W,H)/2-80;
+  const pos={}; nodes.forEach((nd,i)=>{ const a=-Math.PI/2+2*Math.PI*i/Math.max(1,n); pos[nd.id]=[cx+R*Math.cos(a), cy+R*Math.sin(a)]; });
+  const defs=mk("defs",{}); const m=mk("marker",{id:"arrz",viewBox:"0 0 10 10",refX:"9",refY:"5",markerWidth:"7",markerHeight:"7",orient:"auto-start-reverse"});
+  m.appendChild(mk("path",{d:"M0,0 L10,5 L0,10 z",fill:"#6e7681"})); defs.appendChild(m); svg.appendChild(defs);
+  const r=Math.max(13,Math.min(30,360/Math.max(1,n)));
+  for(const e of data.edges){
+    if(!(e.from in pos)||!(e.to in pos))continue;
+    const [x1,y1]=pos[e.from],[x2,y2]=pos[e.to],dx=x2-x1,dy=y2-y1,L=Math.hypot(dx,dy)||1,ux=dx/L,uy=dy/L;
+    const ln=mk("line",{x1:x1+ux*r,y1:y1+uy*r,x2:x2-ux*r,y2:y2-uy*r,stroke:"#6e7681","stroke-width":1.2,"marker-end":"url(#arrz)"});
+    const t=mk("title",{}); t.textContent=`p=${e.prob}`; ln.appendChild(t); svg.appendChild(ln);
+    const mx=(x1+x2)/2,my=(y1+y2)/2; svg.appendChild(mk("text",{x:mx,y:my-2,"text-anchor":"middle",fill:"#8b949e","font-size":10})).textContent=(+e.prob).toFixed(2);
+  }
+  nodes.forEach(nd=>{
+    const [x,y]=pos[nd.id], g=mk("g",{}), isInit=(nd.id===data.init);
+    const c=mk("circle",{cx:x,cy:y,r:r,fill:heat(nd.value),stroke:isInit?"#e6edf3":"#0f1419","stroke-width":isInit?3.5:1.5});
+    const tt=mk("title",{}); tt.textContent=`${nd.descr}\nreach value = ${nd.value.toFixed(3)}${nd.target?" (target)":""}${isInit?" (init)":""}`; c.appendChild(tt); g.appendChild(c);
+    g.appendChild(mk("text",{x:x,y:y+4,"text-anchor":"middle",fill:"#0f1419","font-size":Math.max(9,r*0.5),"font-weight":"700"})).textContent="L"+nd.loc;
+    if(nd.target){const s=mk("text",{x:x,y:y-r-4,"text-anchor":"middle",fill:"#edae49","font-size":13});s.textContent="★";g.appendChild(s);}
+    g.appendChild(mk("text",{x:x,y:y+r+14,"text-anchor":"middle",fill:"#8b949e","font-size":11})).textContent=nd.value.toFixed(2);
+    svg.appendChild(g);
+  });
+  $("status").textContent=`${n} symbolic states · target L${data.target}`;
+}
+
+// ===================== belief tree (POMDP) ==================================
+const BELCOLORS = ["#4493f8","#edae49","#66a182","#d1495b","#a78bfa","#8b949e"];
+function renderBeliefTree(data) {
+  const svg=$("graph"); svg.innerHTML="";
+  const nodes=data.nodes; if(!nodes.length){ $("status").textContent="empty"; return; }
+  const byId={}; nodes.forEach(n=>byId[n.id]=n);
+  const ch={}; nodes.forEach(n=>{ if(n.parent>=0)(ch[n.parent]=ch[n.parent]||[]).push(n.id); });
+  const root=nodes.find(n=>n.parent<0)||nodes[0];
+  const X={}; let leaf=0;
+  (function assign(id){ const c=ch[id]||[]; if(!c.length){X[id]=leaf++;return X[id];} const xs=c.map(assign); X[id]=(xs[0]+xs[xs.length-1])/2; return X[id]; })(root.id);
+  const maxLeaf=Math.max(1,leaf-1), H0=data.horizon, W=svg.clientWidth||800, Hh=svg.clientHeight||600, m=60;
+  const PX=id=>m+(maxLeaf?X[id]/maxLeaf:0.5)*(W-2*m);
+  const PY=d=>m+((H0-d)/Math.max(1,H0))*(Hh-2*m-20);
+  // edges
+  for(const n of nodes){ if(n.parent<0)continue; const x1=PX(n.parent),y1=PY(byId[n.parent].depth),x2=PX(n.id),y2=PY(n.depth);
+    svg.appendChild(mk("line",{x1,y1,x2,y2,stroke:"#6e7681","stroke-width":1.2}));
+    svg.appendChild(mk("text",{x:(x1+x2)/2+4,y:(y1+y2)/2,fill:"#8b949e","font-size":10})).textContent=`o${n.obs}:${n.prob.toFixed(2)}`;
+  }
+  // nodes: belief mini-bar + value
+  const bw=46, bh=12;
+  for(const n of nodes){
+    const x=PX(n.id), y=PY(n.depth), g=mk("g",{});
+    // value disc
+    const c=mk("circle",{cx:x,cy:y,r:7,fill:heat(n.value),stroke:(n.parent<0)?"#e6edf3":"#0f1419","stroke-width":(n.parent<0)?2.5:1});
+    const tt=mk("title",{}); tt.textContent=`belief [${n.belief.map(v=>v.toFixed(2)).join(", ")}]\nvalue ${n.value.toFixed(3)}`+(n.action>=0?`\nbest action ${n.action}`:"");
+    c.appendChild(tt); g.appendChild(c);
+    // belief stacked bar
+    let bx=x-bw/2; const by=y+10;
+    n.belief.forEach((pv,si)=>{ const w=pv*bw; if(w>0.5){ g.appendChild(mk("rect",{x:bx,y:by,width:w,height:bh,fill:BELCOLORS[si%BELCOLORS.length]})); bx+=w; } });
+    g.appendChild(mk("rect",{x:x-bw/2,y:by,width:bw,height:bh,fill:"none",stroke:"#30363d"}));
+    g.appendChild(mk("text",{x:x,y:by+bh+11,"text-anchor":"middle",fill:"#8b949e","font-size":10})).textContent=n.value.toFixed(2);
+    svg.appendChild(g);
+  }
+  // legend for states
+  let lx=14, ly=Hh-26;
+  for(let s=0;s<data.nStates && s<BELCOLORS.length;s++){ svg.appendChild(mk("rect",{x:lx,y:ly,width:10,height:10,fill:BELCOLORS[s]})); svg.appendChild(mk("text",{x:lx+14,y:ly+9,fill:"#8b949e","font-size":11})).textContent="s"+s; lx+=40; }
+  $("status").textContent=`${nodes.length} belief nodes · horizon ${data.horizon} · root value ${root.value.toFixed(3)}`;
+}
+
 const ABOUT=`<p>The visualizers cover IMPaCT's verified stochastic-synthesis stack:</p>
 <ul>
 <li><b>IMDP graph</b> — reach/safety/until/next, ω-regular (GF/FG/patrol) and LTL formulas
@@ -202,6 +325,12 @@ const MODES = {
   grid:   { label:"Grid heatmap", modelLabel:"System (.sys, 2-D affine)", endpoint:"/api/grid", controls:["eps"], examples:GRID_EX,
             body:()=>({model:$("model").value, eps:$("eps").value}),
             render:renderHeatmap },
+  zone:   { label:"Zone graph", modelLabel:"Timed automaton (.pta)", endpoint:"/api/zonegraph", controls:["bound"], examples:PTA_EX,
+            body:()=>({model:$("model").value, bound:($("bound").value==="opt"?"opt":"pess"), engine:"zone"}),
+            render:renderZoneGraph },
+  belief: { label:"Belief tree", modelLabel:"POMDP (.pomdp)", endpoint:"/api/belieftree", controls:["horizon"], examples:POM_EX,
+            body:()=>({model:$("model").value, horizon:$("horizon").value}),
+            render:renderBeliefTree },
   about:  { label:"About", modelLabel:"", endpoint:null, controls:[], examples:[], render:()=>{} },
 };
 let mode = "imdp";
@@ -238,6 +367,7 @@ function loadExample(i) {
   const e=MODES[mode].examples[i]; if(!e) return;
   $("model").value=e.model;
   if(mode==="imdp"){ $("format").value=e.format; $("prop").value=e.prop; $("label").value=e.label; $("bound").value=e.bound; }
+  if(mode==="belief" && e.horizon){ $("horizon").value=e.horizon; }
 }
 
 async function run() {

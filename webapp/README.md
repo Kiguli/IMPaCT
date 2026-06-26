@@ -10,6 +10,18 @@ The C++ core is untouched: the backend shells to the verified `tools/imdp_solve`
 CLI (`--json`), which returns the model structure (states/edges/labels) plus
 per-state `[lower, upper]` values for the chosen property and sense.
 
+## Visualizer modes (tabs)
+- **IMDP graph** — Interval-MDP node-link graph, states heat-mapped by satisfaction
+  probability, for every property (reach/safety/until/next/buchi/persist/patrol/LTL).
+- **Grid heatmap** — a 2-D continuous system (`.sys`) abstracted to a sparse IMDP;
+  per quantized grid cell, the **robust (min)** and **optimistic (max)** probability
+  of the spec (reach/safety) shown as two heatmaps side by side.
+- **Zone graph** — the symbolic zone graph of a (probabilistic) timed automaton
+  (`.pta`): nodes are (location, zone) heat-mapped by reach probability.
+- **Belief tree** — the POMDP (`.pomdp`) optimal-policy belief tree: nodes show the
+  belief (stacked bar) and value; edges are (observation, P(obs)).
+- **About** — overview of the engines behind each tab.
+
 ## What it shows
 - The IMDP as a node-link graph (circular layout, self-contained SVG — no CDN).
 - Each state **heat-mapped** by its satisfaction probability (red → amber → green).
@@ -31,12 +43,23 @@ per-state `[lower, upper]` values for the chosen property and sense.
 
 ## Run
 ```sh
-# 1. build the solver CLI (pure std C++ — no SYCL/Armadillo needed)
+# 1. build the CLIs the web app shells to (pure std C++ — no SYCL/Armadillo needed)
 c++ -std=c++17 -O2 tools/imdp_solve.cpp \
     src/imdp_io.cpp src/prism.cpp src/solve.cpp \
     src/omaximization.cpp src/graph_utils.cpp src/omega.cpp \
     src/pctl.cpp src/ltlspec.cpp \
     -o tools/imdp_solve
+# grid-cell heatmap (continuous abstraction):
+c++ -std=c++17 -O2 tools/grid_heatmap.cpp \
+    src/system_io.cpp src/abstraction.cpp src/solve.cpp \
+    src/omaximization.cpp src/graph_utils.cpp -o tools/grid_heatmap
+# timed-automaton zone graph:
+c++ -std=c++17 -O2 tools/ta_zonegraph.cpp \
+    src/pta_io.cpp src/pta.cpp src/ta.cpp src/dbm.cpp src/solve.cpp \
+    src/omaximization.cpp src/graph_utils.cpp -o tools/ta_zonegraph
+# POMDP belief tree:
+c++ -std=c++17 -O2 tools/pomdp_belieftree.cpp \
+    src/pomdp_io.cpp src/pomdp.cpp -o tools/pomdp_belieftree
 
 # 2. run the app (Python 3, standard library only)
 python3 webapp/server.py            # open http://localhost:8000

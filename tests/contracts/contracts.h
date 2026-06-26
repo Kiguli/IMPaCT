@@ -72,6 +72,10 @@
 // Partially observable MDPs (finite-horizon belief-state reachability).
 #include "../../src/pomdp.h"
 
+// Text parsers for the visualizer model formats (.pta / .pomdp).
+#include "../../src/pta_io.h"
+#include "../../src/pomdp_io.h"
+
 // LTL specification front-end (fragment dispatcher over the verified solvers).
 #include "../../src/ltlspec.h"
 

@@ -34,6 +34,8 @@ IMPL_SRCS := ../src/omaximization.cpp \
              ../src/ta.cpp \
              ../src/pta.cpp \
              ../src/pomdp.cpp \
+             ../src/pta_io.cpp \
+             ../src/pomdp_io.cpp \
              ../src/ltlspec.cpp
 
 TEST_SRCS := unit/test_main.cpp \
@@ -54,6 +56,7 @@ TEST_SRCS := unit/test_main.cpp \
              unit/test_ta.cpp \
              unit/test_pta.cpp \
              unit/test_pomdp.cpp \
+             unit/test_model_io.cpp \
              unit/test_ltlspec.cpp
 
 BIN := run_tests
