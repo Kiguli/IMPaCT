@@ -37,12 +37,24 @@ entry points.
 Verified by reading the source (could NOT compile/run here — needs the
 AdaptiveCpp + Armadillo + GLPK + HDF5 toolchain, absent in this environment):
 
-- **REAL — finite-vs-infinite SAFETY inconsistency (LP path).** In
-  `finiteHorizonControllerImpl` the safe branch sets the Avoid objective coef to 0.0
-  (IMDP.cpp ~4937/4945) and never accumulates `glp_get_col_prim(lp, n+1)` (only does
-  so for reach, ~4972), whereas `infiniteHorizonControllerImpl` uses coef 1.0 (~3247)
-  and DOES accumulate the Avoid column for safe (~3281). One of the two is wrong.
-  **Mooted** by the unification (the LP path is no longer used); to be deleted.
+- **RETRACTED over-claim (was "REAL finite-vs-infinite SAFETY inconsistency").**
+  An earlier version of this audit called the LP finite/infinite avoid handling a
+  genuine bug ("one of the two is wrong"). That was an OVER-CLAIM (same pattern as
+  the ISSUE-0002 lesson) and is withdrawn — the user correctly pushed back. Verified
+  against the IMPaCT theory paper (Wooding-Lavaei, arXiv:2401.03555v2, Sec 5.1,
+  Algorithm 3, Remark 5.1) and by an adversarially-checked multi-agent review: the
+  two paths compute the SAME safety probability via two equivalent encodings —
+  finite uses direct stay-safe VI (avoid = value 0, no complement), infinite uses
+  reach-avoid VI (avoid = value-1 affine term) then a 1-complement. Proof (per fixed
+  policy/LP vertex, avoid lumping all non-safe mass so p_S + a = 1): with W=stay-safe
+  (W0=1) and V=reach-avoid (V0=0), 1 - V_{k+1} = sum_S T (1 - V_k) = W_{k+1}, so
+  W_k = 1 - V_k for every finite k. The infinite path keeps the affine avoid term for
+  CONVERGENCE (without it V0 sticks at 0n), not as a different quantity. The user's
+  conclusion ("finite does not need unsafe-state values") is therefore right; their
+  stated reason ("because we don't check convergence") is not the precise mechanism
+  (the direct encoding works at any horizon — it isn't horizon-specific). NOT a bug;
+  no action needed. (Genuine but separate bugs this review surfaced in the now-LIVE
+  finite-safe Sorted path are tracked in ISSUE-0013.)
 - **FALSE POSITIVE — "GLPK sparse-matrix indexing bug" (`&ja[0]`/`&ar[0]`).** This is
   the standard GLPK 1-based idiom: `ja`/`ar` are sized `n+extra+1`, populated at
   indices 1..len, and `glp_set_mat_row(lp,1,len,&ja[0],&ar[0])` reads indices 1..len

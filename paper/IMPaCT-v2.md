@@ -400,6 +400,24 @@ Format per entry: `date — feature | decision + rationale | algorithm | refs | 
   Tested end-to-end (HTTP 200 + correct values/errors); the richer Vue/Flask/Docker
   build from the plan layers on the same `/api/solve` contract later.
 
+- **Finite-safety audit follow-up (user pushback → ISSUE-0012 retraction + ISSUE-0013).**
+  The user challenged the ISSUE-0012 "finite-vs-infinite safety inconsistency = bug"
+  finding (correctly). An adversarially-checked multi-agent verification against the
+  IMPaCT theory paper (arXiv:2401.03555v2, Sec 5.1 / Algorithm 3 / Remark 5.1)
+  confirmed it is NOT a bug: finite safety uses direct stay-safe VI (avoid = value 0)
+  and infinite uses reach-avoid VI (avoid = value 1) + 1-complement — provably equal
+  (W_k = 1 - V_k ∀ finite k); the infinite affine avoid term is for convergence, not
+  a different quantity. Over-claim RETRACTED (ISSUE-0002 lesson reinforced).
+  - But the same review surfaced GENUINE, separate bugs in the now-live finite-safe
+    `Sorted` UPPER-bound kernels (`GPU_synthesis.cpp`): (1) avoid mass wrongly added
+    to the value (over-count); (2) an uninitialized `temp1` (UB); (3) a missing base
+    transition·value term; (4) a missing avoid-residual block — all in the upper
+    loops, fixed by mirroring the correct lower-bound siblings. Tracked in ISSUE-0013.
+    NOT compile-verified here (no SYCL toolchain) — flagged for the Windows toolchain
+    run, with the LP path / v2 `maxSafety` / cross-tool refs as oracles. Method note:
+    a Workflow (4 readers → reconcile → 3 adversarial refuters, 368k tokens) caught
+    both the retraction and the real bugs that a single pass missed.
+
 <!-- add new dated entries above this line -->
 
 ---

@@ -6246,10 +6246,13 @@ void IMDP::finiteHorizonSafeControllerSorted(bool IMDP_lower, size_t timeHorizon
                             
                             temp1 = 0;
                             s = 0.0;
-                            
-                            temp1 += accminAT[i];
+
+                            // ISSUE-0013: avoid mass is value 0 for finite (direct stay-safe) VI,
+                            // so it must NOT be added to temp1 (the value) — only to s
+                            // (normalization), as in the matching lower-bound loop. Removed an
+                            // erroneous `temp1 += accminAT[i];` here that over-counted the bound.
                             s = s + accminAT[i];
-                            
+
                             for (size_t col = 0; col < state_space_size; col++) {
                                 temp1 += accminT[(col*state_space_size) +i]*accs1[col];
                                 s = s+ accminT[(col*state_space_size) +i];
@@ -6427,18 +6430,29 @@ void IMDP::finiteHorizonSafeControllerSorted(bool IMDP_lower, size_t timeHorizon
                             // set base values to be equal to the minimal transition probabilities
                             double s;
                             double temp1;
+
+                            temp1 = 0;          // ISSUE-0013: temp1 was used uninitialized (UB)
                             s = 0.0;
-                            
+
                             s = s + accminAT[i];
-                            
+
                             for (size_t col = 0; col < state_space_size; col++) {
+                                temp1 += accminT[(col*state_space_size) +i]*accs1[col];   // ISSUE-0013: base transition*value term was missing
                                 s = s+ accminT[(col*state_space_size) +i];
                             }
-                            
+
+                            // ISSUE-0013: avoid-set residual block was missing here (present in
+                            // the matching lower-bound loop); avoid is value 0 so it only updates s.
+                            if ((1.0-s) <= accdAT[i]){
+                                s = 1.0;
+                            }else{
+                                s = s+accdAT[i];
+                            }
+
                             //maximize transitions between states
                             for(size_t col = 0; col < state_space_size; col++){
                                 size_t val = accsort[col];
-                                
+
                                 if ((1.0-s) <= accdT[(val*state_space_size) +i]){
                                     temp1 += (1.0-s)*accs1[val];
                                     s = 1.0;
@@ -6448,7 +6462,7 @@ void IMDP::finiteHorizonSafeControllerSorted(bool IMDP_lower, size_t timeHorizon
                                     s = s+ accdT[(val*state_space_size) +i];
                                 }
                             }
-                            
+
                             cdfAccessor1[i] =  temp1;
                         });
                     });
