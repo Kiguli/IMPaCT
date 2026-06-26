@@ -1,33 +1,13 @@
 // ============================================================================
-// IMPaCT v2.0 — TEMPORARY throwing stubs for the v2.0 contracts.
+// IMPaCT v2.0 — contract stubs (TDD scaffolding).
 // ----------------------------------------------------------------------------
-// Purpose: make the TDD suite BUILD and RUN in a "red" state before any feature
-// is implemented. Every new-feature unit test should FAIL with "not implemented"
-// until the real src/*.cpp is written.
+// All current contracts are implemented in src/, so there are no active stubs:
+//   omax::optimize    -> src/omaximization.cpp (Phase 1a)
+//   graph::sccs/mecs  -> src/graph_utils.cpp   (Phase 1b)
+//   solve::maxReach*  -> src/solve.cpp         (Phase 1c)
+//   ltl::*            -> src/ltl.cpp           (Phase 2, membership front-end)
 //
-// As each feature lands, DELETE the matching stub here and compile the real
-// implementation instead. This file is scaffolding, NOT the implementation and
-// NOT a test — never weaken a test to make it pass; implement the contract.
+// When a NEW contract is added ahead of its implementation (e.g. Phase 3
+// product / robust-accepting-EC), add a throwing stub here so the suite builds
+// and runs "red" until the real src/*.cpp lands. Never weaken a test to pass.
 // ============================================================================
-
-#include "contracts.h"
-#include <stdexcept>
-
-namespace impact {
-
-// omax::optimize     -> src/omaximization.cpp (Phase 1a) — no stub.
-// graph::sccs/mecs   -> src/graph_utils.cpp   (Phase 1b) — no stub.
-// solve::maxReach*   -> src/solve.cpp         (Phase 1c) — no stub.
-
-namespace ltl {
-    struct Automaton {};  // concrete definition so the stubs link
-    Automaton* compileFinite(const std::string&, const std::vector<std::string>&) {
-        throw std::logic_error("not implemented: impact::ltl::compileFinite (Phase 2)");
-    }
-    bool acceptsFinite(const Automaton*, const FiniteTrace&) {
-        throw std::logic_error("not implemented: impact::ltl::acceptsFinite (Phase 2)");
-    }
-    void destroy(Automaton*) {}
-}
-
-} // namespace impact

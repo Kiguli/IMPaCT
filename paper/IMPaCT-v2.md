@@ -106,6 +106,19 @@ Format per entry: `date — feature | decision + rationale | algorithm | refs | 
   is deferred to / merged with Phase 3 (robust accepting ECs use the same machinery).
   Suite: 22/27 cases green, 31618 assertions, 1 skipped (ISSUE-0003), 5 red (Phase 2 LTLf).
 
+- **Phase 2 (part 1) — LTLf front-end (parse + finite-trace membership).**
+  `src/ltl.{h,cpp}`: self-contained tokenizer + recursive-descent parser
+  (`! & | -> <-> X F G U R`, true/false, parens) + LTLf finite-trace semantics
+  evaluator (De Giacomo-Vardi IJCAI 2013/2015). No external dependency. All 5
+  LTLf membership contracts green. Decision: deliberately membership-first so the
+  semantics are pinned and testable before building a DFA; this evaluator will
+  also serve as the differential ORACLE for the DFA construction.
+  **Remaining Phase 2 work (tracked, ISSUE-0004):** LTLf→DFA construction + the
+  IMDP×DFA product + co-safe reachability (to solve Package Delivery at full spec).
+  Plan: self-contained derivative/progression-based DFA (no Spot dependency),
+  validated against this evaluator; Spot remains a future performance option.
+  Suite after Phase 2 (part 1): 27/27 cases green (1 skipped = ISSUE-0003), 31642 assertions.
+
 <!-- add new dated entries above this line -->
 
 ---

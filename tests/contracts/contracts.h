@@ -31,36 +31,9 @@
 // Phase 1c — sound robust interval iteration. Implemented; interface in src/.
 #include "../../src/solve.h"
 
-namespace impact {
-
-// ---------------------------------------------------------------------------
-// Phase 2 — LTL/LTLf -> automaton front-end. Tested via language membership so
-// the contract is independent of the chosen back-end library (Spot/Owl/Lydia).
+// Phase 2 — LTLf / co-safe-LTL front-end (parse + finite-trace membership).
+// Tested via language membership so the contract is back-end-independent.
 // Refs: Kupferman-Vardi (FMSD 2001); De Giacomo-Vardi (IJCAI 2013/2015).
-// ---------------------------------------------------------------------------
-namespace ltl {
-
-    // A finite trace: each element is the set of atomic propositions true at that
-    // step (subset of the formula's APs), given by name.
-    using Letter = std::set<std::string>;
-    using FiniteTrace = std::vector<Letter>;
-
-    // Opaque handle to a compiled (deterministic, finite) automaton for an
-    // LTLf / co-safe-LTL formula over the given alphabet of AP names.
-    struct Automaton;  // defined by the implementation
-
-    // Compile an LTLf / co-safe LTL formula to a DFA. THROWS std::invalid_argument
-    // on parse error or if the formula is not co-safe (when require_cosafe).
-    Automaton* compileFinite(const std::string& formula,
-                             const std::vector<std::string>& aps);
-
-    // Does the compiled automaton accept this finite trace? (language membership)
-    bool acceptsFinite(const Automaton* a, const FiniteTrace& trace);
-
-    void destroy(Automaton* a);
-
-} // namespace ltl
-
-} // namespace impact
+#include "../../src/ltl.h"
 
 #endif // IMPACT_TEST_CONTRACTS_H
