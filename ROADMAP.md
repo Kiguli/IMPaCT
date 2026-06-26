@@ -8,6 +8,25 @@ in [`paper/References.bib`](paper/References.bib)) and (b) cross-validated by a
 differential oracle in the test suite. This applies retroactively to Phases 1–2 and
 forward to Phase 3+.
 
+## Current state (implemented & verified on branch IMPaCT-v2.0)
+- **Solver core** (`src/`): O-maximization (`omaximization`), SCC+MEC (`graph_utils`),
+  sound robust reachability with selectable methods — OVI (default) + MEC-collapse
+  interval iteration (`solve`); **safety** = 1 - min-reach.
+- **Specifications**: LTLf parser + finite-trace evaluator and LTLf→DFA via semantic
+  canonicalization (`ltl`); IMDP×DFA product for co-safe LTL (`product`); **Büchi
+  ω-regular** via accepting-MEC reachability (`omega`).
+- **Sparse abstraction** (`abstraction`): affine n-D and nonlinear (interval
+  arithmetic) diagonal-Gaussian systems; O(nnz) memory.
+- **Verification**: a doctest suite (56 cases, ~600k assertions) of differential /
+  brute-force oracles, plus end-to-end Monte-Carlo validators for reach, safety,
+  co-safe LTL, and nonlinear (VP) — see `benchmarks/`.
+- **Issues**: resolved 0001(superseded),0002,0003,0005,0007,0008; in-progress 0006
+  (sparse landed for the v2 path); open 0004 (Spot back-end optional), 0009 (robust
+  accepting ECs), 0010 (OVI perf on recurrent IMDPs).
+- **Not yet**: robust accepting ECs (ISSUE-0009, the CAV-core robust EC), wiring the
+  sparse path through the full ARCH-COMP suite, ω-automata for general LTL (Büchi/
+  Streett/parity back-ends), and Phase 4 (web app).
+
 ## Near-term (current plan)
 - **Phase 1** sound robust interval iteration — *done* (MEC-collapse variant). Add
   alternative solvers as options: **interval iteration** (Haddad-Monmege/Baier),

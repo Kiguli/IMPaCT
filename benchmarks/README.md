@@ -26,3 +26,25 @@ Reference: ARCH-COMP25 Stochastic Models report (verified entry in
 python3 benchmarks/run_archcomp.py            # run all available ARCH cases
 python3 benchmarks/run_archcomp.py --only VP  # single case
 ```
+
+## v2.0 verification & scaling benchmarks (self-contained C++)
+Each links a few `src/*.cpp` files (no SYCL/HDF5 toolchain needed) and exits 0 on pass.
+
+| File | What it does / verifies |
+|---|---|
+| `sparse_scaling.cpp` | O(nnz) memory: 125k-state synthesis ~255 MB / 0.4 s vs dense ~250 GB |
+| `validate_montecarlo.cpp` | reach: robust controller, empirical reach >= robust lower bound (affine 2-D) |
+| `validate_vp.cpp` | nonlinear ARCH Van der Pol: empirical reach within [lower,upper] (interval-MC) |
+| `validate_cosafe.cpp` | co-safe LTL F(pickup & F deliver) over a continuous robot; empirical >= lower |
+| `validate_safety.cpp` | safety (never enter avoid box); empirical safety >= robust lower bound |
+
+Build one, e.g.:
+```bash
+c++ -std=c++17 -O2 benchmarks/validate_vp.cpp \
+    src/abstraction.cpp src/solve.cpp src/omaximization.cpp src/graph_utils.cpp -o /tmp/vp && /tmp/vp
+```
+The Monte-Carlo validators simulate the *continuous* closed loop and check the
+empirical outcome against the synthesized bounds — this is how ISSUE-0007 and
+ISSUE-0008 (abstraction soundness bugs) were found. Note: an infinite-horizon
+objective needs a long simulation horizon to validate (truncation under-reports).
+
