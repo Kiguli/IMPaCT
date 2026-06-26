@@ -41,6 +41,13 @@ TEST_CASE("imdp_io: parse -> solve a known robust value") {
     CHECK(0.5*(opt.lower[p.init]+opt.upper[p.init])  == doctest::Approx(0.6).epsilon(1e-3));
 }
 
+TEST_CASE("imdp_io: out-of-range state references are rejected") {
+    CHECK_THROWS(parse("states 2\ninit 0\ntran 0 0 2:1:1\n"));  // successor 2 in a 2-state model
+    CHECK_THROWS(parse("states 2\ninit 5\ntran 0 0 0:1:1\n"));  // init out of range
+    CHECK_THROWS(parse("states 2\nlabel t 3\ntran 0 0 0:1:1\n"));// label state out of range
+    CHECK_NOTHROW(parse("states 2\ninit 0\nlabel t 1\ntran 0 0 1:1:1\ntran 1 0 1:1:1\n"));
+}
+
 TEST_CASE("imdp_io: write round-trips (same solution)") {
     Problem p = parse(MODEL);
     Problem q = parse(write(p));

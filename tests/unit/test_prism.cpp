@@ -92,6 +92,12 @@ TEST_CASE("prism: const + controller choice + x'=x+1 + disjunctive label") {
     CHECK(0.5*(opt.lower[p.init]+opt.upper[p.init])  == doctest::Approx(0.5).epsilon(1e-3));
 }
 
+TEST_CASE("prism: out-of-range update/guard/label values are rejected") {
+    CHECK_THROWS(parse("mdp\nmodule m\n x:[0..1] init 0;\n [] x=0 -> 1:(x'=5);\nendmodule\n"));
+    CHECK_THROWS(parse("mdp\nmodule m\n x:[0..1] init 0;\n [] x=0 -> 1:(x'=0);\nendmodule\nlabel \"t\" = x=9;\n"));
+    CHECK_NOTHROW(parse("mdp\nmodule m\n x:[0..1] init 0;\n [] x=0 -> 1:(x'=1);\n [] x=1 -> 1:(x'=0);\nendmodule\n"));
+}
+
 TEST_CASE("prism: same model via PRISM and explicit .imdp solve identically") {
     static const char* IMDP =
         "states 4\ninit 0\nlabel target 3\n"

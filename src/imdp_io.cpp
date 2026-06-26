@@ -58,6 +58,20 @@ Problem parse(const std::string& text) {
         }
     }
     if (!haveStates) throw std::runtime_error("imdp_io: missing 'states'");
+
+    // Validate every referenced state index is in range (catches successor labels
+    // mistakenly used as indices, which would otherwise be a silent out-of-bounds).
+    auto chk = [&](int s, const std::string& what) {
+        if (s < 0 || s >= p.nStates)
+            throw std::runtime_error("imdp_io: " + what + " state " + std::to_string(s) +
+                                     " out of range [0," + std::to_string(p.nStates) + ")");
+    };
+    chk(p.init, "init");
+    for (const auto& kv : p.labels)
+        for (int s : kv.second) chk(s, "label '" + kv.first + "'");
+    for (int s = 0; s < p.nStates; ++s)
+        for (const solve::ActionDist& act : p.model[s])
+            for (const solve::Interval& iv : act) chk(iv.to, "transition target");
     return p;
 }
 
