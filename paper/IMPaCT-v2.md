@@ -324,6 +324,24 @@ Format per entry: `date — feature | decision + rationale | algorithm | refs | 
   Büchi (recurrence GF), generalized Büchi (patrol ⋀GF), co-Büchi (persistence FG).
   Suite: **76 cases / 618,562 assertions green.**
 
+- **ω-regular benchmarking + a negative continuous-abstraction finding (ISSUE-0011).**
+  Extended `tools/imdp_solve` with `buchi` / `persist` / `patrol` properties and added
+  ω-regular models to `benchmarks/crosstool` with independently hand-computed reference
+  values: Büchi recurrence reaching an accepting EC (0.5), the route-around support-EC
+  (robust 0 / optimistic 1), persistence `F G safe` with a leak (robust 0.5 /
+  optimistic 1), patrol `⋀ G F` on a 3-cycle (1). **20/20 cross-tool checks pass.**
+  Bonus robustness: the `.imdp` parser now rejects out-of-range state indices.
+  - **Finding (validate_omega.cpp):** abstracting an UNBOUNDED-noise system with an
+    absorbing off-grid SINK gives a transition system with NO non-trivial end
+    components (the SINK is the only recurrent class; the loose support window erodes
+    any candidate region), so EVERY infinite-horizon ω-regular value is 0 — robustly
+    AND optimistically. This is mathematically correct, not a solver bug: the robust
+    ω-regular solvers are exact/non-trivial on explicit IMDPs (12k-check oracle
+    differential). Non-trivial continuous ω-regular needs a bounded-disturbance /
+    reflecting-boundary abstraction — recorded for the abstraction roadmap. This is
+    an honest scoping result: the ω-regular CONTRIBUTION is demonstrated on explicit
+    IMDPs; the continuous side currently covers reach-avoid / co-safe / finite-horizon.
+
 <!-- add new dated entries above this line -->
 
 ---

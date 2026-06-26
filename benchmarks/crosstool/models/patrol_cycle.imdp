@@ -1,0 +1,9 @@
+# Patrol r0 and r2 (visit each infinitely often) on a forced 3-cycle 0->1->2->0.
+# Both regions visited every lap -> robust value 1 from all states.
+states 3
+init 0
+label r0 0
+label r2 2
+tran 0 0 1:1:1
+tran 1 0 2:1:1
+tran 2 0 0:1:1

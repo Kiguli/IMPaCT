@@ -26,6 +26,7 @@
 #include "../src/imdp_io.h"
 #include "../src/prism.h"
 #include "../src/solve.h"
+#include "../src/omega.h"
 
 #include <iostream>
 #include <string>
@@ -36,8 +37,19 @@ using namespace impact;
 
 static void usage() {
     std::cerr <<
-      "usage: imdp_solve MODEL(.imdp|.prism) reach|safety LABEL "
-      "[--bound pess|opt|both] [--eps E] [--method ovi|mec] [--state S]\n";
+      "usage: imdp_solve MODEL(.imdp|.prism) PROP LABEL "
+      "[--bound pess|opt|both] [--eps E] [--method ovi|mec] [--state S]\n"
+      "  PROP  : reach | safety | buchi | persist | patrol\n"
+      "  LABEL : a label name; for patrol, comma-separated labels (visit each i.o.)\n"
+      "  buchi   = G F label (recurrence)   persist = F G label (reach-then-stay)\n";
+}
+
+// split "a,b,c" -> {"a","b","c"}
+static std::vector<std::string> splitComma(const std::string& s) {
+    std::vector<std::string> out; std::string cur;
+    for (char c : s) { if (c == ',') { if (!cur.empty()) out.push_back(cur); cur.clear(); } else cur += c; }
+    if (!cur.empty()) out.push_back(cur);
+    return out;
 }
 
 int main(int argc, char** argv) {
@@ -81,12 +93,15 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    auto it = p.labels.find(label);
-    if (it == p.labels.end()) {
-        std::cerr << "no such label '" << label << "' in model\n";
-        return 1;
+    // Resolve label(s) -> state set(s). patrol takes several (comma-separated) labels.
+    std::vector<std::set<int>> accSets;
+    for (const std::string& nm : splitComma(label)) {
+        auto it = p.labels.find(nm);
+        if (it == p.labels.end()) { std::cerr << "no such label '" << nm << "' in model\n"; return 1; }
+        accSets.push_back(it->second);
     }
-    const std::set<int>& states = it->second;
+    if (accSets.empty()) { std::cerr << "no label given\n"; return 1; }
+    const std::set<int>& states = accSets.front();
     const int s = (stateArg >= 0) ? stateArg : p.init;
     if (s < 0 || s >= p.nStates) { std::cerr << "state out of range\n"; return 1; }
 
@@ -103,6 +118,15 @@ int main(int argc, char** argv) {
             } else if (prop == "safety") {
                 r = pess ? solve::maxSafetyPessimistic(p.model, states, eps)
                          : solve::maxSafetyOptimistic(p.model, states, eps);
+            } else if (prop == "buchi") {
+                r = pess ? omega::maxBuchiPessimistic(p.model, states, eps)
+                         : omega::maxBuchiOptimistic(p.model, states, eps);
+            } else if (prop == "persist") {
+                r = pess ? omega::maxPersistencePessimistic(p.model, states, eps)
+                         : omega::maxPersistenceOptimistic(p.model, states, eps);
+            } else if (prop == "patrol") {
+                r = pess ? omega::maxGenBuchiPessimistic(p.model, accSets, eps)
+                         : omega::maxGenBuchiOptimistic(p.model, accSets, eps);
             } else {
                 std::cerr << "unknown property '" << prop << "'\n"; return 1;
             }

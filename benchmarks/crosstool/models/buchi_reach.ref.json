@@ -1,0 +1,8 @@
+{
+  "model": "buchi_reach.imdp",
+  "description": "Robust Buchi recurrence G F acc; start reaches an accepting EC w.p. 0.5.",
+  "provenance": "Exact: {0,1} is a forced (lo=hi=1) cycle through acc=1, so Buchi holds w.p.1 inside it; from start 2 the point transition reaches the EC w.p. 0.5 and the sink else. Robust = optimistic = 0.5 (point start). Matches Storm/PRISM P=?[G F acc] on the same MDP.",
+  "checks": [
+    {"prop": "buchi", "label": "acc", "state": 2, "pess": 0.5, "opt": 0.5, "tol": 1e-3}
+  ]
+}

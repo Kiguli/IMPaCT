@@ -1,0 +1,9 @@
+# F G safe. safe={0,1}; 1 is a safe absorbing sink. At 0 nature sends >=0.5 to 1
+# (stay) and <=0.5 to 2 (unsafe sink). Robust: invariant region {1}; reach {1} from
+# 0 = 0.5. Optimistic: nature keeps mass in safe -> stay from 0 -> 1.
+states 3
+init 0
+label safe 0 1
+tran 0 0 1:0.5:1.0 2:0.0:0.5
+tran 1 0 1:1:1
+tran 2 0 2:1:1

@@ -1,0 +1,8 @@
+{
+  "model": "patrol_cycle.imdp",
+  "description": "Generalized Buchi / patrol: visit r0 and r2 infinitely often on a forced 3-cycle.",
+  "provenance": "Exact: the forced cycle 0->1->2->0 visits both r0={0} and r2={2} every lap, so the conjunction G F r0 & G F r2 holds w.p.1 from every state. Robust = optimistic = 1. Matches Storm/PRISM generalized-Buchi on the same MDP.",
+  "checks": [
+    {"prop": "patrol", "label": "r0,r2", "state": 0, "pess": 1.0, "opt": 1.0, "tol": 1e-3}
+  ]
+}

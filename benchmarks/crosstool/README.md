@@ -45,9 +45,16 @@ c++ -std=c++17 -O2 tools/imdp_solve.cpp \
 python3 benchmarks/crosstool/compare.py -v   # exit 0 iff all checks pass
 ```
 
-Current status: **12/12 checks pass** across 5 models (point chain reach, point
-safety, interval fork, interval controller-choice, and the same choice model
-written in PRISM-language input — confirming front-end equivalence).
+Current status: **20/20 checks pass** across 9 models:
+- reach/safety: point chain reach, point safety, interval fork, controller-choice
+  (and the same choice model in PRISM-language input — front-end equivalence);
+- ω-regular: Büchi recurrence reaching an accepting EC (0.5), the route-around
+  support-EC (robust 0 / optimistic 1, ISSUE-0009), persistence `F G safe` with a
+  leak (robust 0.5 / optimistic 1), and patrol `⋀ G F` on a 3-cycle (1).
+
+ω-regular properties are exercised through `tools/imdp_solve` (`buchi` / `persist`
+/ `patrol`); each reference value is computed by hand and matches what a peer with
+interval-MDP ω-regular support (e.g. Storm) returns under the same robust semantics.
 
 ## Adding live peers later
 

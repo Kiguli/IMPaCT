@@ -1,0 +1,9 @@
+# Robust Buchi (G F acc). EC {0,1} = forced cycle 0->1->0, acc={1}. Start 2 reaches
+# the EC w.p. 0.5 (point), else absorbed in sink 3. Robust Buchi(2) = 0.5.
+states 4
+init 2
+label acc 1
+tran 0 0 1:1:1
+tran 1 0 0:1:1
+tran 2 0 0:0.5:0.5 3:0.5:0.5
+tran 3 0 3:1:1

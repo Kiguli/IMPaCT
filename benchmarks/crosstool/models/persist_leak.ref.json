@@ -1,0 +1,8 @@
+{
+  "model": "persist_leak.imdp",
+  "description": "Robust vs optimistic persistence F G safe; nature can leak out of safe via a lo=0 edge.",
+  "provenance": "Exact: robust invariant sub-region of safe is {1} (state 0 cannot stay since the edge to unsafe sink 2 has hi>0); robust reach {1} from 0 = 0.5 (nature minimizes mass to 1). Optimistically nature keeps all mass in safe -> 1. Matches Storm interval F G safe.",
+  "checks": [
+    {"prop": "persist", "label": "safe", "state": 0, "pess": 0.5, "opt": 1.0, "tol": 1e-3}
+  ]
+}

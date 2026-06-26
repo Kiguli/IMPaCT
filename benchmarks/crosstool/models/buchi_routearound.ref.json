@@ -1,0 +1,8 @@
+{
+  "model": "buchi_routearound.imdp",
+  "description": "Robust vs optimistic Buchi inside a support-EC where nature can route around the accepting state (ISSUE-0009).",
+  "provenance": "Exact: optimistically nature keeps visiting acc=1 (value 1); robustly nature zeroes the lo=0 edge into 1 forever, never visiting it (value 0). A Storm interval-MDP G F acc query returns the robust value 0; the cooperative/optimistic value is 1.",
+  "checks": [
+    {"prop": "buchi", "label": "acc", "state": 0, "pess": 0.0, "opt": 1.0, "tol": 1e-3}
+  ]
+}

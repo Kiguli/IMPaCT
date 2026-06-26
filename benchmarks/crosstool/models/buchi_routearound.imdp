@@ -1,0 +1,7 @@
+# Support-EC {0,1}: every leaving edge has hi=0 so nature cannot leave, but the edge
+# into acc=1 has lo=0, so nature sets P(->1)=0 forever. Robust Buchi=0, optimistic=1.
+states 2
+init 0
+label acc 1
+tran 0 0 0:0.5:1.0 1:0.0:0.5
+tran 1 0 0:0.5:1.0 1:0.0:0.5
