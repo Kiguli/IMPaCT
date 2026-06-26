@@ -63,6 +63,19 @@ Format per entry: `date — feature | decision + rationale | algorithm | refs | 
   Status after 1a+1b: 13/23 contract cases green; remaining red = Phase 1c
   interval iteration (5) + Phase 2 LTLf (5).
 
+- **Issue tracking** set up locally in `issues/` (file-per-issue + INDEX +
+  strict literature-counterexample protocol — candidate→confirmed only after
+  exact citation + minimal counterexample + independent verification +
+  adversarial review). Filed ISSUE-0001 (v1 sorted synthesis tolerance-stopping
+  soundness gap → fixed by Phase 1c) and ISSUE-0002 (MEC naive-rule pitfall,
+  classified `naive-strawman` pending the audit — NOT a literature counterexample).
+- **MEC confidence**: added a definition-based brute-force MEC oracle and a
+  randomized differential test (1500 random MDPs) + the explicit leaking-action
+  case; `mecs()` matches the oracle everywhere. Honest correction pending the
+  `mec-correctness-audit`: the implemented algorithm is the standard de Alfaro /
+  Baier-Katoen / Chatterjee-Henzinger MEC decomposition; earlier "counterexample
+  to the literature" wording was overstated (it refutes a naive strawman only).
+
 <!-- add new dated entries above this line -->
 
 ---
