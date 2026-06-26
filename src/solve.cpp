@@ -135,14 +135,63 @@ IntervalResult solveReach(const IMDPModel& m, const std::set<int>& targets,
     return r;
 }
 
+// Optimistic value iteration (Hartmanns & Kaminski, CAV 2020): VI-from-below gives
+// a sound lower bound L (<= V*); then guess U = min(1, L+eps) and VERIFY it is a
+// pre-fixpoint (F(U) <= U). By Knaster-Tarski, F(U) <= U implies V* (the least
+// fixpoint) <= U, so [L,U] is sound with gap <= eps. No end-component handling
+// needed, so it converges on nature-confinable ECs (ISSUE-0003). If the guess is
+// not yet inductive, refine L (smaller delta) and retry.
+IntervalResult solveOVI(const IMDPModel& m, const std::set<int>& targets,
+                        double eps, omax::Sense sense) {
+    const int n = (int)m.size();
+    std::vector<double> L(n, 0.0), tmp(n), U(n), FU(n);
+    for (int t : targets) L[t] = 1.0;
+    int iters = 0;
+    double delta = eps;
+    const int MAXROUND = 100, MAXINNER = 2000000;
+    for (int round = 0; round < MAXROUND; ++round) {
+        for (int it = 0; it < MAXINNER; ++it) {              // refine L from below
+            ++iters;
+            for (int s = 0; s < n; ++s)
+                tmp[s] = targets.count(s) ? 1.0 : backup(m[s], L, sense);
+            double ch = 0.0;
+            for (int s = 0; s < n; ++s) ch = std::max(ch, std::fabs(tmp[s] - L[s]));
+            L.swap(tmp);
+            if (ch < delta) break;
+        }
+        for (int s = 0; s < n; ++s)
+            U[s] = targets.count(s) ? 1.0 : std::min(1.0, L[s] + eps);
+        bool inductive = true;                                // verify F(U) <= U
+        for (int s = 0; s < n; ++s) {
+            FU[s] = targets.count(s) ? 1.0 : backup(m[s], U, sense);
+            if (FU[s] > U[s] + 1e-12) inductive = false;
+        }
+        if (inductive) return IntervalResult{L, U, iters};    // L <= V* <= U, gap <= eps
+        delta *= 0.5;
+    }
+    for (int s = 0; s < n; ++s) U[s] = targets.count(s) ? 1.0 : std::min(1.0, L[s] + eps);
+    return IntervalResult{L, U, iters};                       // best-effort fallback
+}
+
+IntervalResult dispatch(const IMDPModel& m, const std::set<int>& targets,
+                        double eps, omax::Sense sense, Method method) {
+    return (method == Method::MECCollapse) ? solveReach(m, targets, eps, sense)
+                                           : solveOVI(m, targets, eps, sense);
+}
+
 } // namespace
 
 IntervalResult maxReachPessimistic(const IMDPModel& m, const std::set<int>& targets, double eps) {
-    return solveReach(m, targets, eps, omax::Sense::Min);
+    return dispatch(m, targets, eps, omax::Sense::Min, Method::OptimisticVI);
 }
-
 IntervalResult maxReachOptimistic(const IMDPModel& m, const std::set<int>& targets, double eps) {
-    return solveReach(m, targets, eps, omax::Sense::Max);
+    return dispatch(m, targets, eps, omax::Sense::Max, Method::OptimisticVI);
+}
+IntervalResult maxReachPessimistic(const IMDPModel& m, const std::set<int>& targets, double eps, Method method) {
+    return dispatch(m, targets, eps, omax::Sense::Min, method);
+}
+IntervalResult maxReachOptimistic(const IMDPModel& m, const std::set<int>& targets, double eps, Method method) {
+    return dispatch(m, targets, eps, omax::Sense::Max, method);
 }
 
 } // namespace solve

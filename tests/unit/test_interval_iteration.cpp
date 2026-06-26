@@ -187,10 +187,9 @@ static void check_against_oracle(const IntervalResult& r, const std::vector<doub
     }
 }
 
-TEST_CASE("ii: randomized differential vs VI-from-below oracle") {
-    // Validated scope (see ISSUE-0003): point MDPs are sound+convergent for BOTH
-    // senses; interval MDPs are tested for the OPTIMISTIC sense (pessimistic +
-    // interval has the nature-trap non-convergence tracked in ISSUE-0003).
+TEST_CASE("ii: randomized differential vs VI-from-below oracle (BOTH senses, point+interval)") {
+    // Default solver is OVI, which is sound+convergent for both senses on point AND
+    // interval MDPs, including nature-confinable ECs (ISSUE-0003 resolved).
     std::mt19937 rng(777);
     std::uniform_real_distribution<double> u01(0.0, 1.0);
     const double eps = 1e-7;
@@ -204,31 +203,35 @@ TEST_CASE("ii: randomized differential vs VI-from-below oracle") {
         double radius = point ? 0.0 : 0.15 * u01(rng);
         IMDPModel m = random_imdp(rng, n, targets, radius);
         ++checked;
-
-        if (point) {
-            check_against_oracle(maxReachPessimistic(m, targets, eps),
-                                 vi_from_below(m, targets, impact::omax::Sense::Min), n, eps);
-            check_against_oracle(maxReachOptimistic(m, targets, eps),
-                                 vi_from_below(m, targets, impact::omax::Sense::Max), n, eps);
-        } else {
-            check_against_oracle(maxReachOptimistic(m, targets, eps),
-                                 vi_from_below(m, targets, impact::omax::Sense::Max), n, eps);
-        }
+        check_against_oracle(maxReachPessimistic(m, targets, eps),
+                             vi_from_below(m, targets, impact::omax::Sense::Min), n, eps);
+        check_against_oracle(maxReachOptimistic(m, targets, eps),
+                             vi_from_below(m, targets, impact::omax::Sense::Max), n, eps);
     }
     CHECK(checked > 300);
 }
 
-TEST_CASE("ii: pessimistic interval nature-trap — KNOWN LIMITATION (ISSUE-0003)"
-          * doctest::skip()) {
-    // Documented counterexample: nature confines the play at state 0 via the lo=0
-    // leaving edge, so V*(0)=0, but the upper bound sticks at 1 (non-unique
-    // fixpoint). Skipped until robust-EC handling lands (with Phase 3). See
-    // issues/0003-pessimistic-interval-nature-trap.md.
+TEST_CASE("ii: pessimistic interval nature-trap now CONVERGES (ISSUE-0003 resolved via OVI)") {
+    // Nature confines the play at state 0 via the lo=0 leaving edge, so V*(0)=0.
+    // MEC-collapse interval iteration leaves the upper bound stuck at 1 (non-unique
+    // fixpoint); optimistic value iteration (the default) returns a verified
+    // inductive upper bound and converges. See issues/0003.
     IMDPModel m = {
         /*0*/ {{ {0,0.5,1.0}, {1,0.0,0.5} }},
         /*1*/ {{ {2,1,1} }},
         /*2*/ {{ {2,1,1} }},
     };
-    auto r = maxReachPessimistic(m, {2}, EPS);
-    check_sound(r, 0, 0.0);   // currently FAILS: upper stuck at 1, gap not closed
+    check_sound(maxReachPessimistic(m, {2}, EPS), 0, 0.0);                       // default = OVI
+    check_sound(maxReachPessimistic(m, {2}, EPS, Method::OptimisticVI), 0, 0.0); // explicit OVI
+}
+
+TEST_CASE("ii: MEC-collapse method is also correct on point / controller-EC models") {
+    using M = Method;
+    // Model 5: end component WITH an exit action to target => value 1.
+    IMDPModel m5 = { {{ {1,1,1} }, { {2,1,1} }}, {{ {0,1,1} }}, {{ {2,1,1} }} };
+    check_sound(maxReachPessimistic(m5, {2}, EPS, M::MECCollapse), 0, 1.0);
+    check_sound(maxReachPessimistic(m5, {2}, EPS, M::MECCollapse), 1, 1.0);
+    // Model 1: point branch, value 0.5.
+    IMDPModel m1 = { {{ {1,0.5,0.5}, {2,0.5,0.5} }}, {{ {3,1,1} }}, {{ {2,1,1} }}, {{ {3,1,1} }} };
+    check_sound(maxReachPessimistic(m1, {3}, EPS, M::MECCollapse), 0, 0.5);
 }

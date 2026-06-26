@@ -32,22 +32,25 @@ namespace solve {
         int iterations;
     };
 
-    // Robust max-reachability: controller maximizes, nature MINIMIZES within the
-    // intervals (worst-case / pessimistic). lower[s] <= V*(s) <= upper[s], gap <= 2*eps.
-    //
-    // SCOPE (see issues/0003): sound AND convergent for point-probability MDPs and
-    // for interval MDPs without nature-confinable end components. For interval MDPs
-    // where nature can confine the play via lo=0 leaving edges, the upper bound is
-    // still sound but may not converge (gap may stay open) — robust-EC handling for
-    // that case is planned with Phase 3. maxReachOptimistic is convergent on intervals.
-    IntervalResult maxReachPessimistic(const IMDPModel& m,
-                                       const std::set<int>& targets,
-                                       double eps);
+    // Selectable solver (toolbox of literature methods):
+    //  - OptimisticVI: optimistic value iteration (Hartmanns & Kaminski, CAV 2020) —
+    //    VI from below for the lower bound + a verified inductive (pre-fixpoint)
+    //    upper bound (F(U) <= U => V* <= U, Knaster-Tarski). Needs no MEC handling;
+    //    sound and convergent including nature-confinable ECs (resolves ISSUE-0003).
+    //  - MECCollapse: interval iteration with end-component collapse (Haddad-Monmege
+    //    TCS 2018; Baier et al. CAV 2017). Faster on controller end components, but
+    //    its support-graph collapse does NOT converge on pessimistic interval
+    //    nature-traps (ISSUE-0003) — valid for point MDPs and the optimistic sense.
+    enum class Method { OptimisticVI, MECCollapse };
 
-    // Best-case: controller maximizes, nature MAXIMIZES too (optimistic).
-    IntervalResult maxReachOptimistic(const IMDPModel& m,
-                                      const std::set<int>& targets,
-                                      double eps);
+    // Robust max-reachability. Controller maximizes; nature MINIMIZES within the
+    // intervals (pessimistic) or MAXIMIZES (optimistic). Returns sound
+    // lower[s] <= V*(s) <= upper[s] with gap <= 2*eps. The 3-arg forms use the
+    // default (OptimisticVI); the 4-arg forms select the method.
+    IntervalResult maxReachPessimistic(const IMDPModel& m, const std::set<int>& targets, double eps);
+    IntervalResult maxReachOptimistic (const IMDPModel& m, const std::set<int>& targets, double eps);
+    IntervalResult maxReachPessimistic(const IMDPModel& m, const std::set<int>& targets, double eps, Method method);
+    IntervalResult maxReachOptimistic (const IMDPModel& m, const std::set<int>& targets, double eps, Method method);
 
 } // namespace solve
 } // namespace impact

@@ -141,6 +141,25 @@ Format per entry: `date — feature | decision + rationale | algorithm | refs | 
   abstract IMDPs. Remaining for the real PD benchmark: drive it from the actual
   continuous→IMDP abstraction (tool-integration step). Suite: 31/31 cases, 37886 assertions.
 
+- **Docker baseline / ISSUE-0006.** v1 image rebuilt; ran the smallest sorted case
+  (2D robot, CPU, `--memory=4g`). It **OOM-killed**: the dense (state×input)×state
+  transition matrix is 698103×1583 ≈ **8.84 GB**. Confirms the dense-matrix
+  scalability limit — goldens need a tiny model or sparse storage (ISSUE-0006;
+  feeds the planned sparse-representation work). No controller golden produced.
+- **ISSUE-0003 RESOLVED + toolbox principle.** Added **Optimistic Value Iteration**
+  (Hartmanns-Kaminski, CAV 2020) as `solve::Method::OptimisticVI` (now the default):
+  VI-from-below lower bound + a verified inductive upper bound (F(U)≤U ⇒ V*≤U), no
+  EC handling, so it converges on nature-confinable ECs. The nature-trap test now
+  converges; the randomized differential covers BOTH senses on point AND interval
+  MDPs. `MECCollapse` kept as a selectable faster option (tested on point/controller
+  ECs). Suite: 33/33 cases, 45326 assertions, **0 skipped**.
+- **Roadmap captured (`ROADMAP.md`)** per user direction: toolbox of literature-backed
+  selectable approaches (solver variants, automata back-ends, then automata TYPES —
+  Büchi/Streett/parity — in a later phase), and stretch targets: sparse storage, other
+  robust-MDP models incl. POMDPs, PRISM/Storm parity and beyond, and STL/CTL in
+  addition to LTL. Phase 3 pipelines chosen from verified literature (Dutreix-Coogan
+  Rabin+permanent-WC primary; Weininger game-reduction; Asadi qualitative).
+
 <!-- add new dated entries above this line -->
 
 ---

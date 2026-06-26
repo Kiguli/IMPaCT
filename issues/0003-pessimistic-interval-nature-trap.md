@@ -1,7 +1,7 @@
 ---
 id: ISSUE-0003
 title: Pessimistic interval iteration does not converge on nature-confinable end components
-status: open
+status: resolved
 severity: medium
 labels: soundness, correctness, robust-ec
 created: 2026-06-25
@@ -55,14 +55,22 @@ The end-component notion for robust (2.5-player) interval MDPs differs from the
 optimistic support-graph MEC. Nature-confinable ECs must also be collapsed (or
 handled by a robust-EC algorithm) for the pessimistic upper bound to converge.
 
-## Resolution / plan
-Implement robust-EC-aware handling for the pessimistic upper bound. References:
-Haddad & Monmege (TCS 2018) interval iteration for IMDPs (the canonical sound
-treatment); Baier et al. (CAV 2017); and the robust-EC machinery of Asadi et al.
-(AAAI 2026) — which is also the Phase 3 robust-accepting-EC work, so this is best
-solved together with Phase 3. Until then the test suite restricts the interval
-differential to the optimistic case and pins this counterexample as a skipped,
-documented contract.
+## Resolution (RESOLVED)
+Added **Optimistic Value Iteration** (Hartmanns & Kaminski, CAV 2020 — verified in
+`paper/References.bib`) as the default solver (`solve::Method::OptimisticVI`). OVI
+computes the lower bound by VI-from-below and a guessed upper bound U=min(1,L+eps)
+that is VERIFIED inductive (F(U) <= U); by Knaster-Tarski V* <= U, so [L,U] is sound
+with gap <= eps — with NO end-component handling, so it converges on nature-confinable
+ECs. The counterexample now converges (V*(0)=0); the randomized differential covers
+pessimistic AND optimistic on point AND interval MDPs (45k+ assertions).
+
+This is offered as a selectable method (toolbox): `OptimisticVI` (default, general,
+sound+convergent) vs `MECCollapse` (interval iteration with EC collapse — faster on
+controller ECs but does NOT converge on pessimistic interval nature-traps; valid for
+point MDPs / optimistic). A future option is the robust-EC interval iteration
+(Dutreix-Coogan / Weininger game reduction) that is both fast and trap-correct
+(ROADMAP / Phase 3). References: Hartmanns-Kaminski (CAV 2020); Haddad-Monmege
+(TCS 2018); Baier et al. (CAV 2017).
 
 ## Classification
 `our-bug` / known limitation. NOT a literature counterexample — the literature
