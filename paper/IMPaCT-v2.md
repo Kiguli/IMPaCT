@@ -131,6 +131,16 @@ Format per entry: `date — feature | decision + rationale | algorithm | refs | 
   Validated by `dfaAccepts == acceptsFinite` differential on random formulas×traces.
   Suite: 29/29 cases green, 37684 assertions, 1 skipped (ISSUE-0003).
 
+- **Phase 2 (part 3) — IMDP×DFA product + co-safe reachability.** `src/product.{h,cpp}`:
+  builds the product (state = s·nQ+q), DFA reads the label of each entered state,
+  accepting DFA states become reachability targets (good-prefix co-safe semantics),
+  then reuses `solve::maxReach*`. Correctness gate: for `F goal`, product reachability
+  == plain `solve::maxReach` to goal-labelled states — verified differentially on 200
+  random MDPs; plus a sequential `F(pickup & F deliver)` example = 0.5. The full
+  co-safe pipeline (LTLf→DFA→product→robust reachability) now works end-to-end on
+  abstract IMDPs. Remaining for the real PD benchmark: drive it from the actual
+  continuous→IMDP abstraction (tool-integration step). Suite: 31/31 cases, 37886 assertions.
+
 <!-- add new dated entries above this line -->
 
 ---

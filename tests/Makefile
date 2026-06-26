@@ -21,13 +21,15 @@ CXXFLAGS ?= -std=c++17 -O2 -Wall -Wextra
 IMPL_SRCS := ../src/omaximization.cpp \
              ../src/graph_utils.cpp \
              ../src/solve.cpp \
-             ../src/ltl.cpp
+             ../src/ltl.cpp \
+             ../src/product.cpp
 
 TEST_SRCS := unit/test_main.cpp \
              unit/test_omaximization.cpp \
              unit/test_graph.cpp \
              unit/test_interval_iteration.cpp \
-             unit/test_ltl_dfa.cpp
+             unit/test_ltl_dfa.cpp \
+             unit/test_product.cpp
 
 BIN := run_tests
 

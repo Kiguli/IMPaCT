@@ -36,4 +36,7 @@
 // Refs: Kupferman-Vardi (FMSD 2001); De Giacomo-Vardi (IJCAI 2013/2015).
 #include "../../src/ltl.h"
 
+// Phase 2 part 3 — IMDP x DFA product + co-safe reachability.
+#include "../../src/product.h"
+
 #endif // IMPACT_TEST_CONTRACTS_H
