@@ -279,6 +279,32 @@ Format per entry: `date — feature | decision + rationale | algorithm | refs | 
   TDD-clean. Refs: PRISM (Kwiatkowska-Norman-Parker, CAV 2011).
   Suite after both: **64 cases / 606,532 assertions green.**
 
+- **Phase 3 core — robust accepting end components / quantitative robust Büchi
+  (ISSUE-0009 RESOLVED).** Replaced the unsound support-MEC pessimistic reduction
+  with an exact robust almost-sure-Büchi computation (`omega::robustBuchiWinningStates`).
+  Algorithm (2.5-player a.s.-Büchi nested fixpoint): repeat { `robustClosure` (keep
+  states with an action whose hi>0-support ⊆ X — controller stays for all nature);
+  remove `natureAttractor(sureAvoid(X, accepting∩X))` } where `sureAvoid` = greatest
+  accepting-free set nature can contain in for sure (in-set hi-sum ≥ 1 AND out-of-set
+  lo-sum = 0) and `natureAttractor` = states from which nature forces positive-prob
+  entry (every controller action has a may-successor into it). `maxBuchiPessimistic`
+  = robust reachability of the winning region.
+  - *The correction:* even inside a support EC (which nature cannot LEAVE), nature
+    can (a) route around the accepting state via lo=0 edges or (b) partially leak to
+    an accepting-free trap. Headline counterexample to the NAIVE reduction (recorded,
+    not a literature counterexample): 2-state support-MEC {0,1} containing the
+    accepting state but with a lo=0 edge into it ⇒ old method 1, true robust 0.
+  - *Confidence:* an independent brute-force **strategy-enumeration oracle**
+    (enumerate every memoryless controller strategy; per strategy find nature's
+    reachable accepting-free traps) matches the production algorithm EXACTLY on
+    ~12,000 checks over 4,000 random IMDPs (immutable differential contract in
+    `test_omega.cpp`) — evidence of exactness, not merely soundness. Plus 4 hand
+    cases (route-around→0, forced-edge→1, sink-leak→0, quantitative reach→0.5).
+  - *Design:* optimistic path keeps the support-MEC method (exact when nature
+    cooperates); pessimistic path uses the robust region. Refs: Chatterjee-Henzinger
+    (graph games); Dutreix-Coogan permanent components; Asadi et al. (qualitative).
+  Suite: **69 cases / 618,546 assertions green.**
+
 <!-- add new dated entries above this line -->
 
 ---

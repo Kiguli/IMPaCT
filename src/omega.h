@@ -14,11 +14,18 @@
 // Hahn et al., TACAS 2020): an LDBA product turns an LTL objective into Büchi, and
 // the accepting frontier is exactly such an accepting set.
 //
-// Robustness: accepting MECs here use the support-graph MEC structure, which is
-// EXACT for point MDPs and for the OPTIMISTIC sense (nature cooperates). The
-// PESSIMISTIC (robust) accepting-EC notion — where nature may eject the play from
-// a candidate EC — needs the robust-EC machinery (Dutreix-Coogan permanent winning
-// components / Weininger et al. game reduction); tracked in ISSUE-0009.
+// Robustness: the OPTIMISTIC value (nature cooperative) uses the support-graph
+// accepting-MEC structure, which is exact for that sense and for point MDPs. The
+// PESSIMISTIC (robust) value needs more than a support-MEC: even inside a support
+// end component (which nature cannot LEAVE, since all leaving edges have hi=0),
+// nature can ROUTE AROUND the accepting state using lo=0 edges, so "EC contains an
+// accepting state => value 1" is unsound (ISSUE-0009). The robust value uses the
+// robust almost-sure-Büchi winning region (robustBuchiWinningStates): a nested
+// fixpoint of (i) robust EC closure and (ii) robust (controller-vs-nature)
+// almost-sure reachability of the accepting set. This is the qualitative
+// 2.5-player Büchi computation (Chatterjee-Henzinger graph games; the IMDP/robust
+// reading follows Dutreix-Coogan permanent components and Asadi et al. force
+// attractors); the quantitative value is robust reachability of that region.
 //
 // Contracts: tests/unit/test_omega.cpp.
 // ============================================================================
@@ -34,6 +41,14 @@ namespace omega {
     // (the "good"/accepting MECs). Reaching any of these => Büchi is satisfiable
     // from there with probability 1 (optimistic / point-MDP semantics).
     std::vector<int> acceptingMECStates(const solve::IMDPModel& m, const std::set<int>& accepting);
+
+    // Robust (pessimistic) almost-sure-Büchi winning region: the states from which
+    // the controller can force visiting `accepting` infinitely often for ALL nature
+    // resolutions within the intervals. Sound for the robust sense (no nature route
+    // can defeat it); for point MDPs it coincides with the support-MEC region.
+    // maxBuchiPessimistic = robust reachability of this set. (ISSUE-0009.)
+    std::vector<int> robustBuchiWinningStates(const solve::IMDPModel& m,
+                                              const std::set<int>& accepting);
 
     // Max probability of the Büchi objective (visit `accepting` infinitely often),
     // = max reachability of the accepting MECs. Optimistic (nature cooperative) and
