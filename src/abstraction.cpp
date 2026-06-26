@@ -50,6 +50,7 @@ SparseReach buildSparseReach1D(const System1D& sys, double prune) {
     out.nnz = 0;
     out.model.assign(N + 2, {});
     out.targets.insert(TARGET);
+    for (int k = 0; k <= M; ++k) out.actions.push_back({sys.ulb + k * sys.ueta});
 
     auto cellLo = [&](int j) { return sys.xlb + j * sys.eta; };
     auto isTargetCell = [&](int j) {
@@ -88,12 +89,11 @@ SparseReach buildSparseReach1D(const System1D& sys, double prune) {
                 if (b.hi > prune) row.push_back({j, b.lo, b.hi});
             }
 
-            // remaining mass (outside grid / pruned) -> SINK, with feasible bounds
-            double sumLo = 0, sumHi = 0;
-            for (const auto& iv : row) { sumLo += iv.lo; sumHi += iv.hi; }
-            double sinkLo = std::max(0.0, 1.0 - sumHi);
-            double sinkHi = std::min(1.0, 1.0 - sumLo);
-            row.push_back({SINK, sinkLo, sinkHi});
+            // mass leaving the grid -> SINK (value 0), bounded TIGHTLY as the
+            // complement of the whole-grid-box probability (not 1 - sum of loose
+            // per-cell lower bounds, which would let nature drain all mass to sink).
+            Bound g = transitionInterval1D(muLo, muHi, sys.sigma, sys.xlb, sys.xub);
+            row.push_back({SINK, std::max(0.0, 1.0 - g.hi), std::min(1.0, 1.0 - g.lo)});
 
             out.nnz += (long long)row.size();
             out.model[i].push_back(std::move(row));
@@ -136,6 +136,7 @@ SparseReach buildSparseReachND(const SystemND& sys, double prune) {
 
     SparseReach out; out.nCells = (int)N; out.nnz = 0;
     out.model.assign((size_t)N + 2, {}); out.targets.insert(TARGET);
+    out.actions = actions;
 
     auto cellLoDim = [&](int i, int j) { return sys.xlb[i] + j * sys.eta[i]; };
     auto isTargetMi = [&](const std::vector<int>& mi) {
@@ -188,9 +189,11 @@ SparseReach buildSparseReachND(const SystemND& sys, double prune) {
                 if (i == dx) break;
             }
 
-            double sumLo = 0, sumHi = 0;
-            for (const auto& iv : row) { sumLo += iv.lo; sumHi += iv.hi; }
-            row.push_back({SINK, std::max(0.0, 1.0 - sumHi), std::min(1.0, 1.0 - sumLo)});
+            // mass leaving the grid -> SINK, bounded tightly via the whole-grid-box
+            // complement (product of per-dim in-grid probabilities).
+            double gl = 1.0, gh = 1.0;
+            for (int i = 0; i < dx; ++i) { Bound g = transitionInterval1D(muLo[i], muHi[i], sys.sigma[i], sys.xlb[i], sys.xub[i]); gl *= g.lo; gh *= g.hi; }
+            row.push_back({SINK, std::max(0.0, 1.0 - gh), std::min(1.0, 1.0 - gl)});
             out.nnz += (long long)row.size();
             out.model[lin].push_back(std::move(row));
         }

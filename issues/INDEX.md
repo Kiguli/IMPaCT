@@ -7,7 +7,8 @@ See [`README.md`](README.md) for conventions and the literature-counterexample p
 | [0001](0001-sorted-synthesis-tolerance-stopping.md) | v1 sorted synthesis uses tolerance stopping, not sound interval iteration | in-progress | medium | soundness, tool-v1 |
 | [0002](0002-mec-naive-acceptance-rule.md) | MEC naive "staying-action-exists" acceptance rule is unsound | resolved | low | methodology, naive-strawman |
 | [0003](0003-pessimistic-interval-nature-trap.md) | Pessimistic interval iteration doesn't converge on nature-confinable ECs | resolved | medium | soundness, robust-ec |
-| [0006](0006-dense-transition-matrix-oom.md) | Dense transition matrix causes memory overflow even on "small" cases | open | high | scalability, memory |
+| [0006](0006-dense-transition-matrix-oom.md) | Dense transition matrix causes memory overflow even on "small" cases | in-progress | high | scalability, memory |
+| [0007](0007-abstraction-sink-too-loose.md) | Abstraction sink bound too loose -> reach under-estimation (found by Monte-Carlo) | resolved | high | correctness, abstraction |
 | [0004](0004-ltlf-dfa-and-product.md) | Phase 2 — LTLf→DFA (done) + IMDP×DFA product + co-safe reachability | open | medium | enhancement, phase-2 |
 | [0005](0005-ltlf-dfa-state-explosion.md) | LTLf→DFA state explosion from syntactic normalization | resolved | high | correctness, bug |
 

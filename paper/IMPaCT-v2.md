@@ -186,6 +186,21 @@ Format per entry: `date — feature | decision + rationale | algorithm | refs | 
   Next: nonlinear dynamics (mixed-monotone/NLopt mean bounds) + drive an ARCH-COMP
   case through the sparse pipeline and verify the value end-to-end.
 
+- **End-to-end verification vs the real continuous system (Monte-Carlo).**
+  `benchmarks/validate_montecarlo.cpp`: build sparse IMDP → synthesize robust
+  controller → extract policy (argmax of `omax` over `val.lower`) → simulate the
+  continuous closed loop → check empirical reach vs synthesized bounds. This caught
+  **ISSUE-0007** (sink interval too loose: `1 - sumLo` ≈ 1 let nature drain all mass
+  to the value-0 sink → reach ≈ 0 vs true ≈ 1). Fixed: bound outside-grid prob
+  tightly as the grid-box complement `[1-gridHi, 1-gridLo]` (both builders). Notable:
+  internal differential tests missed it (dense & sparse shared the error) — the
+  closed-loop check found it. After the fix: empirical reach ≥ robust lower bound for
+  all start states, in a saturated case (≈1) AND a discriminating high-noise case
+  (value≈0.32, empirical≈0.36). Interpretation recorded: a robust controller's
+  guarantee is empirical ≥ lower; benign noise may exceed the (worst-case) upper.
+  Also found a Monte-Carlo gotcha: validating an infinite-horizon reach needs a long
+  sim horizon (truncation gave 0.73 vs true 1.0). Suite still 42/42, 54971 assertions.
+
 <!-- add new dated entries above this line -->
 
 ---

@@ -63,6 +63,9 @@ namespace abstraction {
         std::set<int> targets;      // { N }
         int nCells;
         long long nnz;              // total stored successor intervals (sparsity metric)
+        // Input vector for each action index (same action set for every non-target
+        // cell); lets a synthesized policy be simulated on the continuous system.
+        std::vector<std::vector<double>> actions;
     };
 
     // Build the sparse IMDP. `prune` drops successor cells whose upper bound <= prune
