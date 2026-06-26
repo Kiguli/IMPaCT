@@ -63,4 +63,7 @@
 // Timed-automaton zone-graph reachability (stretch model).
 #include "../../src/ta.h"
 
+// Probabilistic timed automata -> symbolic MDP (timed<->stochastic integration).
+#include "../../src/pta.h"
+
 #endif // IMPACT_TEST_CONTRACTS_H

@@ -480,6 +480,21 @@ Format per entry: `date — feature | decision + rationale | algorithm | refs | 
   Behrmann-Bouyer-Larsen-Pelanek (2006), KNSS (TCS 2002, PTA).
   Suite: **110 cases / 643,044 assertions green.**
 
+- **Stretch: probabilistic timed automata (PTA) → MDP → reach** (`src/pta.{h,cpp}`),
+  the timed↔stochastic integration point. A PTA edge carries a distribution over
+  (reset,target) branches; the forward zone graph induces a finite MDP whose states
+  are symbolic states (location, canonical zone): each enabled edge is an action
+  sending probability p_k to the branch-k successor symbolic state. `maxReachLocation`
+  = `solve::maxReach` on this MDP = EXACT max probability of reaching a target
+  location (point distributions ⇒ exact). Identity by canonical-zone EQUALITY (exact
+  probabilities) + extrapolation (finiteness); empty/blocked branches and no-edge
+  locations route to an absorbing deadlock sink. TDD (`test_pta.cpp`): timing-gated
+  probabilistic edge (Pmax=branch prob), controller picks the better edge,
+  sequential resets compose, invariant-blocked unreachability, deadlock. Scope:
+  Pmax only — Pmin needs the backward/game or digital-clocks construction (ISSUE-0014).
+  Refs (verified): Kwiatkowska-Norman-Segala-Sproston (TCS 2002),
+  Kwiatkowska-Norman-Sproston-Wang (Inf.&Comp. 2007). Suite: **115 cases / 643,053 green.**
+
 <!-- add new dated entries above this line -->
 
 ---
