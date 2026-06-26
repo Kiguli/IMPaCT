@@ -57,6 +57,26 @@ forward to Phase 3+.
   LDBA/limit-deterministic, good-for-MDP** — as interchangeable automaton back-ends,
   with the product/EC analysis specialized per acceptance condition.
 
+## User-requested extensions (added 2026-06-26)
+- **(a) More noise types.** Support as many disturbance models as possible. The
+  per-cell transition kernel is parameterized by the noise model; each needs the 1-D
+  mass-in-box and its min/max over the source-cell mean range. Done: Gaussian
+  (`transitionInterval1D`), bounded uniform (`transitionInterval1DUniform`,
+  enables non-trivial robust ω-regular — ISSUE-0011). Next: truncated Gaussian,
+  triangular, Laplace, and a unified `NoiseModel` interface so builders accept any.
+- **(b) Audit + clean up the original IMPaCT (v1) code.** Review `src/IMDP.cpp` and
+  `src/GPU_synthesis.cpp` for correctness and sloppy code; file issues for anything
+  found. Unify the two inner-solve approaches: the **GLPK LP** and the **O-maximization
+  sort-and-assign** compute the same robust extremal value, but OMax is always faster
+  (O(n log n) vs an LP solve) — make **OMax the single default** and keep the LP-named
+  entry points as **backwards-compatible aliases** that call the faster OMax routine.
+  (OMax already verified vs brute-force vertex enumeration in `test_omaximization`.)
+- **(web app) Visualize small models.** For models under a configurable state cap,
+  render the IMDP (states/edges) and overlay the synthesized **satisfaction
+  probabilities** (per-state value heat map). Part of the Phase-4 web app (last).
+- **Timed automata** — stretch, AFTER STL/CTL: real-time specs / timed-automaton
+  models (region/zone abstraction) on top of the stochastic core.
+
 ## Stretch / long-term targets (per user direction)
 - **Sparse transition representation** (CSR) — required to scale (see ISSUE-0006);
   prerequisite for large products.
