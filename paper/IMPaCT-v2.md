@@ -235,6 +235,16 @@ Format per entry: `date — feature | decision + rationale | algorithm | refs | 
 - ISSUE-0010 (perf, low): OVI's VI-from-below is slow on large strongly-recurrent
   IMDPs; MECCollapse (optimistic) / robust-EC interval iteration is the fast path.
 
+- **Safety synthesis** (broadens to the ARCH safety category: BAS, rooms).
+  `solve::maxSafety{Pessimistic,Optimistic}` = max P(never reach `avoid`) =
+  1 - min-reach-to-avoid. Added a `controllerMax` flag to the solver so the
+  controller can MINIMIZE reach (for safety) as well as maximize (reachability),
+  reusing OVI. Verified (test_safety.cpp): controller-can-avoid → 1; unavoidable →
+  0; coin → 0.5; point pess==opt; and a differential vs reachability on
+  single-action interval MDPs (safety == 1 - reach). Suite: 56/56, 606499 assertions.
+- **Consolidated CAV paper draft** at `paper/draft.md` (algorithms + verified
+  citations + verification methodology incl. the MC-found bugs + experimental results).
+
 <!-- add new dated entries above this line -->
 
 ---

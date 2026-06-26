@@ -33,7 +33,8 @@ TEST_SRCS := unit/test_main.cpp \
              unit/test_ltl_dfa.cpp \
              unit/test_product.cpp \
              unit/test_abstraction.cpp \
-             unit/test_omega.cpp
+             unit/test_omega.cpp \
+             unit/test_safety.cpp
 
 BIN := run_tests
 

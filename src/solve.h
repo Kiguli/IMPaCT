@@ -52,6 +52,12 @@ namespace solve {
     IntervalResult maxReachPessimistic(const IMDPModel& m, const std::set<int>& targets, double eps, Method method);
     IntervalResult maxReachOptimistic (const IMDPModel& m, const std::set<int>& targets, double eps, Method method);
 
+    // Robust safety: max over controller of P(never reach `avoid`) = 1 - min-reach to
+    // avoid. Pessimistic = nature adversarial; optimistic = nature cooperative.
+    // Returns sound [lower,upper] on the safety probability (gap <= 2*eps).
+    IntervalResult maxSafetyPessimistic(const IMDPModel& m, const std::set<int>& avoid, double eps);
+    IntervalResult maxSafetyOptimistic (const IMDPModel& m, const std::set<int>& avoid, double eps);
+
 } // namespace solve
 } // namespace impact
 

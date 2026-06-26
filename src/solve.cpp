@@ -14,7 +14,10 @@ namespace {
 // Robust Bellman backup at one state: max over actions of the omax optimum.
 // sense = Min for pessimistic (adversarial nature), Max for optimistic.
 // A state with no actions has value 0 (cannot make progress to a target).
-double backup(const StateActions& actions, const std::vector<double>& V, omax::Sense sense) {
+// controllerMax: the controller MAXIMIZES over actions (reachability) or MINIMIZES
+// (used for safety = 1 - min-reach-to-avoid). A state with no actions has value 0.
+double backup(const StateActions& actions, const std::vector<double>& V, omax::Sense sense,
+              bool controllerMax = true) {
     double best = 0.0;
     bool any = false;
     std::vector<double> lo, hi, vv;
@@ -23,9 +26,10 @@ double backup(const StateActions& actions, const std::vector<double>& V, omax::S
         lo.reserve(act.size()); hi.reserve(act.size()); vv.reserve(act.size());
         for (const Interval& iv : act) { lo.push_back(iv.lo); hi.push_back(iv.hi); vv.push_back(V[iv.to]); }
         const double val = omax::optimize(lo, hi, vv, sense).value;
-        if (!any || val > best) { best = val; any = true; }
+        if (!any) { best = val; any = true; }
+        else best = controllerMax ? std::max(best, val) : std::min(best, val);
     }
-    return best;
+    return any ? best : 0.0;
 }
 
 struct Collapsed {
@@ -142,7 +146,7 @@ IntervalResult solveReach(const IMDPModel& m, const std::set<int>& targets,
 // needed, so it converges on nature-confinable ECs (ISSUE-0003). If the guess is
 // not yet inductive, refine L (smaller delta) and retry.
 IntervalResult solveOVI(const IMDPModel& m, const std::set<int>& targets,
-                        double eps, omax::Sense sense) {
+                        double eps, omax::Sense sense, bool controllerMax = true) {
     const int n = (int)m.size();
     std::vector<double> L(n, 0.0), tmp(n), U(n), FU(n);
     for (int t : targets) L[t] = 1.0;
@@ -153,7 +157,7 @@ IntervalResult solveOVI(const IMDPModel& m, const std::set<int>& targets,
         for (int it = 0; it < MAXINNER; ++it) {              // refine L from below
             ++iters;
             for (int s = 0; s < n; ++s)
-                tmp[s] = targets.count(s) ? 1.0 : backup(m[s], L, sense);
+                tmp[s] = targets.count(s) ? 1.0 : backup(m[s], L, sense, controllerMax);
             double ch = 0.0;
             for (int s = 0; s < n; ++s) ch = std::max(ch, std::fabs(tmp[s] - L[s]));
             L.swap(tmp);
@@ -163,7 +167,7 @@ IntervalResult solveOVI(const IMDPModel& m, const std::set<int>& targets,
             U[s] = targets.count(s) ? 1.0 : std::min(1.0, L[s] + eps);
         bool inductive = true;                                // verify F(U) <= U
         for (int s = 0; s < n; ++s) {
-            FU[s] = targets.count(s) ? 1.0 : backup(m[s], U, sense);
+            FU[s] = targets.count(s) ? 1.0 : backup(m[s], U, sense, controllerMax);
             if (FU[s] > U[s] + 1e-12) inductive = false;
         }
         if (inductive) return IntervalResult{L, U, iters};    // L <= V* <= U, gap <= eps
@@ -171,6 +175,26 @@ IntervalResult solveOVI(const IMDPModel& m, const std::set<int>& targets,
     }
     for (int s = 0; s < n; ++s) U[s] = targets.count(s) ? 1.0 : std::min(1.0, L[s] + eps);
     return IntervalResult{L, U, iters};                       // best-effort fallback
+}
+
+// Min-reach: controller MINIMIZES reach to `targets`. Used for safety.
+IntervalResult minReach(const IMDPModel& m, const std::set<int>& targets,
+                        double eps, omax::Sense sense) {
+    return solveOVI(m, targets, eps, sense, /*controllerMax=*/false);
+}
+
+// Safety = 1 - min-reach-to-avoid (controller maximizes staying out of `avoid`).
+IntervalResult safetyFromMinReach(const IMDPModel& m, const std::set<int>& avoid,
+                                  double eps, omax::Sense sense) {
+    IntervalResult mr = minReach(m, avoid, eps, sense);
+    IntervalResult r;
+    r.iterations = mr.iterations;
+    r.lower.resize(mr.lower.size()); r.upper.resize(mr.upper.size());
+    for (size_t s = 0; s < mr.lower.size(); ++s) {
+        r.lower[s] = 1.0 - mr.upper[s];    // safety lower = 1 - max possible reach
+        r.upper[s] = 1.0 - mr.lower[s];
+    }
+    return r;
 }
 
 IntervalResult dispatch(const IMDPModel& m, const std::set<int>& targets,
@@ -192,6 +216,15 @@ IntervalResult maxReachPessimistic(const IMDPModel& m, const std::set<int>& targ
 }
 IntervalResult maxReachOptimistic(const IMDPModel& m, const std::set<int>& targets, double eps, Method method) {
     return dispatch(m, targets, eps, omax::Sense::Max, method);
+}
+
+// Robust safety: max over controller of P(never reach `avoid`); pessimistic =
+// nature adversarial (maximizes reach to avoid, omax Sense::Max).
+IntervalResult maxSafetyPessimistic(const IMDPModel& m, const std::set<int>& avoid, double eps) {
+    return safetyFromMinReach(m, avoid, eps, omax::Sense::Max);
+}
+IntervalResult maxSafetyOptimistic(const IMDPModel& m, const std::set<int>& avoid, double eps) {
+    return safetyFromMinReach(m, avoid, eps, omax::Sense::Min);
 }
 
 } // namespace solve
