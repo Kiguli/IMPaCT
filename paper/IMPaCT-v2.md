@@ -495,6 +495,24 @@ Format per entry: `date — feature | decision + rationale | algorithm | refs | 
   Refs (verified): Kwiatkowska-Norman-Segala-Sproston (TCS 2002),
   Kwiatkowska-Norman-Sproston-Wang (Inf.&Comp. 2007). Suite: **115 cases / 643,053 green.**
 
+- **Stretch: POMDPs — exact finite-horizon reachability** (`src/pomdp.{h,cpp}`).
+  Belief-state value iteration: `V_0(b)=b(target)`, `V_t(b)=max_a Σ_o P(o|b,a)
+  V_{t-1}(belief-update(b,a,o))` with target made absorbing (so "in target at H" =
+  "reached within H"). Exact for finite horizon (no α-vector pruning needed); beliefs
+  continuous but the reachable belief tree is finite per horizon. TDD (`test_pomdp.cpp`):
+  fully-observable POMDP == MDP finite-horizon DP (200 random models), a hand case
+  (per-step 0.5 → 0.75 at H=2), and a **250-model differential vs brute-force
+  observation-history-policy enumeration** (the exact finite-horizon optimum). Robust
+  interval-POMDP (adversarial nature + robust belief update) noted as future work.
+  Refs (verified): Smallwood-Sondik (Oper. Res. 1973), Kaelbling-Littman-Cassandra
+  (AIJ 1998). Suite: **118 cases / 643,506 assertions green.**
+
+  Citations added & Crossref-verified this round: PRISM (CAV 2011), Hansson-Jonsson
+  (FAC 1994), Maler-Nickovic (FORMATS 2004), Sadigh-Kapoor (RSS 2016), Alur-Dill
+  (TCS 1994), Bengtsson-Yi (2004), Behrmann et al. (2006), KNSS (TCS 2002), KNSW
+  (Inf.&Comp. 2007), Smallwood-Sondik (1973), Kaelbling-Littman-Cassandra (1998) —
+  every new algorithm linked to a verified paper, per the standing directive.
+
 <!-- add new dated entries above this line -->
 
 ---

@@ -31,7 +31,8 @@ IMPL_SRCS := ../src/omaximization.cpp \
              ../src/stl.cpp \
              ../src/dbm.cpp \
              ../src/ta.cpp \
-             ../src/pta.cpp
+             ../src/pta.cpp \
+             ../src/pomdp.cpp
 
 TEST_SRCS := unit/test_main.cpp \
              unit/test_omaximization.cpp \
@@ -48,7 +49,8 @@ TEST_SRCS := unit/test_main.cpp \
              unit/test_stl.cpp \
              unit/test_dbm.cpp \
              unit/test_ta.cpp \
-             unit/test_pta.cpp
+             unit/test_pta.cpp \
+             unit/test_pomdp.cpp
 
 BIN := run_tests
 

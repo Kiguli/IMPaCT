@@ -66,4 +66,7 @@
 // Probabilistic timed automata -> symbolic MDP (timed<->stochastic integration).
 #include "../../src/pta.h"
 
+// Partially observable MDPs (finite-horizon belief-state reachability).
+#include "../../src/pomdp.h"
+
 #endif // IMPACT_TEST_CONTRACTS_H
