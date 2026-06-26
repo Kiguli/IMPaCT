@@ -357,6 +357,22 @@ Format per entry: `date — feature | decision + rationale | algorithm | refs | 
   unbounded-Gaussian triviality (ISSUE-0011) is specific to unbounded noise.
   Suite: **80 cases / 627,572 assertions green.**
 
+- **v1 inner-solve unification + audit (ISSUE-0012, user request).** The original
+  IMPaCT computed the robust Bellman update two ways — a per-state GLPK LP and the
+  closed-form O-maximization sort-and-assign — returning the same value, but
+  O-maximization is O(n log n) vs an LP solve and is verified against brute-force.
+  Made O-maximization the single default: the four public controller entry points
+  (`{infinite,finite}Horizon{Reach,Safe}Controller`) now delegate to the `*Sorted`
+  (O-maximization) implementations as backwards-compatible aliases; the GLPK LP
+  implementations are dead-coded (DEPRECATED in place) pending deletion + GLPK
+  removal once compile-verified on the SYCL toolchain. Audit recorded in ISSUE-0012:
+  a REAL finite-vs-infinite safety inconsistency in the (now-dead) LP path; a
+  FALSE-POSITIVE "GLPK indexing bug" (it is the standard 1-based idiom — flagged to
+  avoid re-claiming, per the ISSUE-0002 lesson); minor issues (ignored `glp_simplex`
+  status, dead `ia`, two tolerances) all in the dead LP path; and a live follow-up
+  (Sorted-path `//TODO` error stubs). Edits are mechanical signature-preserving
+  redirects, NOT compile-verified here (no SYCL/GLPK toolchain in this environment).
+
 <!-- add new dated entries above this line -->
 
 ---

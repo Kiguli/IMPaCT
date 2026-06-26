@@ -3151,6 +3151,11 @@ void IMDP::targetTransitionVectorBounds(){
 
 /* Synthesis Functions */
 
+/// DEPRECATED / DEAD CODE (ISSUE-0012). GLPK-LP inner-solve for infinite-horizon
+/// synthesis. No longer reachable: infiniteHorizon{Reach,Safe}Controller now
+/// delegate to the faster, verified O-maximization (*Sorted) path. Kept only for
+/// reference; remove with the GLPK dependency after compile-verifying on the
+/// AdaptiveCpp/Armadillo/GLPK toolchain.
 /// Internal implementation for infinite horizon controller synthesis (reach and safe)
 void IMDP::infiniteHorizonControllerImpl(bool IMDP_lower, bool is_reach) {
     auto start = chrono::steady_clock::now();
@@ -4748,28 +4753,39 @@ void IMDP::infiniteHorizonControllerImpl(bool IMDP_lower, bool is_reach) {
     cout << "Execution time: " << duration.count()/1000.0 << " seconds" << endl;
 }
 
-/// infinite horizon reachability synthesis
+// ============================================================================
+// Inner-solve unification (see ISSUE-0012). The robust Bellman update was
+// computed two equivalent ways: a per-state GLPK LINEAR PROGRAM
+// (infiniteHorizonControllerImpl / finiteHorizonControllerImpl) and the
+// closed-form O-MAXIMIZATION "sort-and-assign" (the *Sorted variants). They
+// return the same robust extremal value, but O-maximization is O(n log n) vs an
+// LP solve per state, so it is ALWAYS faster — and the O-maximization core is
+// verified against brute-force vertex enumeration (IMPaCT v2 test_omaximization).
+// O-maximization is therefore the single default: the public controller names
+// below are kept for backwards compatibility and now delegate to the *Sorted
+// (O-maximization) implementations. The GLPK LP path is retained only as dead
+// reference code (it also has a finite-vs-infinite safety inconsistency, see
+// ISSUE-0012) and should be removed together with the GLPK dependency once this
+// change is compile-verified on the AdaptiveCpp/Armadillo/GLPK toolchain.
+// ============================================================================
+
+/// infinite horizon reachability synthesis (backwards-compatible alias -> O-maximization)
 void IMDP::infiniteHorizonReachController(bool IMDP_lower) {
-    infiniteHorizonControllerImpl(IMDP_lower, true);
+    infiniteHorizonReachControllerSorted(IMDP_lower);
 }
 
-
-/// infinite horizon safety synthesis - DEPRECATED: Original implementation below replaced by infiniteHorizonSafeController wrapper
-/// The following commented block contains the original infiniteHorizonReachController implementation
-/// that has been replaced by infiniteHorizonControllerImpl(IMDP_lower, true) above.
-/// This is kept for reference during validation, and should be deleted after verification.
-
-
-/// infinite horizon safety synthesis
+/// infinite horizon safety synthesis (backwards-compatible alias -> O-maximization)
 void IMDP::infiniteHorizonSafeController(bool IMDP_lower) {
-    infiniteHorizonControllerImpl(IMDP_lower, false);
+    infiniteHorizonSafeControllerSorted(IMDP_lower);
 }
 
-
-/// infinite horizon safety synthesis - DEPRECATED: Original implementation
-/// that has been replaced by infiniteHorizonControllerImpl(IMDP_lower, false) above.
-/// This is kept for reference during validation, and should be deleted after verification.
-
+/// DEPRECATED / DEAD CODE (ISSUE-0012). GLPK-LP inner-solve for finite-horizon
+/// synthesis; no longer reachable (callers delegate to the *Sorted O-maximization
+/// path). NOTE: this LP path also has a finite-vs-infinite SAFETY inconsistency —
+/// for safe (is_reach=false) it sets the Avoid objective coef to 0 and never
+/// accumulates glp_get_col_prim(lp, n+1), whereas the infinite LP path uses coef
+/// 1.0 and accumulates it. Moot now that O-maximization is the default. Remove
+/// with the GLPK dependency after toolchain compile-verification.
 /// Internal implementation for finite horizon controller synthesis (reach and safe)
 void IMDP::finiteHorizonControllerImpl(bool IMDP_lower, size_t timeHorizon, bool is_reach) {
     auto start = chrono::steady_clock::now();
@@ -5681,20 +5697,12 @@ void IMDP::finiteHorizonControllerImpl(bool IMDP_lower, size_t timeHorizon, bool
     cout << "Execution time: " << duration.count()/1000.0 << " seconds" << endl;
 }
 
-/// finite horizon reachability synthesis
+/// finite horizon reachability synthesis (backwards-compatible alias -> O-maximization; ISSUE-0012)
 void IMDP::finiteHorizonReachController(bool IMDP_lower, size_t timeHorizon) {
-    finiteHorizonControllerImpl(IMDP_lower, timeHorizon, true);
+    finiteHorizonReachControllerSorted(IMDP_lower, timeHorizon);
 }
 
-/// finite horizon reachability synthesis - DEPRECATED: Original implementation
-/// that has been replaced by finiteHorizonControllerImpl(IMDP_lower, timeHorizon, true) above.
-/// This is kept for reference during validation, and should be deleted after verification.
-
-/// finite horizon safety synthesis
+/// finite horizon safety synthesis (backwards-compatible alias -> O-maximization; ISSUE-0012)
 void IMDP::finiteHorizonSafeController(bool IMDP_lower, size_t timeHorizon) {
-    finiteHorizonControllerImpl(IMDP_lower, timeHorizon, false);
+    finiteHorizonSafeControllerSorted(IMDP_lower, timeHorizon);
 }
-
-/// finite horizon safety synthesis - DEPRECATED: Original implementation
-/// that has been replaced by finiteHorizonControllerImpl(IMDP_lower, timeHorizon, false) above.
-/// This is kept for reference during validation, and should be deleted after verification.
