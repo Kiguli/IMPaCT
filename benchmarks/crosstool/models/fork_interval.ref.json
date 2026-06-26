@@ -1,0 +1,8 @@
+{
+  "model": "fork_interval.imdp",
+  "description": "Interval MDP, single action; nature splits [0.4,0.6] mass between a reaching state and a dead state.",
+  "provenance": "Exact O-maximization: pess pushes mass to the dead successor (s1=0.4) => 0.4; opt pushes to the reaching successor (s1=0.6) => 0.6. IntervalMDP.jl robust value interval = [0.4, 0.6].",
+  "checks": [
+    {"prop": "reach", "label": "target", "state": 0, "pess": 0.4, "opt": 0.6, "tol": 1e-4}
+  ]
+}

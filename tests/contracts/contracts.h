@@ -45,4 +45,7 @@
 // Phase 3 — omega-regular (Büchi) synthesis via accepting-MEC reachability.
 #include "../../src/omega.h"
 
+// Explicit (interval) MDP exchange format (cross-tool benchmarking).
+#include "../../src/imdp_io.h"
+
 #endif // IMPACT_TEST_CONTRACTS_H

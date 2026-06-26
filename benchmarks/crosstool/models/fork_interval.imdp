@@ -1,0 +1,10 @@
+# Interval MDP, single controller action. Nature splits mass over s1 (reaches) / s2 (dead).
+# Each edge in [0.4,0.6], must sum to 1. min-reach: mass->s2 (s1=0.4) => 0.4;
+# max-reach: s1=0.6 => 0.6. Robust value interval [0.4, 0.6] (O-maximization, exact).
+states 4
+init 0
+label target 3
+tran 0 0  1:0.4:0.6 2:0.4:0.6
+tran 1 0  3:1:1
+tran 2 0  2:1:1
+tran 3 0  3:1:1

@@ -1,0 +1,11 @@
+# Point MDP, SAFETY = P(never reach `avoid`). avoid = {2}.
+#   s0 -> s1 (0.7), s3 (0.3);  s1 -> s2 (0.4), s3 (0.6);  s3 safe-absorbing.
+# safe(2)=0, safe(3)=1, safe(1)=0.6, safe(0)=0.7*0.6 + 0.3*1 = 0.72.
+# Point MDP => exact; PRISM/Storm Pmax[ !F avoid ] give 0.72.
+states 4
+init 0
+label avoid 2
+tran 0 0  1:0.7:0.7 3:0.3:0.3
+tran 1 0  2:0.4:0.4 3:0.6:0.6
+tran 2 0  2:1:1
+tran 3 0  3:1:1

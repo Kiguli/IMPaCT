@@ -1,0 +1,12 @@
+# Point (degenerate-interval) Markov chain. Exact reachability by linear solve.
+# 3 = target (absorbing), 2 = dead/sink (absorbing, non-target).
+#   s0 -> s1 (0.5), s2 (0.5);   s1 -> s3 (0.5), s2 (0.5)
+# P(reach {3}): p3=1, p2=0, p1=0.5, p0=0.25.
+# Point MDP => PRISM / Storm / IntervalMDP.jl give exactly these (no interval slack).
+states 4
+init 0
+label target 3
+tran 0 0  1:0.5:0.5 2:0.5:0.5
+tran 1 0  3:0.5:0.5 2:0.5:0.5
+tran 2 0  2:1:1
+tran 3 0  3:1:1

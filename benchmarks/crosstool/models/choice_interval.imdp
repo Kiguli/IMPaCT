@@ -1,0 +1,13 @@
+# Interval MDP with a controller CHOICE at s0 (two actions) + interval nature.
+# s1 is a dead sink (reaches target w.p. 0); s2 is the absorbing target.
+# action A: to s1 [0.5,0.7], to s2 [0.3,0.5]  -> reach = mass on s2.
+#           nature min: s1=0.7,s2=0.3 -> 0.3 ; nature max: s1=0.5,s2=0.5 -> 0.5
+# action B: to s1 0.6, to s2 0.4 (point)      -> reach = 0.4 (both senses)
+# controller max:  pess = max(0.3,0.4)=0.4 (pick B);  opt = max(0.5,0.4)=0.5 (pick A).
+states 3
+init 0
+label target 2
+tran 0 0  1:0.5:0.7 2:0.3:0.5
+tran 0 1  1:0.6:0.6 2:0.4:0.4
+tran 1 0  1:1:1
+tran 2 0  2:1:1

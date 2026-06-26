@@ -1,0 +1,9 @@
+{
+  "model": "chain_point.imdp",
+  "description": "Point Markov chain; absorbing target {3}, sink {2}.",
+  "provenance": "Exact: linear reachability system. p0=0.25, p1=0.5. Point MDP, so PRISM (Pmax=?[F target]), Storm, and IntervalMDP.jl all return exactly 0.25 (no interval slack).",
+  "checks": [
+    {"prop": "reach", "label": "target", "state": 0, "pess": 0.25, "opt": 0.25, "tol": 1e-4},
+    {"prop": "reach", "label": "target", "state": 1, "pess": 0.5,  "opt": 0.5,  "tol": 1e-4}
+  ]
+}

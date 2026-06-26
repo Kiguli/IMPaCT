@@ -11,3 +11,6 @@ __pycache__/
 
 # partial/OOM baseline outputs
 tests/golden/
+
+# cross-tool CLI build artifact
+tools/imdp_solve
