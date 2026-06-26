@@ -57,4 +57,7 @@
 // Bounded STL on Interval-MDP abstractions (logics beyond LTL).
 #include "../../src/stl.h"
 
+// DBM zone abstraction for timed automata (stretch model).
+#include "../../src/dbm.h"
+
 #endif // IMPACT_TEST_CONTRACTS_H

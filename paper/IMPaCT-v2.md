@@ -448,6 +448,22 @@ Format per entry: `date — feature | decision + rationale | algorithm | refs | 
   finite-horizon bounded operators = Baier-Katoen Ch.10. Spatial-robustness STL
   (single-trace) noted as future work. Suite: **98 cases / 642,650 assertions green.**
 
+- **Stretch: timed-automata foundation — DBM zone abstraction** (`src/dbm.{h,cpp}`).
+  The canonical data structure for zone-based timed-automaton reachability: a zone =
+  convex set of clock valuations via difference constraints x_i - x_j ≤/< c, stored
+  as an (n+1)² Difference Bound Matrix (clock 0 = zero reference). Implemented the
+  standard operations (Bengtsson-Yi 2004): `canonicalize` (Floyd-Warshall),
+  `isEmpty` (negative cycle), `constrain`/`intersect` (guards), `up` (delay/time
+  elapse), `reset` (clock:=0), `includes` (fixpoint inclusion), `contains`
+  (membership). TDD (`test_dbm.cpp`): emptiness/guard/inclusion hand cases plus a
+  GRID DIFFERENTIAL oracle that checks intersect/up/reset against an explicit
+  finite-grid set model of the continuous semantics (385 assertions). This is the
+  foundation a probabilistic-timed-automaton front-end builds on — the zone graph
+  yields a finite (I)MDP the verified reach/PCTL solvers then handle (next step).
+  Algorithm→paper links (all verified in References.bib): Alur-Dill (TCS 1994, timed
+  automata + regions); Bengtsson-Yi (2004, DBM/zone algorithms); the PTA target is
+  Kwiatkowska-Norman-Segala-Sproston (TCS 2002). Suite: **105 cases / 643,035 green.**
+
 <!-- add new dated entries above this line -->
 
 ---
