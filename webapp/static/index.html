@@ -25,8 +25,18 @@
   .legend { position:absolute; bottom:14px; left:14px; background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-size:12px; }
   .bar { width:160px; height:12px; border-radius:3px; margin:6px 0 2px; background:linear-gradient(90deg,#d1495b,#edae49,#66a182); }
   .barlabels { display:flex; justify-content:space-between; color:var(--muted); }
-  .examples { margin-top:10px; font-size:12px; color:var(--muted); }
-  .examples a { color:var(--accent); cursor:pointer; margin-right:10px; }
+  .examples { display:flex; flex-wrap:wrap; gap:6px; margin:4px 0 6px; }
+  .examples button { width:auto; margin:0; padding:5px 9px; font-size:12px; font-weight:500;
+    background:var(--panel); color:var(--ink); border:1px solid var(--line); border-radius:14px; cursor:pointer; }
+  .examples button:hover { border-color:var(--accent); color:var(--accent); }
+  .examples .ex-group { width:100%; color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.04em; margin-top:6px; }
+  .tabs { display:flex; flex-wrap:wrap; gap:4px; margin-bottom:12px; border-bottom:1px solid var(--line); padding-bottom:8px; }
+  .tabs button { width:auto; margin:0; padding:6px 10px; font-size:12px; font-weight:600; background:transparent; color:var(--muted); border:1px solid transparent; border-radius:6px; cursor:pointer; }
+  .tabs button:hover { color:var(--ink); }
+  .tabs button.active { background:var(--accent); color:#fff; }
+  .info { font-size:13px; color:var(--ink); }
+  .info p { margin:8px 0; } .info ul { margin:8px 0; padding-left:18px; } .info li { margin:4px 0; color:var(--muted); }
+  .info code { background:var(--bg); border:1px solid var(--line); border-radius:4px; padding:0 4px; font-size:12px; color:var(--ink); }
   .hint { color:var(--muted); font-size:12px; margin-top:4px; }
 </style>
 </head>
@@ -36,17 +46,31 @@
 </header>
 <div class="wrap">
   <div class="controls">
+    <div class="tabs" id="tabs"></div>
+    <label>Examples <span class="hint">— click to load &amp; run (tutorial)</span></label>
+    <div class="examples" id="examples"></div>
+
+   <div id="solverPanel">
     <label>Model</label>
     <textarea id="model" spellcheck="false"></textarea>
-    <div class="examples">load: <a data-ex="fork">interval fork</a><a data-ex="patrol">patrol (prism)</a><a data-ex="chain">point chain</a></div>
 
     <div class="row">
       <div><label>Format</label>
         <select id="format"><option value="imdp">.imdp</option><option value="prism">PRISM</option></select></div>
       <div><label>Property</label>
-        <select id="prop"><option>reach</option><option>safety</option><option>buchi</option><option>persist</option><option>patrol</option></select></div>
+        <select id="prop">
+          <option value="reach">reach (F)</option>
+          <option value="safety">safety (G)</option>
+          <option value="buchi">buchi (G F)</option>
+          <option value="persist">persist (F G)</option>
+          <option value="patrol">patrol (&amp;G F)</option>
+          <option value="next">next (X)</option>
+          <option value="until">until (U)</option>
+          <option value="ltl">LTL formula</option>
+        </select></div>
     </div>
-    <label>Label(s) <span class="hint">— comma-separated for patrol</span></label>
+    <label>Label(s) / formula
+      <span class="hint">— comma-separated for patrol/until (a,b); an LTL formula for "LTL formula"</span></label>
     <input id="label" value="target"/>
     <div class="row">
       <div><label>Bound</label>
@@ -58,6 +82,7 @@
     <input id="cap" type="number" value="60" min="2"/>
     <button id="go">Solve &amp; visualize</button>
     <div class="hint" id="status"></div>
+   </div>
   </div>
   <div class="view">
     <svg id="graph"></svg>

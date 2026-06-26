@@ -27,6 +27,8 @@
 #include "../src/prism.h"
 #include "../src/solve.h"
 #include "../src/omega.h"
+#include "../src/pctl.h"
+#include "../src/ltlspec.h"
 
 #include <iostream>
 #include <string>
@@ -39,9 +41,10 @@ static void usage() {
     std::cerr <<
       "usage: imdp_solve MODEL(.imdp|.prism) PROP LABEL "
       "[--bound pess|opt|both] [--eps E] [--method ovi|mec] [--state S]\n"
-      "  PROP  : reach | safety | buchi | persist | patrol\n"
-      "  LABEL : a label name; for patrol, comma-separated labels (visit each i.o.)\n"
-      "  buchi   = G F label (recurrence)   persist = F G label (reach-then-stay)\n";
+      "  PROP  : reach | safety | buchi | persist | patrol | next | until | ltl\n"
+      "  LABEL : a label name; for patrol/until, comma-separated labels;\n"
+      "          for ltl, an LTL formula (e.g. \"F goal\", \"G F r\", \"a U b\")\n"
+      "  buchi = G F label   persist = F G label   next = X label   until = a,b (a U b)\n";
 }
 
 // split "a,b,c" -> {"a","b","c"}
@@ -95,15 +98,20 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    // Resolve label(s) -> state set(s). patrol takes several (comma-separated) labels.
+    // For `ltl` the LABEL arg is an LTL formula (not a label name); every other
+    // property resolves comma-separated label name(s) to state set(s).
+    const bool isLtl = (prop == "ltl");
     std::vector<std::set<int>> accSets;
-    for (const std::string& nm : splitComma(label)) {
-        auto it = p.labels.find(nm);
-        if (it == p.labels.end()) { std::cerr << "no such label '" << nm << "' in model\n"; return 1; }
-        accSets.push_back(it->second);
+    if (!isLtl) {
+        for (const std::string& nm : splitComma(label)) {
+            auto it = p.labels.find(nm);
+            if (it == p.labels.end()) { std::cerr << "no such label '" << nm << "' in model\n"; return 1; }
+            accSets.push_back(it->second);
+        }
+        if (accSets.empty()) { std::cerr << "no label given\n"; return 1; }
     }
-    if (accSets.empty()) { std::cerr << "no label given\n"; return 1; }
-    const std::set<int>& states = accSets.front();
+    const std::set<int> empty;
+    const std::set<int>& states = isLtl ? empty : accSets.front();
     const int s = (stateArg >= 0) ? stateArg : p.init;
     if (s < 0 || s >= p.nStates) { std::cerr << "state out of range\n"; return 1; }
 
@@ -128,6 +136,16 @@ int main(int argc, char** argv) {
         if (prop == "patrol")
             return pess ? omega::maxGenBuchiPessimistic(p.model, accSets, eps)
                         : omega::maxGenBuchiOptimistic(p.model, accSets, eps);
+        if (prop == "next")
+            return pess ? pctl::nextPessimistic(p.model, states, eps)
+                        : pctl::nextOptimistic(p.model, states, eps);
+        if (prop == "until") {
+            if (accSets.size() < 2) throw std::runtime_error("until needs two labels: a,b (a U b)");
+            return pess ? pctl::untilPessimistic(p.model, accSets[0], accSets[1], eps)
+                        : pctl::untilOptimistic(p.model, accSets[0], accSets[1], eps);
+        }
+        if (prop == "ltl")
+            return ltlspec::synthesize(p.model, p.labels, label, pess, eps);
         throw std::runtime_error("unknown property '" + prop + "'");
     };
 

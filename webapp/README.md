@@ -15,8 +15,16 @@ per-state `[lower, upper]` values for the chosen property and sense.
 - Each state **heat-mapped** by its satisfaction probability (red → amber → green).
 - Initial state (thick border) and labelled states (★); edges carry the interval
   `[lo, hi]` on hover; per-state robust/optimistic values on hover.
-- Supports every property the CLI does: `reach`, `safety`, `buchi` (G F),
-  `persist` (F G), `patrol` (⋀ G F), in `.imdp` or PRISM input.
+- **Category tabs** (Reachability · ω-regular · LTL · Input · Other models), each
+  with one **clickable example per feature** so the app doubles as a tutorial.
+- Every IMDP property the toolbox exposes, all robust (pessimistic) + optimistic:
+  `reach` (F), `safety` (G), `until` (a U b), `next` (X), `buchi` (G F recurrence),
+  `persist` (F G), `patrol` (⋀ G F), and a free-form **LTL formula** mode
+  (`ltlspec` dispatcher: F/G/U/X/GF/FG/patrol over boolean atoms), in `.imdp` or
+  PRISM input. Out-of-fragment LTL is reported (needs the LDBA route, ISSUE-0016).
+- The **Other models** tab documents the non-IMDP features (bounded STL, timed
+  automata, PTA, POMDPs, continuous-system abstraction) that are used via the CLI /
+  library rather than this graph view.
 - A **state cap** (default 60): larger models report their size and are not
   rendered (the backend also has a 200-state hard cap), so the visualization stays
   legible for the small models it is meant for.
@@ -27,6 +35,7 @@ per-state `[lower, upper]` values for the chosen property and sense.
 c++ -std=c++17 -O2 tools/imdp_solve.cpp \
     src/imdp_io.cpp src/prism.cpp src/solve.cpp \
     src/omaximization.cpp src/graph_utils.cpp src/omega.cpp \
+    src/pctl.cpp src/ltlspec.cpp \
     -o tools/imdp_solve
 
 # 2. run the app (Python 3, standard library only)
