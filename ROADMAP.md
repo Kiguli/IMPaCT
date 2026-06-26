@@ -10,22 +10,30 @@ forward to Phase 3+.
 
 ## Current state (implemented & verified on branch IMPaCT-v2.0)
 - **Solver core** (`src/`): O-maximization (`omaximization`), SCC+MEC (`graph_utils`),
-  sound robust reachability with selectable methods — OVI (default) + MEC-collapse
-  interval iteration (`solve`); **safety** = 1 - min-reach.
-- **Specifications**: LTLf parser + finite-trace evaluator and LTLf→DFA via semantic
-  canonicalization (`ltl`); IMDP×DFA product for co-safe LTL (`product`); **Büchi
-  ω-regular** via accepting-MEC reachability (`omega`).
-- **Sparse abstraction** (`abstraction`): affine n-D and nonlinear (interval
-  arithmetic) diagonal-Gaussian systems; O(nnz) memory.
-- **Verification**: a doctest suite (56 cases, ~600k assertions) of differential /
-  brute-force oracles, plus end-to-end Monte-Carlo validators for reach, safety,
-  co-safe LTL, and nonlinear (VP) — see `benchmarks/`.
-- **Issues**: resolved 0001(superseded),0002,0003,0005,0007,0008; in-progress 0006
-  (sparse landed for the v2 path); open 0004 (Spot back-end optional), 0009 (robust
-  accepting ECs), 0010 (OVI perf on recurrent IMDPs).
-- **Not yet**: robust accepting ECs (ISSUE-0009, the CAV-core robust EC), wiring the
-  sparse path through the full ARCH-COMP suite, ω-automata for general LTL (Büchi/
-  Streett/parity back-ends), and Phase 4 (web app).
+  sound robust reachability — OVI (default) + MEC-collapse (`solve`); **safety**.
+- **ω-regular** (`omega`): exact robust accepting ECs / a.s.-Büchi (ISSUE-0009,
+  oracle-validated), generalized Büchi (patrol), persistence/co-Büchi.
+- **Specifications/logics**: LTLf→DFA + IMDP×DFA product (co-safe, `ltl`/`product`);
+  **PCTL/CTL** (`pctl`); **bounded STL** (`stl`); **LTL fragment dispatcher**
+  (`ltlspec`) routing F/G/U/X/GF/FG/patrol to the verified solvers.
+- **Abstraction** (`abstraction`): sparse affine n-D + nonlinear (interval-arithmetic)
+  diagonal-Gaussian, O(nnz); **pluggable noise** (Gaussian/uniform/triangular/Laplace);
+  bounded-disturbance kernel → non-trivial robust continuous ω-regular (ISSUE-0011).
+- **Other models**: **timed automata** (DBM zones + zone-graph reachability, `dbm`/`ta`);
+  **probabilistic timed automata** (`pta`, zone Pmax + digital-clocks Pmin); **POMDPs**
+  (`pomdp`, exact finite-horizon belief-state reachability).
+- **Tooling**: neutral `.imdp` format + PRISM-language input + `imdp_solve` CLI;
+  cross-tool reference benchmarks (`benchmarks/crosstool`); **web app** (`webapp`,
+  small-model IMDP + satisfaction-probability visualization).
+- **Verification**: doctest suite **128 cases / ~643k assertions**, all differential/
+  brute-force-oracle-backed; Monte-Carlo end-to-end validators in `benchmarks/`.
+  Every algorithm linked to a Crossref-verified paper in `paper/References.bib`.
+- **Issues**: resolved 0001–0003,0005,0007–0009,0011,0014; in-progress 0006,0010,
+  0012,0013; open/transfer 0004, 0015 (robust interval-POMDP, research),
+  0016 (full-LTL→LDBA, external Spot/Owl). See the big-machine queue below.
+- **Needs the big machine** (compile/external): v1 LP→OMax compile-verify + GLPK
+  removal (0012), finite-safe Sorted fix verification (0013), live peer comparisons,
+  robust interval-POMDP (0015), arbitrary-LTL→LDBA (0016).
 
 ## Near-term (current plan)
 - **Phase 1** sound robust interval iteration — *done* (MEC-collapse variant). Add
