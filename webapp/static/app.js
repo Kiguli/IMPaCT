@@ -234,6 +234,7 @@ function drawGraph() {
   // Robust (pessimistic) and optimistic results, when both senses were computed.
   const Vp=data.values.pess, Vo=data.values.opt;
   for(let i=0;i<n;i++){
+    const [x,y]=pos[i];
     // lower bound = pessimistic (robust) value; upper bound = optimistic value.
     // Each sense's own [lower,upper] is just the solver's tight convergence bracket,
     // so we take its midpoint as that sense's value. Fall back to the colour-by sense
