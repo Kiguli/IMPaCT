@@ -231,9 +231,18 @@ function drawGraph() {
       const lt=mk("text",{x:mx-uy*9,y:my+ux*9+3,"text-anchor":"middle",fill:"#9aa4ad","font-size":9});
       lt.textContent=probLbl(e.lo,e.hi); svg.appendChild(lt); }
   }
+  // Robust (pessimistic) and optimistic results, when both senses were computed.
+  const Vp=data.values.pess, Vo=data.values.opt;
   for(let i=0;i<n;i++){
-    const [x,y]=pos[i], lo=vals[i]?vals[i].lower:0, hi=vals[i]?vals[i].upper:0;
-    const colorVal=GFR?(GFR[i]||0):lo;                       // colour by the LOWER bound (or animation frame)
+    // lower bound = pessimistic (robust) value; upper bound = optimistic value.
+    // Each sense's own [lower,upper] is just the solver's tight convergence bracket,
+    // so we take its midpoint as that sense's value. Fall back to the colour-by sense
+    // if only one was computed (so lo==hi then, honestly reflecting a single solve).
+    const mid=r=>r?0.5*(r[i].lower+r[i].upper):null;
+    const pv=mid(Vp), ov=mid(Vo), cv=mid(vals);
+    const lo = (pv!==null)?pv:(cv!==null?cv:0);
+    const hi = (ov!==null)?ov:lo;
+    const colorVal=GFR?(GFR[i]||0):(GCB==="opt"?hi:lo);      // colour by lower (robust) by default; upper if "Color by: optimistic"
     const g=mk("g",{style:"cursor:grab"}), isInit=(i===data.init), lab=labelOf[i];
     const c=mk("circle",{cx:x,cy:y,r:r,fill:heat(colorVal),stroke:isInit?"#e6edf3":"#0f1419","stroke-width":isInit?3.5:1.5});
     const tt=mk("title",{}); tt.textContent=`state ${i}${lab?" {"+lab.join(",")+"}":""}${isInit?" (init)":""}\n`+(GFR?`iteration value = ${colorVal.toFixed(3)}`:Object.keys(data.values).map(k=>`${k} [${data.values[k][i].lower.toFixed(3)}, ${data.values[k][i].upper.toFixed(3)}]`).join("\n"));
