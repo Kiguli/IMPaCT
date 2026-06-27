@@ -185,15 +185,22 @@ const POM_EX = [
 
 // ===================== node-link graph (IMDP) ===============================
 // Stateful so node positions persist across re-renders (drag, animation, recolor).
-let GD=null, GCB=null, GFR=null, GPOS=null, GR=14, GdragIdx=-1, GdragSetup=false;
+let GD=null, GCB=null, GFR=null, GPOS=null, GLBLOFF=null, GR=14, GdragIdx=-1, GdragLabelIdx=-1, GdragSetup=false;
 const probLbl=(lo,hi)=> (Math.abs(hi-lo)<1e-9) ? (+lo).toFixed(2) : `[${(+lo).toFixed(2)},${(+hi).toFixed(2)}]`;
 
 function svgXY(ev){ const r=$("graph").getBoundingClientRect(); return [ev.clientX-r.left, ev.clientY-r.top]; }
 function setupDrag(){
   if(GdragSetup) return; GdragSetup=true;
   const svg=$("graph");
-  svg.addEventListener("pointermove", ev=>{ if(GdragIdx<0||!GPOS) return; const [x,y]=svgXY(ev); GPOS[GdragIdx]=[x,y]; drawGraph(); });
-  const end=()=>{ GdragIdx=-1; };
+  svg.addEventListener("pointermove", ev=>{
+    if(!GPOS) return; const [mx,my]=svgXY(ev);
+    if(GdragLabelIdx>=0){                                  // rotate/move the value label around its node (clamped radius)
+      let dx=mx-GPOS[GdragLabelIdx][0], dy=my-GPOS[GdragLabelIdx][1]; const m=Math.hypot(dx,dy)||1;
+      const cl=Math.max(GR+8, Math.min(GR+52, m)); GLBLOFF[GdragLabelIdx]=[dx/m*cl, dy/m*cl]; drawGraph(); return;
+    }
+    if(GdragIdx>=0){ GPOS[GdragIdx]=[mx,my]; drawGraph(); }
+  });
+  const end=()=>{ GdragIdx=-1; GdragLabelIdx=-1; };
   svg.addEventListener("pointerup", end); svg.addEventListener("pointerleave", end);
 }
 
@@ -203,7 +210,7 @@ function renderGraph(data, colorBy, frame) {
   const svg=$("graph"), n=data.nStates;
   if(GD!==data || !GPOS || GPOS.length!==n){   // new model -> fresh circular layout
     const W=svg.clientWidth||800, H=svg.clientHeight||600, cx=W/2, cy=H/2, R=Math.min(W,H)/2-70;
-    GPOS=[]; for(let i=0;i<n;i++){const a=-Math.PI/2+2*Math.PI*i/n; GPOS.push([cx+R*Math.cos(a), cy+R*Math.sin(a)]);}
+    GPOS=[]; GLBLOFF=[]; for(let i=0;i<n;i++){const a=-Math.PI/2+2*Math.PI*i/n; GPOS.push([cx+R*Math.cos(a), cy+R*Math.sin(a)]); GLBLOFF.push([0, 24]);}
   }
   GD=data; GCB=colorBy; GFR=frame||null; GR=Math.max(10,Math.min(26,320/n));
   drawGraph();
@@ -252,9 +259,14 @@ function drawGraph() {
     g.appendChild(c);
     g.appendChild(mk("text",{x:x,y:y+4,"text-anchor":"middle",fill:"#0f1419","font-size":Math.max(9,r*0.6),"font-weight":"700","pointer-events":"none"})).textContent=i;
     if(lab){const s=mk("text",{x:x,y:y-r-4,"text-anchor":"middle",fill:"#edae49","font-size":13,"pointer-events":"none"});s.textContent="★";g.appendChild(s);}
-    // label below: lower / upper (animation: single iterate value)
-    g.appendChild(mk("text",{x:x,y:y+r+14,"text-anchor":"middle",fill:"#8b949e","font-size":11,"pointer-events":"none"}))
-      .textContent = GFR ? colorVal.toFixed(2) : `${lo.toFixed(2)} / ${hi.toFixed(2)}`;
+    // value label: lower / upper (animation: single iterate value). Draggable AROUND
+    // the node at a clamped radius so it can be moved off overlapping edges.
+    const off = (GLBLOFF && GLBLOFF[i]) || [0, 24];
+    const vt = mk("text",{x:x+off[0], y:y+off[1]+4, "text-anchor":"middle", fill:"#8b949e","font-size":11, style:"cursor:move"});
+    vt.textContent = GFR ? colorVal.toFixed(2) : `${lo.toFixed(2)} / ${hi.toFixed(2)}`;
+    vt.appendChild(mk("title",{})).textContent="drag to reposition the label around the state";
+    vt.addEventListener("pointerdown", ev=>{ GdragLabelIdx=i; ev.preventDefault(); ev.stopPropagation(); if(vt.setPointerCapture) try{vt.setPointerCapture(ev.pointerId);}catch(e){} });
+    g.appendChild(vt);
     svg.appendChild(g);
   }
 }
