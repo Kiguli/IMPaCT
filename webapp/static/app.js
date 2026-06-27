@@ -195,11 +195,19 @@ function renderGraph(data, colorBy, frame) {
   mr.appendChild(mk("path",{d:"M0,0 L10,5 L0,10 z",fill:"#6e7681"})); defs.appendChild(mr); svg.appendChild(defs);
   const r=Math.max(10,Math.min(26,320/n));
   const agg={}; for(const e of data.edges){const k=e.from+"-"+e.to; const a=agg[k]||(agg[k]={from:e.from,to:e.to,lo:1,hi:0}); a.lo=Math.min(a.lo,e.lo);a.hi=Math.max(a.hi,e.hi);}
+  const probLbl=(lo,hi)=> (Math.abs(hi-lo)<1e-9) ? (+lo).toFixed(2) : `[${(+lo).toFixed(2)},${(+hi).toFixed(2)}]`;
+  const showEdgeLabels = Object.keys(agg).length <= 60;   // avoid clutter on dense graphs
   for(const e of Object.values(agg)){
-    if(e.from===e.to){const [x,y]=pos[e.from],ox=(x-cx)/R||0.01,oy=(y-cy)/R||0.01; svg.appendChild(mk("circle",{cx:x+ox*r*1.6,cy:y+oy*r*1.6,r:r*0.7,fill:"none",stroke:"#6e7681","stroke-width":1})); continue;}
+    if(e.from===e.to){const [x,y]=pos[e.from],ox=(x-cx)/R||0.01,oy=(y-cy)/R||0.01;
+      svg.appendChild(mk("circle",{cx:x+ox*r*1.6,cy:y+oy*r*1.6,r:r*0.7,fill:"none",stroke:"#6e7681","stroke-width":1}));
+      if(showEdgeLabels) svg.appendChild(mk("text",{x:x+ox*r*2.7,y:y+oy*r*2.7,"text-anchor":"middle",fill:"#8b949e","font-size":9})).textContent=probLbl(e.lo,e.hi);
+      continue;}
     const [x1,y1]=pos[e.from],[x2,y2]=pos[e.to]; const dx=x2-x1,dy=y2-y1,L=Math.hypot(dx,dy)||1,ux=dx/L,uy=dy/L;
     const ln=mk("line",{x1:x1+ux*r,y1:y1+uy*r,x2:x2-ux*r,y2:y2-uy*r,stroke:"#6e7681","stroke-width":1.2,"marker-end":"url(#arr)"});
     const t=mk("title",{});t.textContent=`${e.from}→${e.to} [${(+e.lo).toFixed(3)}, ${(+e.hi).toFixed(3)}]`;ln.appendChild(t);svg.appendChild(ln);
+    if(showEdgeLabels){ const mx=(x1+x2)/2,my=(y1+y2)/2, px=-uy, py=ux;   // perpendicular offset
+      const lt=mk("text",{x:mx+px*9,y:my+py*9+3,"text-anchor":"middle",fill:"#9aa4ad","font-size":9});
+      lt.textContent=probLbl(e.lo,e.hi); svg.appendChild(lt); }
   }
   for(let i=0;i<n;i++){
     const [x,y]=pos[i], v=frame?(frame[i]||0):(vals[i]?0.5*(vals[i].lower+vals[i].upper):0), g=mk("g",{}), isInit=(i===data.init), lab=labelOf[i];
