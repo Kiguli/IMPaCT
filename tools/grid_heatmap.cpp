@@ -10,10 +10,12 @@
 #include "../src/abstraction.h"
 #include "../src/solve.h"
 #include "../src/imdp_io.h"
+#include "../src/expr.h"
 #include <cstdio>
 #include <cstdlib>
 #include <cmath>
 #include <string>
+#include <vector>
 #include <iostream>
 
 using namespace impact;
@@ -32,8 +34,30 @@ int main(int argc, char** argv) {
 
     abstraction::SystemND& s = spec.sys;
     abstraction::SparseReach ab;
-    try { ab = abstraction::buildSparseReachND(s, spec.prune); }
-    catch (const std::exception& e) { fprintf(stderr, "abstraction error: %s\n", e.what()); return 1; }
+    try {
+        if (spec.nonlinear) {
+            // Build a sound mean-enclosure from the f0/f1 expressions (interval arithmetic).
+            abstraction::GridSpec g;
+            g.dim_x=s.dim_x; g.dim_u=s.dim_u; g.xlb=s.xlb; g.xub=s.xub; g.eta=s.eta;
+            g.ulb=s.ulb; g.uub=s.uub; g.ueta=s.ueta; g.sigma=s.sigma; g.tlo=s.tlo; g.thi=s.thi;
+            std::vector<std::string> vars;
+            for (int i=0;i<g.dim_x;i++) vars.push_back("x"+std::to_string(i));
+            for (int i=0;i<g.dim_u;i++) vars.push_back("u"+std::to_string(i));
+            std::vector<expr::Expr> fs;
+            for (int i=0;i<g.dim_x;i++) fs.push_back(expr::parse(spec.fexpr[i], vars));
+            abstraction::MeanBoundFn mean = [fs,g](const std::vector<double>& cl, const std::vector<double>& ch,
+                                                   const std::vector<double>& u, std::vector<double>& muLo, std::vector<double>& muHi){
+                std::vector<abstraction::Ival> vals;
+                for (int i=0;i<g.dim_x;i++) vals.push_back(abstraction::Ival(cl[i], ch[i]));
+                for (int i=0;i<g.dim_u;i++) vals.push_back(abstraction::Ival(u[i], u[i]));
+                muLo.resize(g.dim_x); muHi.resize(g.dim_x);
+                for (int i=0;i<g.dim_x;i++){ auto r=expr::evalInterval(fs[i], vals); muLo[i]=r.lo; muHi[i]=r.hi; }
+            };
+            ab = abstraction::buildSparseReachGeneral(g, mean, spec.prune);
+        } else {
+            ab = abstraction::buildSparseReachND(s, spec.prune);
+        }
+    } catch (const std::exception& e) { fprintf(stderr, "abstraction error: %s\n", e.what()); return 1; }
 
     const int Nx = (int)llround((s.xub[0] - s.xlb[0]) / s.eta[0]);
     const int Ny = (int)llround((s.xub[1] - s.xlb[1]) / s.eta[1]);

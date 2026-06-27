@@ -134,10 +134,39 @@ sigma 0.6 0.6
 region 1 3 1 3
 prop reach
 prune 1e-3`;
+const SYS_VDP=`# Van der Pol oscillator — NONLINEAR stochastic system (ARCH-flavoured).
+# dynamics given as expressions f0,f1 over x0,x1 (and u0,u1); sound interval enclosure.
+xlb -3 -3
+xub 3 3
+eta 0.5 0.5
+ulb 0 0
+uub 0 0
+ueta 1 1
+f0 = x0 + 0.1*x1
+f1 = x1 + 0.1*(-x0 + (1 - x0^2)*x1)
+sigma 0.2 0.2
+region -0.5 0.5 -0.5 0.5
+prop safety
+prune 1e-4`;
+const SYS_VDP_COARSE=`# Van der Pol (nonlinear), coarse grid -> readable IMDP graph
+xlb -2 -2
+xub 2 2
+eta 2 2
+ulb 0 0
+uub 0 0
+ueta 1 1
+f0 = x0 + 0.2*x1
+f1 = x1 + 0.2*(-x0 + (1 - x0^2)*x1)
+sigma 0.5 0.5
+region -1 1 -1 1
+prop safety
+prune 1e-3`;
 const GRID_EX = [
-  { name:"coarse → IMDP graph",     model:SYS_COARSE, view:"graph" },
-  { name:"reach (heatmap)",         model:SYS_REACH,  view:"heatmap" },
-  { name:"safety obstacle (heatmap)", model:SYS_SAFE, view:"heatmap" },
+  { name:"coarse → IMDP graph",       model:SYS_COARSE, view:"graph" },
+  { name:"reach (heatmap)",           model:SYS_REACH,  view:"heatmap" },
+  { name:"safety obstacle (heatmap)", model:SYS_SAFE,   view:"heatmap" },
+  { name:"Van der Pol — nonlinear",   model:SYS_VDP,    view:"heatmap" },
+  { name:"Van der Pol → IMDP graph",  model:SYS_VDP_COARSE, view:"graph" },
 ];
 
 const PTA_PROB=`# PTA: at clock x>=2 a probabilistic edge -> 0.7 target L1 / 0.3 dead L2
@@ -446,7 +475,7 @@ const TUT_PROP = {
   ltl:    "<b>LTL formula</b> — parsed and dispatched to the matching engine (F/G/U/X, G F, F G, patrol over boolean atoms). Arbitrary nested LTL needs the LDBA route (Spot/Owl, ISSUE-0016).",
 };
 const TUT_MODE = {
-  grid:  "<b>Abstraction → IMDP</b> — IMPaCT's core feature: a discrete-time stochastic control system x' = A x + B u + noise is <b>abstracted to a sparse Interval-MDP</b> over quantized grid cells (sound transition-probability intervals), then analysed. <b>View: IMDP graph</b> draws the abstracted Interval-MDP (use a coarse grid / large η so it stays readable); <b>View: Heatmap</b> shows the per-cell robust (min) &amp; optimistic (max) spec probability for fine grids. Export the abstracted .imdp with the button below.",
+  grid:  "<b>Abstraction → IMDP</b> — IMPaCT's core feature: a discrete-time stochastic control system x' = A x + B u + noise is <b>abstracted to a sparse Interval-MDP</b> over quantized grid cells (sound transition-probability intervals), then analysed. <b>View: IMDP graph</b> draws the abstracted Interval-MDP (use a coarse grid / large η so it stays readable); <b>View: Heatmap</b> shows the per-cell robust (min) &amp; optimistic (max) spec probability for fine grids. Works for <b>affine</b> (A,B) and <b>nonlinear</b> (f0,f1 expressions — e.g. Van der Pol) dynamics via sound interval enclosures. Export the abstracted .imdp with the button below.",
   zone:  "<b>Zone graph</b> — a (probabilistic) timed automaton is explored symbolically: each node is a (location, clock-zone), heat-mapped by reach probability; extrapolation keeps the graph finite.",
   belief:"<b>Belief tree</b> — under partial observation the controller acts on the belief (state distribution). This is the optimal-policy belief tree; each node shows the belief (stacked bar) and its finite-horizon reach value.",
   about: "",
@@ -503,13 +532,17 @@ const PLACEHOLDERS = {
 # tran 0 0  1:0.4:0.6 2:0.4:0.6
 # tran 1 0  1:1:1
 # tran 2 0  2:1:1`,
-  grid:`# Discrete-time stochastic control system  x' = A x + B u + noise,
-# abstracted to an Interval-MDP and analysed per grid cell.
-# (or just use the System builder form above)
+  grid:`# Discrete-time stochastic control system, abstracted to an Interval-MDP.
+# (or just use the System builder form above for the affine case)
 # xlb -3 -3    xub 3 3    eta 0.5 0.5
 # ulb -1 -1    uub 1 1    ueta 1 1
-# A a00 a01 a10 a11     B b00 b01 b10 b11     sigma s0 s1
-# region lo0 hi0 lo1 hi1      prop reach|safety`,
+# sigma s0 s1     region lo0 hi0 lo1 hi1     prop reach|safety
+#
+# AFFINE:    A a00 a01 a10 a11     B b00 b01 b10 b11
+# NONLINEAR: f0 = <expr in x0,x1,u0,u1>     f1 = <expr>
+#            ops + - * / ^(int)  funcs sin cos exp sqrt abs   (sound interval enclosure)
+#   e.g.  f0 = x0 + 0.1*x1
+#         f1 = x1 + 0.1*(-x0 + (1 - x0^2)*x1)`,
   zone:`# (probabilistic) timed automaton
 # clocks N    init L    kmax <clk> <v> ...    target L
 # inv L <clk><op><int> ...

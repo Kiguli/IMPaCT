@@ -34,9 +34,12 @@ per-state `[lower, upper]` values for the chosen property and sense.
 - **IMDP graph** — Interval-MDP node-link graph, states heat-mapped by satisfaction
   probability, for every property (reach/safety/until/next/buchi/persist/patrol/LTL).
 - **Abstraction → IMDP** (core feature) — abstract a discrete-time stochastic control
-  system (`.sys`, or via the no-code System builder) to a sparse Interval-MDP; show the
-  per-cell **robust (min)** and **optimistic (max)** spec probability as two heatmaps,
-  and **export the abstracted `.imdp`** to analyse further (IMDP tab / CLI).
+  system (`.sys`, or via the no-code System builder) to a sparse Interval-MDP. Supports
+  **affine** (`A`,`B`) and **nonlinear** dynamics (`f0`,`f1` expressions — `+ - * / ^`,
+  `sin cos exp sqrt abs` — e.g. Van der Pol), via sound interval-arithmetic enclosures.
+  Switch **View** between the abstracted **IMDP graph** (transition intervals on edges,
+  nodes labelled by their grid cell) and the per-cell **min/max heatmaps**; **export the
+  abstracted `.imdp`** to analyse further.
 - **Zone graph** — the symbolic zone graph of a (probabilistic) timed automaton
   (`.pta`): nodes are (location, zone) heat-mapped by reach probability.
 - **Belief tree** — the POMDP (`.pomdp`) optimal-policy belief tree: nodes show the
@@ -70,10 +73,10 @@ c++ -std=c++17 -O2 tools/imdp_solve.cpp \
     src/omaximization.cpp src/graph_utils.cpp src/omega.cpp \
     src/pctl.cpp src/ltlspec.cpp \
     -o tools/imdp_solve
-# abstraction → IMDP heatmap (+ .imdp export):
+# abstraction → IMDP (affine + nonlinear; heatmap/graph + .imdp export):
 c++ -std=c++17 -O2 tools/grid_heatmap.cpp \
     src/system_io.cpp src/abstraction.cpp src/solve.cpp \
-    src/omaximization.cpp src/graph_utils.cpp src/imdp_io.cpp -o tools/grid_heatmap
+    src/omaximization.cpp src/graph_utils.cpp src/imdp_io.cpp src/expr.cpp -o tools/grid_heatmap
 # timed-automaton zone graph:
 c++ -std=c++17 -O2 tools/ta_zonegraph.cpp \
     src/pta_io.cpp src/pta.cpp src/ta.cpp src/dbm.cpp src/solve.cpp \

@@ -45,6 +45,9 @@
 // 2-D continuous-system spec parser (grid-heatmap visualizer).
 #include "../../src/system_io.h"
 
+// Expression parser + interval evaluator (nonlinear dynamics).
+#include "../../src/expr.h"
+
 // Phase 3 — omega-regular (Büchi) synthesis via accepting-MEC reachability.
 #include "../../src/omega.h"
 
