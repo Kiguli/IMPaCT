@@ -185,9 +185,14 @@ const POM_EX = [
 
 // ===================== node-link graph (IMDP) ===============================
 // Stateful so node positions persist across re-renders (drag, animation, recolor).
-let GD=null, GCB=null, GFR=null, GPOS=null, GLBLOFF=null, GR=14, GdragIdx=-1, GdragLabelIdx=-1, GdragSetup=false;
+let GD=null, GCB=null, GFR=null, GPOS=null, GLBLOFF=null, GEDGEOFF=null, GR=14, Gcx=0, Gcy=0, GdragIdx=-1, GdragLabelIdx=-1, GdragEdge=null, GdragSetup=false;
 const probLbl=(lo,hi)=> (Math.abs(hi-lo)<1e-9) ? (+lo).toFixed(2) : `[${(+lo).toFixed(2)},${(+hi).toFixed(2)}]`;
 
+// base anchor of an edge's label (midpoint, or the outward loop point for self-loops)
+function edgeMid(e){
+  if(e.from===e.to){ const [x,y]=GPOS[e.from], d=Math.hypot(x-Gcx,y-Gcy)||1; return [x+(x-Gcx)/d*GR*2.7, y+(y-Gcy)/d*GR*2.7]; }
+  const a=GPOS[e.from], b=GPOS[e.to]; return [(a[0]+b[0])/2, (a[1]+b[1])/2];
+}
 function svgXY(ev){ const r=$("graph").getBoundingClientRect(); return [ev.clientX-r.left, ev.clientY-r.top]; }
 function setupDrag(){
   if(GdragSetup) return; GdragSetup=true;
@@ -198,9 +203,13 @@ function setupDrag(){
       let dx=mx-GPOS[GdragLabelIdx][0], dy=my-GPOS[GdragLabelIdx][1]; const m=Math.hypot(dx,dy)||1;
       const cl=Math.max(GR+8, Math.min(GR+52, m)); GLBLOFF[GdragLabelIdx]=[dx/m*cl, dy/m*cl]; drawGraph(); return;
     }
+    if(GdragEdge){                                          // nudge an edge's interval label (small clamp)
+      const [bx,by]=edgeMid(GdragEdge); const C=44;
+      GEDGEOFF[GdragEdge.key]=[Math.max(-C,Math.min(C,mx-bx)), Math.max(-C,Math.min(C,my-by))]; drawGraph(); return;
+    }
     if(GdragIdx>=0){ GPOS[GdragIdx]=[mx,my]; drawGraph(); }
   });
-  const end=()=>{ GdragIdx=-1; GdragLabelIdx=-1; };
+  const end=()=>{ GdragIdx=-1; GdragLabelIdx=-1; GdragEdge=null; };
   svg.addEventListener("pointerup", end); svg.addEventListener("pointerleave", end);
 }
 
@@ -210,7 +219,7 @@ function renderGraph(data, colorBy, frame) {
   const svg=$("graph"), n=data.nStates;
   if(GD!==data || !GPOS || GPOS.length!==n){   // new model -> fresh circular layout
     const W=svg.clientWidth||800, H=svg.clientHeight||600, cx=W/2, cy=H/2, R=Math.min(W,H)/2-70;
-    GPOS=[]; GLBLOFF=[]; for(let i=0;i<n;i++){const a=-Math.PI/2+2*Math.PI*i/n; GPOS.push([cx+R*Math.cos(a), cy+R*Math.sin(a)]); GLBLOFF.push([0, 24]);}
+    GPOS=[]; GLBLOFF=[]; GEDGEOFF={}; for(let i=0;i<n;i++){const a=-Math.PI/2+2*Math.PI*i/n; GPOS.push([cx+R*Math.cos(a), cy+R*Math.sin(a)]); GLBLOFF.push([0, 24]);}
   }
   GD=data; GCB=colorBy; GFR=frame||null; GR=Math.max(10,Math.min(26,320/n));
   drawGraph();
@@ -220,6 +229,17 @@ function drawGraph() {
   const svg=$("graph"); svg.innerHTML="";
   const data=GD, n=data.nStates, pos=GPOS, r=GR;
   let cx=0, cy=0; for(const p of pos){cx+=p[0];cy+=p[1];} cx/=n||1; cy/=n||1;   // centroid (for self-loop direction)
+  Gcx=cx; Gcy=cy;
+  // draggable edge interval label (nudge around the edge midpoint)
+  const addEdgeLabel=(e, bx, by, dox, doy)=>{
+    if(!showEdgeLabels) return;
+    const key=e.from+"-"+e.to, off=(GEDGEOFF&&GEDGEOFF[key])||[dox,doy];
+    const t=mk("text",{x:bx+off[0], y:by+off[1], "text-anchor":"middle", fill:"#9aa4ad","font-size":9, style:"cursor:move"});
+    t.textContent=probLbl(e.lo,e.hi);
+    t.appendChild(mk("title",{})).textContent=`${e.from}→${e.to}  (drag to nudge)`;
+    t.addEventListener("pointerdown", ev=>{ GdragEdge={from:e.from,to:e.to,key:key}; ev.preventDefault(); ev.stopPropagation(); if(t.setPointerCapture) try{t.setPointerCapture(ev.pointerId);}catch(e2){} });
+    svg.appendChild(t);
+  };
   const labelOf={}; for(const [nm,sts] of Object.entries(data.labels||{})) for(const s of sts)(labelOf[s]=labelOf[s]||[]).push(nm);
   const vals=data.values[GCB]||data.values.pess||data.values.opt;
   const defs=mk("defs",{}); const mr=mk("marker",{id:"arr",viewBox:"0 0 10 10",refX:"9",refY:"5",markerWidth:"7",markerHeight:"7",orient:"auto-start-reverse"});
@@ -229,14 +249,12 @@ function drawGraph() {
   for(const e of Object.values(agg)){
     if(e.from===e.to){const [x,y]=pos[e.from],d=Math.hypot(x-cx,y-cy)||1,ox=(x-cx)/d,oy=(y-cy)/d;
       svg.appendChild(mk("circle",{cx:x+ox*r*1.6,cy:y+oy*r*1.6,r:r*0.7,fill:"none",stroke:"#6e7681","stroke-width":1}));
-      if(showEdgeLabels) svg.appendChild(mk("text",{x:x+ox*r*2.7,y:y+oy*r*2.7,"text-anchor":"middle",fill:"#8b949e","font-size":9})).textContent=probLbl(e.lo,e.hi);
+      addEdgeLabel(e, x+ox*r*2.7, y+oy*r*2.7, 0, 0);       // base = outward loop point (matches edgeMid)
       continue;}
     const [x1,y1]=pos[e.from],[x2,y2]=pos[e.to]; const dx=x2-x1,dy=y2-y1,L=Math.hypot(dx,dy)||1,ux=dx/L,uy=dy/L;
     const ln=mk("line",{x1:x1+ux*r,y1:y1+uy*r,x2:x2-ux*r,y2:y2-uy*r,stroke:"#6e7681","stroke-width":1.2,"marker-end":"url(#arr)"});
     const t=mk("title",{});t.textContent=`${e.from}→${e.to} [${(+e.lo).toFixed(3)}, ${(+e.hi).toFixed(3)}]`;ln.appendChild(t);svg.appendChild(ln);
-    if(showEdgeLabels){ const mx=(x1+x2)/2,my=(y1+y2)/2;
-      const lt=mk("text",{x:mx-uy*9,y:my+ux*9+3,"text-anchor":"middle",fill:"#9aa4ad","font-size":9});
-      lt.textContent=probLbl(e.lo,e.hi); svg.appendChild(lt); }
+    addEdgeLabel(e, (x1+x2)/2, (y1+y2)/2, -uy*9, ux*9+3);  // base = midpoint, default perpendicular offset
   }
   // Robust (pessimistic) and optimistic results, when both senses were computed.
   const Vp=data.values.pess, Vo=data.values.opt;
