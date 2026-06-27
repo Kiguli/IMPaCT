@@ -36,6 +36,14 @@
   .info { font-size:13px; color:var(--ink); }
   .info p { margin:8px 0; } .info ul { margin:8px 0; padding-left:18px; } .info li { margin:4px 0; color:var(--muted); }
   .info code { background:var(--bg); border:1px solid var(--line); border-radius:4px; padding:0 4px; font-size:12px; }
+  .toolbar { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
+  .tbtn { padding:6px 10px; font-size:12px; background:var(--panel); color:var(--ink); border:1px solid var(--line); border-radius:6px; cursor:pointer; }
+  .tbtn:hover { border-color:var(--accent); color:var(--accent); }
+  #anim { position:absolute; top:12px; left:50%; transform:translateX(-50%); display:none; align-items:center; gap:8px;
+    background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:8px 12px; font-size:13px; box-shadow:0 4px 16px #0008; }
+  #anim button { padding:4px 9px; font-size:13px; background:var(--bg); color:var(--ink); border:1px solid var(--line); border-radius:6px; cursor:pointer; }
+  #anim input[type=range] { width:200px; }
+  #anim .hint { max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 </style>
 </head>
 <body>
@@ -74,6 +82,13 @@
       <div id="c_horizon"><label>Horizon (steps)</label><input id="horizon" type="number" value="4" min="1"/></div>
 
       <button class="go" id="go">Run &amp; visualize</button>
+      <div class="toolbar">
+        <label class="tbtn">⬆ Upload<input type="file" id="upload" hidden></label>
+        <button class="tbtn" id="download">⬇ Model</button>
+        <button class="tbtn" id="downloadSvg">⬇ Figure (SVG)</button>
+        <button class="tbtn" id="downloadJson">⬇ Results (JSON)</button>
+      </div>
+      <button class="go" id="animate" style="background:#2d333b">▶ Animate value iteration</button>
       <div class="hint" id="status" style="margin-top:8px"></div>
     </div>
     <div id="aboutPanel" class="info" style="display:none"></div>
@@ -81,6 +96,14 @@
 
   <div class="view">
     <svg id="graph"></svg>
+    <div id="anim">
+      <button id="animStepB" title="step back">◀</button>
+      <button id="animPlay" title="play/pause">▶</button>
+      <button id="animStepF" title="step forward">▶▶</button>
+      <input type="range" id="animSlider" min="0" value="0"/>
+      <span id="animLabel"></span><span id="animTitle" class="hint"></span>
+      <button id="animClose" title="close">✕</button>
+    </div>
     <div id="msg"></div>
     <div class="legend" id="legend">
       satisfaction probability<div class="bar"></div>

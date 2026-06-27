@@ -97,6 +97,7 @@ class Handler(BaseHTTPRequestHandler):
         try:
             tf.write(model); tf.close()
             cmd = [SOLVER, tf.name, prop, label, "--bound", bound, "--eps", eps, "--json"]
+            if req.get("trace"): cmd.append("--trace")
             p = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
             if p.returncode != 0:
                 return self._send(400, json.dumps({"error": p.stderr.strip() or "solve failed"}))

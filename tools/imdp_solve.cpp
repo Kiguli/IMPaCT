@@ -29,11 +29,44 @@
 #include "../src/omega.h"
 #include "../src/pctl.h"
 #include "../src/ltlspec.h"
+#include "../src/omaximization.h"
 
 #include <iostream>
 #include <string>
 #include <set>
+#include <vector>
+#include <cmath>
 #include <cstdlib>
+
+// Value-iteration trace (the actual robust Bellman / O-maximization backup, applied
+// from below) for the tutorial animation: returns the per-state value vector at each
+// iteration. controllerMax + natureMin select the sense (reach: max/min).
+static std::vector<std::vector<double>> reachTrace(const impact::solve::IMDPModel& m,
+        const std::set<int>& tgt, double eps, int maxIt, bool natureMin, bool controllerMax) {
+    using namespace impact;
+    const int n = (int)m.size();
+    std::vector<double> V(n, 0.0); for (int s : tgt) if (s>=0 && s<n) V[s] = 1.0;
+    std::vector<std::vector<double>> frames; frames.push_back(V);
+    std::vector<double> lo, hi, v;
+    for (int it = 0; it < maxIt; ++it) {
+        std::vector<double> Vn(n, 0.0); double diff = 0;
+        for (int s = 0; s < n; ++s) {
+            if (tgt.count(s)) { Vn[s] = 1.0; continue; }
+            double best = controllerMax ? -1e18 : 1e18;
+            for (const solve::ActionDist& act : m[s]) {
+                lo.clear(); hi.clear(); v.clear();
+                for (const solve::Interval& iv : act) { lo.push_back(iv.lo); hi.push_back(iv.hi); v.push_back(V[iv.to]); }
+                double q = lo.empty() ? 0.0 : omax::optimize(lo, hi, v, natureMin ? omax::Sense::Min : omax::Sense::Max).value;
+                best = controllerMax ? std::max(best, q) : std::min(best, q);
+            }
+            if (best < -1e17 || best > 1e17) best = 0.0;
+            Vn[s] = best; diff = std::max(diff, std::fabs(Vn[s] - V[s]));
+        }
+        frames.push_back(Vn); V.swap(Vn);
+        if (diff < eps) break;
+    }
+    return frames;
+}
 
 using namespace impact;
 
@@ -67,6 +100,7 @@ int main(int argc, char** argv) {
     bool methodSet = false;
     int stateArg = -1;  // -1 => use model init
     bool jsonOut = false;  // emit full model structure + per-state values (for the web app)
+    bool traceOut = false; // also emit the per-iteration value-iteration trace (tutorial animation)
 
     for (int i = 4; i < argc; ++i) {
         std::string a = argv[i];
@@ -78,6 +112,7 @@ int main(int argc, char** argv) {
         else if (a == "--eps")    eps = std::stod(need("--eps"));
         else if (a == "--state")  stateArg = std::stoi(need("--state"));
         else if (a == "--json")   jsonOut = true;
+        else if (a == "--trace")  { jsonOut = true; traceOut = true; }
         else if (a == "--method") {
             std::string m = need("--method");
             method = (m == "mec") ? solve::Method::MECCollapse : solve::Method::OptimisticVI;
@@ -208,7 +243,30 @@ int main(int argc, char** argv) {
                 std::cout << (st ? "," : "") << "{\"lower\":" << r.lower[st] << ",\"upper\":" << r.upper[st] << "}";
             std::cout << "]"; firstS = false;
         }
-        std::cout << "\n  }\n}\n";
+        std::cout << "\n  }";
+
+        // Value-iteration trace (tutorial animation) for reach / safety: the actual
+        // robust Bellman / O-maximization backup applied iteration by iteration.
+        if (traceOut && (prop == "reach" || prop == "safety")) {
+            std::vector<std::vector<double>> frames;
+            std::string tprop;
+            if (prop == "reach") {                       // VI from below: controller max, nature min
+                frames = reachTrace(p.model, states, eps, 80, /*natureMin=*/true, /*controllerMax=*/true);
+                tprop = "reach (P max, robust)";
+            } else {                                     // safety = 1 - reach-to-avoid (controller min, nature max)
+                auto W = reachTrace(p.model, states, eps, 80, /*natureMin=*/false, /*controllerMax=*/false);
+                for (auto& f : W) { for (double& x : f) x = 1.0 - x; frames.push_back(f); }
+                tprop = "safety (1 - reach avoid, robust)";
+            }
+            std::cout << ",\n  \"trace\": {\"prop\": \"" << tprop << "\", \"frames\": [";
+            for (size_t k = 0; k < frames.size(); ++k) {
+                std::cout << (k ? ",\n    " : "\n    ") << "[";
+                for (int st = 0; st < p.nStates; ++st) std::cout << (st ? "," : "") << frames[k][st];
+                std::cout << "]";
+            }
+            std::cout << "]}";
+        }
+        std::cout << "\n}\n";
         return 0;
     }
 

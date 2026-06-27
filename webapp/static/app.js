@@ -184,7 +184,8 @@ const POM_EX = [
 ];
 
 // ===================== node-link graph (IMDP) ===============================
-function renderGraph(data, colorBy) {
+// `frame` (optional): per-state values from a value-iteration step (animation).
+function renderGraph(data, colorBy, frame) {
   const svg=$("graph"); svg.innerHTML="";
   const n=data.nStates, W=svg.clientWidth||800, H=svg.clientHeight||600, cx=W/2, cy=H/2, R=Math.min(W,H)/2-70;
   const pos=[]; for(let i=0;i<n;i++){const a=-Math.PI/2+2*Math.PI*i/n; pos.push([cx+R*Math.cos(a), cy+R*Math.sin(a)]);}
@@ -201,9 +202,9 @@ function renderGraph(data, colorBy) {
     const t=mk("title",{});t.textContent=`${e.from}→${e.to} [${(+e.lo).toFixed(3)}, ${(+e.hi).toFixed(3)}]`;ln.appendChild(t);svg.appendChild(ln);
   }
   for(let i=0;i<n;i++){
-    const [x,y]=pos[i], v=vals[i]?0.5*(vals[i].lower+vals[i].upper):0, g=mk("g",{}), isInit=(i===data.init), lab=labelOf[i];
+    const [x,y]=pos[i], v=frame?(frame[i]||0):(vals[i]?0.5*(vals[i].lower+vals[i].upper):0), g=mk("g",{}), isInit=(i===data.init), lab=labelOf[i];
     const c=mk("circle",{cx:x,cy:y,r:r,fill:heat(v),stroke:isInit?"#e6edf3":"#0f1419","stroke-width":isInit?3.5:1.5});
-    const tt=mk("title",{}); tt.textContent=`state ${i}${lab?" {"+lab.join(",")+"}":""}${isInit?" (init)":""}\n`+Object.keys(data.values).map(k=>`${k} [${data.values[k][i].lower.toFixed(3)}, ${data.values[k][i].upper.toFixed(3)}]`).join("\n");
+    const tt=mk("title",{}); tt.textContent=`state ${i}${lab?" {"+lab.join(",")+"}":""}${isInit?" (init)":""}\n`+(frame?`iteration value = ${v.toFixed(3)}`:Object.keys(data.values).map(k=>`${k} [${data.values[k][i].lower.toFixed(3)}, ${data.values[k][i].upper.toFixed(3)}]`).join("\n"));
     c.appendChild(tt); g.appendChild(c);
     g.appendChild(mk("text",{x:x,y:y+4,"text-anchor":"middle",fill:"#0f1419","font-size":Math.max(9,r*0.6),"font-weight":"700"})).textContent=i;
     if(lab){const s=mk("text",{x:x,y:y-r-4,"text-anchor":"middle",fill:"#edae49","font-size":13});s.textContent="★";g.appendChild(s);}
@@ -343,6 +344,7 @@ function showControls() {
   $("c_cap").style.display    = want.has("cap")    ? "" : "none";
   $("c_eps").style.display    = want.has("eps")    ? "" : "none";
   $("c_horizon").style.display= want.has("horizon")? "" : "none";
+  $("animate").style.display = (mode === "imdp") ? "" : "none";
   const isAbout = (mode === "about");
   $("modePanel").style.display = isAbout ? "none" : "";
   $("aboutPanel").style.display = isAbout ? "" : "none";
@@ -370,19 +372,67 @@ function loadExample(i) {
   if(mode==="belief" && e.horizon){ $("horizon").value=e.horizon; }
 }
 
+let LAST=null;
 async function run() {
   const M=MODES[mode]; if(!M.endpoint) return;
+  stopAnim(); $("anim").style.display="none";
   $("go").disabled=true; $("status").textContent="solving…"; showMsg("");
   try {
     const res=await fetch(M.endpoint,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(M.body())});
     const data=await res.json();
     if(!res.ok){ showMsg("Error: "+(data.error||res.status)); $("status").textContent=""; clearView(); return; }
-    M.render(data);
+    LAST=data; M.render(data);
   } catch(e){ showMsg("Request failed: "+e.message); }
   finally{ $("go").disabled=false; }
 }
 
+// ---- value-iteration animation (IMDP graph, reach/safety) -------------------
+const ANIM={ data:null, frames:null, cur:0, timer:null };
+function stopAnim(){ if(ANIM.timer){clearInterval(ANIM.timer); ANIM.timer=null;} const b=$("animPlay"); if(b) b.textContent="▶"; }
+function setFrame(k){ if(!ANIM.frames) return; k=Math.max(0,Math.min(ANIM.frames.length-1,k)); ANIM.cur=k;
+  renderGraph(ANIM.data,null,ANIM.frames[k]); $("animSlider").value=k;
+  $("animLabel").textContent=`iteration ${k} / ${ANIM.frames.length-1}`; }
+function playAnim(){ if(!ANIM.frames) return; if(ANIM.timer){ stopAnim(); return; }
+  if(ANIM.cur>=ANIM.frames.length-1) setFrame(0);
+  $("animPlay").textContent="⏸";
+  ANIM.timer=setInterval(()=>{ if(ANIM.cur>=ANIM.frames.length-1){ stopAnim(); return; } setFrame(ANIM.cur+1); }, 650); }
+async function animateVI(){
+  if(mode!=="imdp"){ showMsg("Value-iteration animation is for the IMDP graph (reach / safety)."); return; }
+  const prop=$("prop").value;
+  if(prop!=="reach"&&prop!=="safety"){ showMsg("VI animation is available for reach and safety properties."); return; }
+  stopAnim(); $("animate").disabled=true; $("status").textContent="computing trace…"; showMsg("");
+  try{
+    const body=Object.assign(MODES.imdp.body(),{trace:true});
+    const res=await fetch("/api/solve",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+    const data=await res.json();
+    if(!res.ok){ showMsg("Error: "+(data.error||res.status)); return; }
+    if(data.nStates>(parseInt($("cap").value)||60)){ showMsg("Too many states to animate; increase cap or use a smaller model."); return; }
+    if(!data.trace){ showMsg("No trace available for this property."); return; }
+    ANIM.data=data; ANIM.frames=data.trace.frames; ANIM.cur=0;
+    $("anim").style.display="flex"; $("animSlider").max=ANIM.frames.length-1; $("animTitle").textContent=data.trace.prop;
+    $("status").textContent=`${data.trace.frames.length-1} iterations · ${data.trace.prop}`;
+    setFrame(0);
+  }catch(e){ showMsg("Request failed: "+e.message); }
+  finally{ $("animate").disabled=false; }
+}
+
+// ---- upload / download ------------------------------------------------------
+function downloadText(name,text,type){ const b=new Blob([text],{type:type||"text/plain"}); const u=URL.createObjectURL(b);
+  const a=document.createElement("a"); a.href=u; a.download=name; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(u); }
+const EXT={imdp:"imdp",grid:"sys",zone:"pta",belief:"pomdp"};
+
 $("go").addEventListener("click", run);
-$("colorby").addEventListener("change", ()=>{ if(mode==="imdp") run(); });
+$("animate").addEventListener("click", animateVI);
+$("colorby").addEventListener("change", ()=>{ if(mode==="imdp" && $("anim").style.display==="none") run(); });
+$("animPlay").addEventListener("click", playAnim);
+$("animStepF").addEventListener("click", ()=>{ stopAnim(); setFrame(ANIM.cur+1); });
+$("animStepB").addEventListener("click", ()=>{ stopAnim(); setFrame(ANIM.cur-1); });
+$("animSlider").addEventListener("input", e=>{ stopAnim(); setFrame(parseInt(e.target.value)); });
+$("animClose").addEventListener("click", ()=>{ stopAnim(); $("anim").style.display="none"; if(LAST&&mode==="imdp"){let cb=$("colorby").value; if(!LAST.values||!LAST.values[cb])cb=LAST.values?Object.keys(LAST.values)[0]:"pess"; renderGraph(LAST,cb);} });
+$("upload").addEventListener("change", e=>{ const f=e.target.files[0]; if(!f)return; const rd=new FileReader(); rd.onload=()=>{ $("model").value=rd.result; run(); }; rd.readAsText(f); e.target.value=""; });
+$("download").addEventListener("click", ()=>downloadText("model."+(EXT[mode]||"txt"), $("model").value));
+$("downloadSvg").addEventListener("click", ()=>{ const s=$("graph"); downloadText("impact-figure.svg", '<?xml version="1.0" encoding="UTF-8"?>\n'+new XMLSerializer().serializeToString(s), "image/svg+xml"); });
+$("downloadJson").addEventListener("click", ()=>{ if(!LAST){showMsg("Run something first.");return;} downloadText("impact-result.json", JSON.stringify(LAST,null,2), "application/json"); });
+
 renderModes(); renderExamples(); showControls(); loadExample(0);
 window.addEventListener("load", run);

@@ -27,9 +27,11 @@ std::vector<std::string> tokenize(const std::string& s) {
     size_t i = 0;
     while (i < s.size()) {
         char c = s[i];
-        if (std::isspace((unsigned char)c)) { ++i; continue; }
-        if (c == '(' || c == ')' || c == '!' || c == '&' || c == '|') { t.push_back(std::string(1, c)); ++i; continue; }
+        if (std::isspace((unsigned char)c) || c == ',') { ++i; continue; }   // commas treated as separators
         if (c == '-' && i + 1 < s.size() && s[i + 1] == '>') { t.push_back("->"); i += 2; continue; }
+        if (c == '&' && i + 1 < s.size() && s[i + 1] == '&') { t.push_back("&"); i += 2; continue; }
+        if (c == '|' && i + 1 < s.size() && s[i + 1] == '|') { t.push_back("|"); i += 2; continue; }
+        if (c == '(' || c == ')' || c == '!' || c == '&' || c == '|') { t.push_back(std::string(1, c)); ++i; continue; }
         if (std::isalnum((unsigned char)c) || c == '_') {
             size_t j = i; while (j < s.size() && (std::isalnum((unsigned char)s[j]) || s[j] == '_')) ++j;
             t.push_back(s.substr(i, j - i)); i = j; continue;

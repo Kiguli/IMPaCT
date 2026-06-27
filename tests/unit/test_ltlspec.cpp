@@ -69,6 +69,16 @@ TEST_CASE("ltlspec atom -> 0/1 indicator") {
     CHECK(mid(r, 1) == doctest::Approx(1.0));
 }
 
+TEST_CASE("ltlspec tokenizer tolerates commas and &&/|| (no crash)") {
+    IMDPModel m = { /*0*/ {{ {1,1,1} }}, /*1*/ {{ {0,1,1} }} };
+    ls::Labels L = { {"r0", {0}}, {"r2", {1}} };
+    // commas as separators: equivalent to a space; '&&' accepted as '&'
+    same(ls::synthesize(m, L, "(G F r0) && (G F r2)", true, EPS),
+         om::maxGenBuchiPessimistic(m, { {0}, {1} }, EPS), 2);
+    // a stray comma must NOT throw "bad character" (clear parse outcome instead)
+    CHECK_NOTHROW(ls::synthesize(m, L, "F r0", true, EPS));
+}
+
 TEST_CASE("ltlspec out-of-fragment formulas throw (-> LDBA / ISSUE-0016)") {
     IMDPModel m = { {{ {1,1,1} }}, {{ {1,1,1} }} };
     ls::Labels L = { {"a", {0}}, {"b", {1}} };
