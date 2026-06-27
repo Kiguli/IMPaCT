@@ -10,6 +10,12 @@ The C++ core is untouched: the backend shells to the verified `tools/imdp_solve`
 CLI (`--json`), which returns the model structure (states/edges/labels) plus
 per-state `[lower, upper]` values for the chosen property and sense.
 
+## Two top-level surfaces
+- **Research** — a clean workspace: empty cells with grey help text describing what to
+  enter, a *warm-start* dropdown to pre-fill with a tutorial example, then Run.
+- **Tutorial** — clickable examples + per-spec explanation panels + the value-iteration
+  animation; the same engines, framed for learning.
+
 ## Use it without writing C++ (platform + tutorial)
 - **No-code builders** — the Grid-heatmap tab has a *System builder* form (decay,
   control, noise, domain, grid, region, spec) that generates the `.sys` for you;
@@ -20,14 +26,17 @@ per-state `[lower, upper]` values for the chosen property and sense.
   each state as the probabilities update (reach / safety). This is the implemented
   algorithm, traced iteration by iteration (`imdp_solve --trace`).
 - **Upload / download** — load a model file into the editor; download the model,
-  the rendered figure (SVG), or the full results (JSON).
+  the rendered figure (SVG), the full results (JSON), or the abstracted `.imdp`.
+- **Interactive graph** — drag states to lay them out; IMDP states show
+  `lower / upper` bounds and are coloured by the lower (robust) bound.
 
 ## Visualizer modes (tabs)
 - **IMDP graph** — Interval-MDP node-link graph, states heat-mapped by satisfaction
   probability, for every property (reach/safety/until/next/buchi/persist/patrol/LTL).
-- **Grid heatmap** — a 2-D continuous system (`.sys`) abstracted to a sparse IMDP;
-  per quantized grid cell, the **robust (min)** and **optimistic (max)** probability
-  of the spec (reach/safety) shown as two heatmaps side by side.
+- **Abstraction → IMDP** (core feature) — abstract a discrete-time stochastic control
+  system (`.sys`, or via the no-code System builder) to a sparse Interval-MDP; show the
+  per-cell **robust (min)** and **optimistic (max)** spec probability as two heatmaps,
+  and **export the abstracted `.imdp`** to analyse further (IMDP tab / CLI).
 - **Zone graph** — the symbolic zone graph of a (probabilistic) timed automaton
   (`.pta`): nodes are (location, zone) heat-mapped by reach probability.
 - **Belief tree** — the POMDP (`.pomdp`) optimal-policy belief tree: nodes show the
@@ -61,10 +70,10 @@ c++ -std=c++17 -O2 tools/imdp_solve.cpp \
     src/omaximization.cpp src/graph_utils.cpp src/omega.cpp \
     src/pctl.cpp src/ltlspec.cpp \
     -o tools/imdp_solve
-# grid-cell heatmap (continuous abstraction):
+# abstraction → IMDP heatmap (+ .imdp export):
 c++ -std=c++17 -O2 tools/grid_heatmap.cpp \
     src/system_io.cpp src/abstraction.cpp src/solve.cpp \
-    src/omaximization.cpp src/graph_utils.cpp -o tools/grid_heatmap
+    src/omaximization.cpp src/graph_utils.cpp src/imdp_io.cpp -o tools/grid_heatmap
 # timed-automaton zone graph:
 c++ -std=c++17 -O2 tools/ta_zonegraph.cpp \
     src/pta_io.cpp src/pta.cpp src/ta.cpp src/dbm.cpp src/solve.cpp \

@@ -33,6 +33,11 @@
   .modes button { padding:6px 10px; font-size:12px; font-weight:600; background:transparent; color:var(--muted); border:1px solid transparent; border-radius:6px; cursor:pointer; }
   .modes button:hover { color:var(--ink); }
   .modes button.active { background:var(--accent); color:#fff; }
+  .sections { display:flex; gap:6px; margin-bottom:14px; }
+  .sections button { flex:1; padding:9px 12px; font-size:14px; font-weight:700; background:var(--panel); color:var(--muted); border:1px solid var(--line); border-radius:8px; cursor:pointer; }
+  .sections button.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+  #warm { margin:0 0 10px; display:none; }
+  textarea::placeholder, input::placeholder { color:#6b7682; }
   .info { font-size:13px; color:var(--ink); }
   .info p { margin:8px 0; } .info ul { margin:8px 0; padding-left:18px; } .info li { margin:4px 0; color:var(--muted); }
   .info code { background:var(--bg); border:1px solid var(--line); border-radius:4px; padding:0 4px; font-size:12px; }
@@ -52,8 +57,11 @@
 <header><h1>IMPaCT</h1><span id="subtitle">visualizers for verified stochastic synthesis</span></header>
 <div class="wrap">
   <div class="controls">
+    <div class="sections" id="sections"></div>
     <div class="modes" id="modes"></div>
-    <label>Examples <span class="hint">— click to load &amp; run</span></label>
+    <div id="warm"><label>Warm start <span class="hint">— pre-fill with a tutorial example</span></label>
+      <select id="warmstart"></select></div>
+    <label id="exLabel">Examples <span class="hint">— click to load &amp; run</span></label>
     <div class="examples" id="examples"></div>
     <div id="tutorial" class="info"></div>
 
@@ -109,6 +117,7 @@
         <button class="tbtn" id="download">⬇ Model</button>
         <button class="tbtn" id="downloadSvg">⬇ Figure (SVG)</button>
         <button class="tbtn" id="downloadJson">⬇ Results (JSON)</button>
+        <button class="tbtn" id="exportImdp" style="display:none">⬇ Abstracted IMDP</button>
       </div>
       <button class="go" id="animate" style="background:#2d333b">▶ Animate value iteration</button>
       <div class="hint" id="status" style="margin-top:8px"></div>

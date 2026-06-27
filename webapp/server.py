@@ -38,10 +38,12 @@ STATE_CAP = 200          # hard safety cap for the backend (front-end caps rende
 
 # (endpoint, tool, file-suffix, extra-args-builder) for the model-file CLIs.
 def _grid_args(req):    return ["--eps", str(req.get("eps", 1e-6))]
+def _abstract_args(req):return ["--emit-imdp"]
 def _zone_args(req):    return [str(req.get("target", "-")), req.get("engine", "zone"), req.get("bound", "pess")]
 def _belief_args(req):  return [str(req.get("horizon", 4)), req.get("bound", "max")]
 CLI_ENDPOINTS = {
     "/api/grid":       ("grid_heatmap",      ".sys",   _grid_args),
+    "/api/abstract":   ("grid_heatmap",      ".sys",   _abstract_args),   # export abstracted .imdp
     "/api/zonegraph":  ("ta_zonegraph",      ".pta",   _zone_args),
     "/api/belieftree": ("pomdp_belieftree",  ".pomdp", _belief_args),
 }

@@ -9,17 +9,21 @@
 #include "../src/system_io.h"
 #include "../src/abstraction.h"
 #include "../src/solve.h"
+#include "../src/imdp_io.h"
 #include <cstdio>
 #include <cstdlib>
 #include <cmath>
 #include <string>
+#include <iostream>
 
 using namespace impact;
 
 int main(int argc, char** argv) {
-    if (argc < 2) { fprintf(stderr, "usage: grid_heatmap MODEL.sys [--eps E]\n"); return 2; }
-    double eps = 1e-6;
-    for (int i = 2; i < argc; ++i) { std::string a = argv[i]; if (a == "--eps" && i + 1 < argc) eps = atof(argv[++i]); }
+    if (argc < 2) { fprintf(stderr, "usage: grid_heatmap MODEL.sys [--eps E] [--emit-imdp]\n"); return 2; }
+    double eps = 1e-6; bool emitImdp = false;
+    for (int i = 2; i < argc; ++i) { std::string a = argv[i];
+        if (a == "--eps" && i + 1 < argc) eps = atof(argv[++i]);
+        else if (a == "--emit-imdp") emitImdp = true; }
 
     system_io::SystemSpec spec;
     try { spec = system_io::parseFile(argv[1]); }
@@ -33,6 +37,19 @@ int main(int argc, char** argv) {
     const int Nx = (int)llround((s.xub[0] - s.xlb[0]) / s.eta[0]);
     const int Ny = (int)llround((s.xub[1] - s.xlb[1]) / s.eta[1]);
     if ((long long)Nx * Ny > 250000) { fprintf(stderr, "grid too large for the heatmap demo (%dx%d)\n", Nx, Ny); return 1; }
+
+    // Export the abstracted Interval-MDP (.imdp) so it can be analysed/visualised further.
+    if (emitImdp) {
+        io::Problem prob;
+        prob.model = ab.model;
+        prob.nStates = (int)ab.model.size();
+        prob.init = 0;
+        prob.labels[spec.prop == "safety" ? "avoid" : "target"] = ab.targets;
+        std::cout << "# IMDP abstracted from a discrete-time stochastic system ("
+                  << Nx << "x" << Ny << " cells; cell c=j0+j1*" << Nx << ", +TARGET +SINK)\n";
+        std::cout << io::write(prob);
+        return 0;
+    }
 
     solve::IntervalResult pess, opt;
     try {

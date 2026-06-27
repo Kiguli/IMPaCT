@@ -184,39 +184,67 @@ const POM_EX = [
 ];
 
 // ===================== node-link graph (IMDP) ===============================
+// Stateful so node positions persist across re-renders (drag, animation, recolor).
+let GD=null, GCB=null, GFR=null, GPOS=null, GR=14, GdragIdx=-1, GdragSetup=false;
+const probLbl=(lo,hi)=> (Math.abs(hi-lo)<1e-9) ? (+lo).toFixed(2) : `[${(+lo).toFixed(2)},${(+hi).toFixed(2)}]`;
+
+function svgXY(ev){ const r=$("graph").getBoundingClientRect(); return [ev.clientX-r.left, ev.clientY-r.top]; }
+function setupDrag(){
+  if(GdragSetup) return; GdragSetup=true;
+  const svg=$("graph");
+  svg.addEventListener("pointermove", ev=>{ if(GdragIdx<0||!GPOS) return; const [x,y]=svgXY(ev); GPOS[GdragIdx]=[x,y]; drawGraph(); });
+  const end=()=>{ GdragIdx=-1; };
+  svg.addEventListener("pointerup", end); svg.addEventListener("pointerleave", end);
+}
+
 // `frame` (optional): per-state values from a value-iteration step (animation).
 function renderGraph(data, colorBy, frame) {
+  setupDrag();
+  const svg=$("graph"), n=data.nStates;
+  if(GD!==data || !GPOS || GPOS.length!==n){   // new model -> fresh circular layout
+    const W=svg.clientWidth||800, H=svg.clientHeight||600, cx=W/2, cy=H/2, R=Math.min(W,H)/2-70;
+    GPOS=[]; for(let i=0;i<n;i++){const a=-Math.PI/2+2*Math.PI*i/n; GPOS.push([cx+R*Math.cos(a), cy+R*Math.sin(a)]);}
+  }
+  GD=data; GCB=colorBy; GFR=frame||null; GR=Math.max(10,Math.min(26,320/n));
+  drawGraph();
+}
+
+function drawGraph() {
   const svg=$("graph"); svg.innerHTML="";
-  const n=data.nStates, W=svg.clientWidth||800, H=svg.clientHeight||600, cx=W/2, cy=H/2, R=Math.min(W,H)/2-70;
-  const pos=[]; for(let i=0;i<n;i++){const a=-Math.PI/2+2*Math.PI*i/n; pos.push([cx+R*Math.cos(a), cy+R*Math.sin(a)]);}
+  const data=GD, n=data.nStates, pos=GPOS, r=GR;
+  let cx=0, cy=0; for(const p of pos){cx+=p[0];cy+=p[1];} cx/=n||1; cy/=n||1;   // centroid (for self-loop direction)
   const labelOf={}; for(const [nm,sts] of Object.entries(data.labels||{})) for(const s of sts)(labelOf[s]=labelOf[s]||[]).push(nm);
-  const vals=data.values[colorBy]||data.values.pess||data.values.opt;
+  const vals=data.values[GCB]||data.values.pess||data.values.opt;
   const defs=mk("defs",{}); const mr=mk("marker",{id:"arr",viewBox:"0 0 10 10",refX:"9",refY:"5",markerWidth:"7",markerHeight:"7",orient:"auto-start-reverse"});
   mr.appendChild(mk("path",{d:"M0,0 L10,5 L0,10 z",fill:"#6e7681"})); defs.appendChild(mr); svg.appendChild(defs);
-  const r=Math.max(10,Math.min(26,320/n));
   const agg={}; for(const e of data.edges){const k=e.from+"-"+e.to; const a=agg[k]||(agg[k]={from:e.from,to:e.to,lo:1,hi:0}); a.lo=Math.min(a.lo,e.lo);a.hi=Math.max(a.hi,e.hi);}
-  const probLbl=(lo,hi)=> (Math.abs(hi-lo)<1e-9) ? (+lo).toFixed(2) : `[${(+lo).toFixed(2)},${(+hi).toFixed(2)}]`;
-  const showEdgeLabels = Object.keys(agg).length <= 60;   // avoid clutter on dense graphs
+  const showEdgeLabels = Object.keys(agg).length <= 60;
   for(const e of Object.values(agg)){
-    if(e.from===e.to){const [x,y]=pos[e.from],ox=(x-cx)/R||0.01,oy=(y-cy)/R||0.01;
+    if(e.from===e.to){const [x,y]=pos[e.from],d=Math.hypot(x-cx,y-cy)||1,ox=(x-cx)/d,oy=(y-cy)/d;
       svg.appendChild(mk("circle",{cx:x+ox*r*1.6,cy:y+oy*r*1.6,r:r*0.7,fill:"none",stroke:"#6e7681","stroke-width":1}));
       if(showEdgeLabels) svg.appendChild(mk("text",{x:x+ox*r*2.7,y:y+oy*r*2.7,"text-anchor":"middle",fill:"#8b949e","font-size":9})).textContent=probLbl(e.lo,e.hi);
       continue;}
     const [x1,y1]=pos[e.from],[x2,y2]=pos[e.to]; const dx=x2-x1,dy=y2-y1,L=Math.hypot(dx,dy)||1,ux=dx/L,uy=dy/L;
     const ln=mk("line",{x1:x1+ux*r,y1:y1+uy*r,x2:x2-ux*r,y2:y2-uy*r,stroke:"#6e7681","stroke-width":1.2,"marker-end":"url(#arr)"});
     const t=mk("title",{});t.textContent=`${e.from}→${e.to} [${(+e.lo).toFixed(3)}, ${(+e.hi).toFixed(3)}]`;ln.appendChild(t);svg.appendChild(ln);
-    if(showEdgeLabels){ const mx=(x1+x2)/2,my=(y1+y2)/2, px=-uy, py=ux;   // perpendicular offset
-      const lt=mk("text",{x:mx+px*9,y:my+py*9+3,"text-anchor":"middle",fill:"#9aa4ad","font-size":9});
+    if(showEdgeLabels){ const mx=(x1+x2)/2,my=(y1+y2)/2;
+      const lt=mk("text",{x:mx-uy*9,y:my+ux*9+3,"text-anchor":"middle",fill:"#9aa4ad","font-size":9});
       lt.textContent=probLbl(e.lo,e.hi); svg.appendChild(lt); }
   }
   for(let i=0;i<n;i++){
-    const [x,y]=pos[i], v=frame?(frame[i]||0):(vals[i]?0.5*(vals[i].lower+vals[i].upper):0), g=mk("g",{}), isInit=(i===data.init), lab=labelOf[i];
-    const c=mk("circle",{cx:x,cy:y,r:r,fill:heat(v),stroke:isInit?"#e6edf3":"#0f1419","stroke-width":isInit?3.5:1.5});
-    const tt=mk("title",{}); tt.textContent=`state ${i}${lab?" {"+lab.join(",")+"}":""}${isInit?" (init)":""}\n`+(frame?`iteration value = ${v.toFixed(3)}`:Object.keys(data.values).map(k=>`${k} [${data.values[k][i].lower.toFixed(3)}, ${data.values[k][i].upper.toFixed(3)}]`).join("\n"));
-    c.appendChild(tt); g.appendChild(c);
-    g.appendChild(mk("text",{x:x,y:y+4,"text-anchor":"middle",fill:"#0f1419","font-size":Math.max(9,r*0.6),"font-weight":"700"})).textContent=i;
-    if(lab){const s=mk("text",{x:x,y:y-r-4,"text-anchor":"middle",fill:"#edae49","font-size":13});s.textContent="★";g.appendChild(s);}
-    g.appendChild(mk("text",{x:x,y:y+r+14,"text-anchor":"middle",fill:"#8b949e","font-size":11})).textContent=v.toFixed(2);
+    const [x,y]=pos[i], lo=vals[i]?vals[i].lower:0, hi=vals[i]?vals[i].upper:0;
+    const colorVal=GFR?(GFR[i]||0):lo;                       // colour by the LOWER bound (or animation frame)
+    const g=mk("g",{style:"cursor:grab"}), isInit=(i===data.init), lab=labelOf[i];
+    const c=mk("circle",{cx:x,cy:y,r:r,fill:heat(colorVal),stroke:isInit?"#e6edf3":"#0f1419","stroke-width":isInit?3.5:1.5});
+    const tt=mk("title",{}); tt.textContent=`state ${i}${lab?" {"+lab.join(",")+"}":""}${isInit?" (init)":""}\n`+(GFR?`iteration value = ${colorVal.toFixed(3)}`:Object.keys(data.values).map(k=>`${k} [${data.values[k][i].lower.toFixed(3)}, ${data.values[k][i].upper.toFixed(3)}]`).join("\n"));
+    c.appendChild(tt);
+    c.addEventListener("pointerdown", ev=>{ GdragIdx=i; ev.preventDefault(); if(c.setPointerCapture) try{c.setPointerCapture(ev.pointerId);}catch(e){} });
+    g.appendChild(c);
+    g.appendChild(mk("text",{x:x,y:y+4,"text-anchor":"middle",fill:"#0f1419","font-size":Math.max(9,r*0.6),"font-weight":"700","pointer-events":"none"})).textContent=i;
+    if(lab){const s=mk("text",{x:x,y:y-r-4,"text-anchor":"middle",fill:"#edae49","font-size":13,"pointer-events":"none"});s.textContent="★";g.appendChild(s);}
+    // label below: lower / upper (animation: single iterate value)
+    g.appendChild(mk("text",{x:x,y:y+r+14,"text-anchor":"middle",fill:"#8b949e","font-size":11,"pointer-events":"none"}))
+      .textContent = GFR ? colorVal.toFixed(2) : `${lo.toFixed(2)} / ${hi.toFixed(2)}`;
     svg.appendChild(g);
   }
 }
@@ -316,8 +344,9 @@ const ABOUT=`<p>The visualizers cover IMPaCT's verified stochastic-synthesis sta
 <ul>
 <li><b>IMDP graph</b> — reach/safety/until/next, ω-regular (GF/FG/patrol) and LTL formulas
   on Interval-MDPs (.imdp / PRISM), heat-mapped by robust/optimistic probability.</li>
-<li><b>Grid heatmap</b> — per-cell min (robust) &amp; max (optimistic) satisfaction
-  probability for a 2-D continuous system via the sparse abstraction.</li>
+<li><b>Abstraction → IMDP</b> — IMPaCT's core capability: abstract a discrete-time
+  stochastic control system to a sparse Interval-MDP, then analyse it (per-cell min
+  robust / max optimistic satisfaction probability; export the abstracted .imdp).</li>
 <li><b>Zone graph</b> — symbolic states of a (probabilistic) timed automaton.</li>
 <li><b>Belief tree</b> — the POMDP optimal-policy belief tree.</li>
 </ul>
@@ -331,7 +360,7 @@ const MODES = {
             render:(d)=>{ if(d.nStates>(parseInt($("cap").value)||60)){showMsg(`${d.nStates} states > cap — increase "Max states".`);clearView();return;}
                           let cb=$("colorby").value; if(!d.values[cb]) cb=Object.keys(d.values)[0]; renderGraph(d,cb);
                           $("status").textContent=`${d.nStates} states · ${d.edges.length} edges · ${d.prop}`; } },
-  grid:   { label:"Grid heatmap", modelLabel:"System (.sys, 2-D affine)", endpoint:"/api/grid", controls:["eps","sysform"], examples:GRID_EX,
+  grid:   { label:"Abstraction → IMDP", modelLabel:"Discrete-time stochastic system (.sys) → IMDP", endpoint:"/api/grid", controls:["eps","sysform"], examples:GRID_EX,
             body:()=>({model:$("model").value, eps:$("eps").value}),
             render:renderHeatmap },
   zone:   { label:"Zone graph", modelLabel:"Timed automaton (.pta)", endpoint:"/api/zonegraph", controls:["bound"], examples:PTA_EX,
@@ -356,7 +385,7 @@ const TUT_PROP = {
   ltl:    "<b>LTL formula</b> — parsed and dispatched to the matching engine (F/G/U/X, G F, F G, patrol over boolean atoms). Arbitrary nested LTL needs the LDBA route (Spot/Owl, ISSUE-0016).",
 };
 const TUT_MODE = {
-  grid:  "<b>Grid heatmap</b> — a 2-D continuous system x' = A x + B u + noise is abstracted to a sparse Interval-MDP over grid cells. The two heatmaps are the <b>robust (min)</b> and <b>optimistic (max)</b> probability of the spec per cell.",
+  grid:  "<b>Abstraction → IMDP</b> — IMPaCT's core feature: a discrete-time stochastic control system x' = A x + B u + noise is <b>abstracted to a sparse Interval-MDP</b> over quantized grid cells (sound transition-probability intervals), then analysed. The two heatmaps are the <b>robust (min)</b> and <b>optimistic (max)</b> probability of the spec for each cell. Export the abstracted IMDP with the button below.",
   zone:  "<b>Zone graph</b> — a (probabilistic) timed automaton is explored symbolically: each node is a (location, clock-zone), heat-mapped by reach probability; extrapolation keeps the graph finite.",
   belief:"<b>Belief tree</b> — under partial observation the controller acts on the belief (state distribution). This is the optimal-policy belief tree; each node shows the belief (stacked bar) and its finite-horizon reach value.",
   about: "",
@@ -378,6 +407,7 @@ function showControls() {
   $("c_horizon").style.display= want.has("horizon")? "" : "none";
   $("c_sysform").style.display= want.has("sysform")? "" : "none";
   $("animate").style.display = (mode === "imdp") ? "" : "none";
+  $("exportImdp").style.display = (mode === "grid") ? "" : "none";
   const isAbout = (mode === "about");
   $("modePanel").style.display = isAbout ? "none" : "";
   $("aboutPanel").style.display = isAbout ? "" : "none";
@@ -390,9 +420,76 @@ function renderModes() {
   const bar=$("modes"); bar.innerHTML="";
   for (const k of Object.keys(MODES)) {
     const b=document.createElement("button"); b.textContent=MODES[k].label; b.className=(k===mode)?"active":"";
-    b.addEventListener("click",()=>{ mode=k; renderModes(); renderExamples(); showControls(); if(MODES[mode].examples.length) loadExample(0); });
+    b.addEventListener("click",()=>onMode(k));
     bar.appendChild(b);
   }
+}
+
+// ---- Research / Tutorial top-level sections --------------------------------
+let section = "tutorial";   // default to Tutorial (populated onboarding); Research = blank workspace
+const PLACEHOLDERS = {
+  imdp:`# Interval-MDP (.imdp).  Set Format to PRISM for a PRISM module instead.
+# states N
+# init s
+# label NAME s s ...
+# tran s a  to:lo:hi  to:lo:hi      (one line per action; point transition: lo==hi)
+#
+# example:
+# states 3
+# init 0
+# label target 2
+# tran 0 0  1:0.4:0.6 2:0.4:0.6
+# tran 1 0  1:1:1
+# tran 2 0  2:1:1`,
+  grid:`# Discrete-time stochastic control system  x' = A x + B u + noise,
+# abstracted to an Interval-MDP and analysed per grid cell.
+# (or just use the System builder form above)
+# xlb -3 -3    xub 3 3    eta 0.5 0.5
+# ulb -1 -1    uub 1 1    ueta 1 1
+# A a00 a01 a10 a11     B b00 b01 b10 b11     sigma s0 s1
+# region lo0 hi0 lo1 hi1      prop reach|safety`,
+  zone:`# (probabilistic) timed automaton
+# clocks N    init L    kmax <clk> <v> ...    target L
+# inv L <clk><op><int> ...
+# edge from | guard | prob toLoc [r<clk>] ; prob toLoc ...`,
+  belief:`# POMDP
+# states N    actions A    obs O    init s:p ...    target s ...    horizon H
+# T a s : s':p s':p ...
+# O a s' : o:p o:p ...`,
+  about:"",
+};
+function setPlaceholders(){ $("model").placeholder = PLACEHOLDERS[mode] || ""; }
+function clearForm(){ ["f_a","f_b","f_sig","f_min","f_max","f_eta","f_rlo","f_rhi"].forEach(id=>{ const el=$(id); if(el){ if(el.value) el.placeholder=el.value; el.value=""; } }); }
+function populateWarm(){
+  const sel=$("warmstart"); sel.innerHTML="";
+  const o0=document.createElement("option"); o0.value=""; o0.textContent="— choose a tutorial example —"; sel.appendChild(o0);
+  MODES[mode].examples.forEach((e,i)=>{ const o=document.createElement("option"); o.value=i; o.textContent=e.name; sel.appendChild(o); });
+}
+function viewHint(t){ const svg=$("graph"); svg.innerHTML=""; const W=svg.clientWidth||800,H=svg.clientHeight||600;
+  svg.appendChild(mk("text",{x:W/2,y:H/2,"text-anchor":"middle",fill:"#6b7682","font-size":15})).textContent=t; }
+function applySection(){
+  const research = (section==="research");
+  if(mode==="about"){ $("warm").style.display="none"; $("examples").style.display="none"; $("exLabel").style.display="none"; $("tutorial").style.display="none"; return; }
+  $("warm").style.display = research ? "" : "none";
+  $("examples").style.display = research ? "none" : "";
+  $("exLabel").style.display = research ? "none" : "";
+  $("tutorial").style.display = research ? "none" : "";
+  if(research){
+    setPlaceholders(); $("model").value=""; clearForm(); populateWarm();
+    showMsg(""); $("status").textContent=""; GD=null; GPOS=null;
+    viewHint("Define your model on the left (or warm-start with an example), then Run & visualize.");
+  } else {
+    renderExamples(); GD=null; GPOS=null; if(MODES[mode].examples.length) loadExample(0); run();
+  }
+}
+function onMode(k){ mode=k; renderModes(); showControls(); applySection(); }
+function renderSections(){
+  const bar=$("sections"); bar.innerHTML="";
+  [["research","Research"],["tutorial","Tutorial"]].forEach(([k,lbl])=>{
+    const b=document.createElement("button"); b.textContent=lbl; b.className=(k===section)?"active":"";
+    b.addEventListener("click",()=>{ section=k; renderSections(); applySection(); });
+    bar.appendChild(b);
+  });
 }
 function renderExamples() {
   const box=$("examples"); box.innerHTML="";
@@ -456,7 +553,7 @@ function downloadText(name,text,type){ const b=new Blob([text],{type:type||"text
 const EXT={imdp:"imdp",grid:"sys",zone:"pta",belief:"pomdp"};
 
 function buildSys() {
-  const g=id=>$(id).value.trim();
+  const g=id=>($(id).value.trim() || $(id).placeholder || "0");
   $("model").value =
 `# built from the system-builder form (no code): x' = a x + b u + N(0, sigma^2)
 xlb ${g("f_min")} ${g("f_min")}
@@ -487,6 +584,15 @@ $("upload").addEventListener("change", e=>{ const f=e.target.files[0]; if(!f)ret
 $("download").addEventListener("click", ()=>downloadText("model."+(EXT[mode]||"txt"), $("model").value));
 $("downloadSvg").addEventListener("click", ()=>{ const s=$("graph"); downloadText("impact-figure.svg", '<?xml version="1.0" encoding="UTF-8"?>\n'+new XMLSerializer().serializeToString(s), "image/svg+xml"); });
 $("downloadJson").addEventListener("click", ()=>{ if(!LAST){showMsg("Run something first.");return;} downloadText("impact-result.json", JSON.stringify(LAST,null,2), "application/json"); });
+$("exportImdp").addEventListener("click", async ()=>{
+  showMsg(""); $("status").textContent="abstracting → IMDP…";
+  try{ const res=await fetch("/api/abstract",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:$("model").value})});
+    const txt=await res.text();
+    if(!res.ok){ let m=txt; try{m=JSON.parse(txt).error;}catch(e){} showMsg("Error: "+m); $("status").textContent=""; return; }
+    downloadText("abstracted.imdp", txt); $("status").textContent="abstracted IMDP downloaded — open it in the IMDP graph tab.";
+  }catch(e){ showMsg("Request failed: "+e.message); }
+});
 
-renderModes(); renderExamples(); showControls(); loadExample(0);
-window.addEventListener("load", run);
+$("warmstart").addEventListener("change", e=>{ const i=parseInt(e.target.value); if(isNaN(i))return; loadExample(i); run(); });
+renderSections(); renderModes(); showControls(); applySection();
+window.addEventListener("load", applySection);
