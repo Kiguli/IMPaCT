@@ -10,6 +10,18 @@ The C++ core is untouched: the backend shells to the verified `tools/imdp_solve`
 CLI (`--json`), which returns the model structure (states/edges/labels) plus
 per-state `[lower, upper]` values for the chosen property and sense.
 
+## Use it without writing C++ (platform + tutorial)
+- **No-code builders** — the Grid-heatmap tab has a *System builder* form (decay,
+  control, noise, domain, grid, region, spec) that generates the `.sys` for you;
+  every tab ships clickable examples and a short *tutorial panel* explaining the
+  spec and how IMPaCT solves it.
+- **Value-iteration animation** — in the IMDP-graph tab, *Animate value iteration*
+  plays / steps the **actual** robust Bellman / O-maximisation backup, recolouring
+  each state as the probabilities update (reach / safety). This is the implemented
+  algorithm, traced iteration by iteration (`imdp_solve --trace`).
+- **Upload / download** — load a model file into the editor; download the model,
+  the rendered figure (SVG), or the full results (JSON).
+
 ## Visualizer modes (tabs)
 - **IMDP graph** — Interval-MDP node-link graph, states heat-mapped by satisfaction
   probability, for every property (reach/safety/until/next/buchi/persist/patrol/LTL).

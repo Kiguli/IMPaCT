@@ -323,7 +323,7 @@ const MODES = {
             render:(d)=>{ if(d.nStates>(parseInt($("cap").value)||60)){showMsg(`${d.nStates} states > cap — increase "Max states".`);clearView();return;}
                           let cb=$("colorby").value; if(!d.values[cb]) cb=Object.keys(d.values)[0]; renderGraph(d,cb);
                           $("status").textContent=`${d.nStates} states · ${d.edges.length} edges · ${d.prop}`; } },
-  grid:   { label:"Grid heatmap", modelLabel:"System (.sys, 2-D affine)", endpoint:"/api/grid", controls:["eps"], examples:GRID_EX,
+  grid:   { label:"Grid heatmap", modelLabel:"System (.sys, 2-D affine)", endpoint:"/api/grid", controls:["eps","sysform"], examples:GRID_EX,
             body:()=>({model:$("model").value, eps:$("eps").value}),
             render:renderHeatmap },
   zone:   { label:"Zone graph", modelLabel:"Timed automaton (.pta)", endpoint:"/api/zonegraph", controls:["bound"], examples:PTA_EX,
@@ -336,6 +336,30 @@ const MODES = {
 };
 let mode = "imdp";
 
+// ---- per-spec / per-mode tutorial text -------------------------------------
+const TUT_PROP = {
+  reach:  "<b>F φ (reach)</b> — maximise the probability of eventually reaching a φ-state. Solved by robust value iteration (O-maximisation inner solve + optimistic value iteration). Press <b>Animate</b> to watch V converge from below.",
+  safety: "<b>G φ (safety)</b> — stay in φ forever = 1 − max P(reach ¬φ). Robust interval iteration; <b>Animate</b> shows the safety probability settle.",
+  until:  "<b>φ U ψ (until)</b> — reach ψ while remaining in φ. Reduces to reachability on the model with ¬φ∧¬ψ states made absorbing.",
+  next:   "<b>X φ (next)</b> — one robust Bellman step: probability the next state satisfies φ.",
+  buchi:  "<b>G F φ (recurrence / Büchi)</b> — visit φ infinitely often. Computes the robust accepting end components (a.s.-Büchi winning region), then its robust reachability (ISSUE-0009, oracle-validated).",
+  persist:"<b>F G φ (persistence / co-Büchi)</b> — eventually remain in φ forever. Reach the largest robustly-invariant sub-region of φ.",
+  patrol: "<b>⋀ G F φᵢ (patrol)</b> — visit each region infinitely often. Round-robin degeneralisation to a single Büchi objective.",
+  ltl:    "<b>LTL formula</b> — parsed and dispatched to the matching engine (F/G/U/X, G F, F G, patrol over boolean atoms). Arbitrary nested LTL needs the LDBA route (Spot/Owl, ISSUE-0016).",
+};
+const TUT_MODE = {
+  grid:  "<b>Grid heatmap</b> — a 2-D continuous system x' = A x + B u + noise is abstracted to a sparse Interval-MDP over grid cells. The two heatmaps are the <b>robust (min)</b> and <b>optimistic (max)</b> probability of the spec per cell.",
+  zone:  "<b>Zone graph</b> — a (probabilistic) timed automaton is explored symbolically: each node is a (location, clock-zone), heat-mapped by reach probability; extrapolation keeps the graph finite.",
+  belief:"<b>Belief tree</b> — under partial observation the controller acts on the belief (state distribution). This is the optimal-policy belief tree; each node shows the belief (stacked bar) and its finite-horizon reach value.",
+  about: "",
+};
+function updateTutorial() {
+  const el = $("tutorial");
+  if (mode === "imdp") el.innerHTML = TUT_PROP[$("prop").value] || "";
+  else el.innerHTML = TUT_MODE[mode] || "";
+  el.style.display = el.innerHTML ? "" : "none";
+}
+
 function showControls() {
   const want = new Set(MODES[mode].controls);
   $("c_format").style.display = want.has("format") ? "" : "none";
@@ -344,6 +368,7 @@ function showControls() {
   $("c_cap").style.display    = want.has("cap")    ? "" : "none";
   $("c_eps").style.display    = want.has("eps")    ? "" : "none";
   $("c_horizon").style.display= want.has("horizon")? "" : "none";
+  $("c_sysform").style.display= want.has("sysform")? "" : "none";
   $("animate").style.display = (mode === "imdp") ? "" : "none";
   const isAbout = (mode === "about");
   $("modePanel").style.display = isAbout ? "none" : "";
@@ -351,6 +376,7 @@ function showControls() {
   $("legend").style.display = isAbout ? "none" : "";
   if (isAbout) { $("aboutPanel").innerHTML = ABOUT; clearView(); }
   $("modelLabel").textContent = MODES[mode].modelLabel;
+  updateTutorial();
 }
 function renderModes() {
   const bar=$("modes"); bar.innerHTML="";
@@ -421,7 +447,27 @@ function downloadText(name,text,type){ const b=new Blob([text],{type:type||"text
   const a=document.createElement("a"); a.href=u; a.download=name; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(u); }
 const EXT={imdp:"imdp",grid:"sys",zone:"pta",belief:"pomdp"};
 
+function buildSys() {
+  const g=id=>$(id).value.trim();
+  $("model").value =
+`# built from the system-builder form (no code): x' = a x + b u + N(0, sigma^2)
+xlb ${g("f_min")} ${g("f_min")}
+xub ${g("f_max")} ${g("f_max")}
+eta ${g("f_eta")} ${g("f_eta")}
+ulb -1 -1
+uub 1 1
+ueta 1 1
+A ${g("f_a")} 0 0 ${g("f_a")}
+B ${g("f_b")} 0 0 ${g("f_b")}
+sigma ${g("f_sig")} ${g("f_sig")}
+region ${g("f_rlo")} ${g("f_rhi")} ${g("f_rlo")} ${g("f_rhi")}
+prop ${$("f_prop").value}
+prune 1e-5`;
+}
+
 $("go").addEventListener("click", run);
+$("prop").addEventListener("change", updateTutorial);
+$("buildSys").addEventListener("click", ()=>{ buildSys(); run(); });
 $("animate").addEventListener("click", animateVI);
 $("colorby").addEventListener("change", ()=>{ if(mode==="imdp" && $("anim").style.display==="none") run(); });
 $("animPlay").addEventListener("click", playAnim);

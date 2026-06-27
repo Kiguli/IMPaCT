@@ -36,6 +36,8 @@
   .info { font-size:13px; color:var(--ink); }
   .info p { margin:8px 0; } .info ul { margin:8px 0; padding-left:18px; } .info li { margin:4px 0; color:var(--muted); }
   .info code { background:var(--bg); border:1px solid var(--line); border-radius:4px; padding:0 4px; font-size:12px; }
+  #tutorial { font-size:12px; margin:2px 0 10px; padding:9px 11px; background:var(--panel); border:1px solid var(--line); border-radius:8px; color:var(--muted); }
+  #tutorial b { color:var(--ink); }
   .toolbar { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
   .tbtn { padding:6px 10px; font-size:12px; background:var(--panel); color:var(--ink); border:1px solid var(--line); border-radius:6px; cursor:pointer; }
   .tbtn:hover { border-color:var(--accent); color:var(--accent); }
@@ -53,8 +55,28 @@
     <div class="modes" id="modes"></div>
     <label>Examples <span class="hint">— click to load &amp; run</span></label>
     <div class="examples" id="examples"></div>
+    <div id="tutorial" class="info"></div>
 
     <div id="modePanel">
+      <div id="c_sysform">
+        <label>System builder <span class="hint">— no code; fills the .sys below</span></label>
+        <div class="row">
+          <div><label>decay a</label><input id="f_a" value="0.9"/></div>
+          <div><label>control b</label><input id="f_b" value="0.5"/></div>
+          <div><label>noise &sigma;</label><input id="f_sig" value="0.3"/></div>
+        </div>
+        <div class="row">
+          <div><label>domain min</label><input id="f_min" value="-3"/></div>
+          <div><label>domain max</label><input id="f_max" value="3"/></div>
+          <div><label>grid &eta;</label><input id="f_eta" value="0.5"/></div>
+        </div>
+        <div class="row">
+          <div><label>region lo</label><input id="f_rlo" value="1.5"/></div>
+          <div><label>region hi</label><input id="f_rhi" value="3"/></div>
+          <div><label>spec</label><select id="f_prop"><option>reach</option><option>safety</option></select></div>
+        </div>
+        <button class="tbtn" id="buildSys" style="margin-top:8px">&#10227; Build .sys from form, then run</button>
+      </div>
       <label id="modelLabel">Model</label>
       <textarea id="model" spellcheck="false"></textarea>
 
