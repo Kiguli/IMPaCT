@@ -5,10 +5,17 @@ models in IMPaCT and in peer tools, and check we get the **same outputs** (solve
 times may differ). This directory does that on a shared, tool-neutral model
 format.
 
-## Mode: reference values (peers deferred)
+## Live peers (2026-06-27): IntervalMDP.jl, Storm, PRISM
 
-We are running in **reference-values mode**: peer tools are *not* installed here.
-Instead each model carries a sibling `.ref.json` with **independently-computed**
+The peer tools are now installed and run side-by-side on these models; the measured
+numbers (in each `.ref.json` `measured` block and in the top-level
+[`TOOL_COMPARISONS.md`](../../TOOL_COMPARISONS.md)) match the analytic references
+exactly for reach/safety/point models. IntervalMDP.jl 0.6.0 and Storm 1.13.0 do **not**
+support robust ω-regular on interval MDPs (so buchi/persist/patrol are IMPaCT-only),
+and PRISM 4.8.1 has no interval-MDP support (point models only). The runners live in
+[`peers/`](peers/). The original reference-values mode (below) still stands:
+
+Each model carries a sibling `.ref.json` with **independently-computed**
 reference values plus the provenance of how each was obtained:
 
 - **Point (degenerate-interval) MDPs** — exact reachability/safety by linear

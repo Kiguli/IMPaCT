@@ -1,0 +1,6 @@
+[build] AS
+[run] AS
+synthesis_seconds=4.321
+wall_clock=0:31.37
+max_rss_kb=2291880
+[done] AS -> models/AS.imdp

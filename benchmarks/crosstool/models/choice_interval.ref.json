@@ -4,5 +4,12 @@
   "provenance": "Exact by enumeration of controller actions x extremal nature. A: pess 0.3 / opt 0.5; B: 0.4 point. Controller maximizes => pess max(0.3,0.4)=0.4 (pick B), opt max(0.5,0.4)=0.5 (pick A). Matches IntervalMDP.jl robust max-reach.",
   "checks": [
     {"prop": "reach", "label": "target", "state": 0, "pess": 0.4, "opt": 0.5, "tol": 1e-4}
-  ]
+  ],
+  "measured": {
+    "note": "Live peer runs, 2026-06-27 (see TOOL_COMPARISONS.md). PRISM has no interval-MDP support.",
+    "impact":      {"pess": 0.4, "opt": 0.5},
+    "intervalmdp": {"pess": 0.4, "opt": 0.5},
+    "storm":       {"pess": 0.4, "opt": 0.5},
+    "prism":       "unsupported (no interval-MDP support)"
+  }
 }

@@ -96,6 +96,9 @@ int main() {
     //mdp.saveMinTransitionMatrix();
     //mdp.saveMaxTransitionMatrix();
     
+    /* ###### export abstracted IMDP for cross-tool comparison ######*/
+    mdp.exportIMDP("PD_p1.imdp");
+
     /* ###### synthesize infinite horizon controller (true = pessimistic, false = optimistic) ######*/
     mdp.infiniteHorizonReachController(true);
     

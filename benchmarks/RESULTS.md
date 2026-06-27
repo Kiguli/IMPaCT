@@ -43,11 +43,26 @@ O(N²). Synthesis = optimistic VI (eps=1e-6).
 At 125k states the sparse model is ~255 MB and synthesizes in 0.42 s, where the dense
 matrix would be ~250 GB (infeasible). This is the IntervalMDP.jl-style memory win.
 
-## Baseline (v1, branch main) — TODO: fill via Docker/CI on a tiny-enough model
-```
-# paste run_archcomp.py output here
-```
+## ARCH runs on the big machine (2026-06-27, AdaptiveCpp/OMP, 56 GB host)
 
-## Phase 1 (sound II + O-maximization) — TODO
-## Phase 2 (co-safe LTL) — TODO
-## Phase 3 (full ω-regular) — TODO
+Full cross-tool comparison vs PRISM / Storm / IntervalMDP.jl is in the top-level
+[`TOOL_COMPARISONS.md`](../TOOL_COMPARISONS.md). Summary of the IMPaCT side
+(abstraction = build the IMDP from continuous dynamics; synth = robust VI):
+
+| case | spec | cells | abstraction (s) | synth (s) | robust value matches IntervalMDP.jl? |
+|---|---|---|---|---|---|
+| AS | finite reach H=10 | 2460 | 27.0 | 4.3 | yes (Δ≤4.8e-7) |
+| BA | finite safety H=6 | 1225 | 7.6 | 0.27 | yes (Δ≤4.3e-7) |
+| VP | infinite reach | 2591 | 1.9 | 214 (6119 iters) | yes (Δ≤2.3e-5) |
+| IC_reach | finite reach H=5 | 592 | 1.8 | 0.06 | yes (Δ≤6.3e-7) |
+| IC_safe | finite safety H=5 | 1681 | 2.7 | 0.47 | yes (Δ≤6.3e-7) |
+| PD_p1 | infinite reach | 571 | 37 | 6.5 | yes (Δ≤7.1e-7) |
+| PD_p3 | infinite reach | 571 | ~37 | (SYCL VI did not converge) | yes via imdp_solve/peers (1.0) |
+| PR_minimal | infinite reach | 1583 | ~533 (8.84 GB×2) | (SYCL VI did not converge) | abstraction OK (was OOM @4 GB) |
+| AV_minimal | infinite reach | 5562 | (7.42 GB×2) | — | abstraction fits (14.8 GB) |
+| LM | finite reach H=200 | 36450 | dense-infeasible (~96 GB/matrix) | — | needs sparse storage |
+
+Findings: robust values agree with the peers everywhere applicable; IMPaCT's
+infinite-horizon SYCL VI is slow on recurrent models (ISSUE-0017); robust ω-regular
+is IMPaCT-only (Storm/IntervalMDP.jl unsupported); the dense abstraction is the
+memory wall (ISSUE-0006), cleared by the big machine except for the 6-D LM case.

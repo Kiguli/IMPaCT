@@ -6,7 +6,7 @@
 #include <iostream>
 #include <vector>
 #include <functional>
-#include "../../../src/IMDP.h"
+#include "../../../../src/IMDP.h"
 #include <armadillo>
 #include <chrono>
 
@@ -97,6 +97,9 @@ int main() {
     //mdp.saveMinTransitionMatrix();
     //mdp.saveMaxTransitionMatrix();
     
+    /* ###### export abstracted IMDP for cross-tool comparison ######*/
+    mdp.exportIMDP("PR_minimal.imdp");
+
     /* ###### synthesize infinite horizon controller (true = pessimistic, false = optimistic) ######*/
     mdp.infiniteHorizonReachControllerSorted(true);
     

@@ -22,3 +22,5 @@ See [`README.md`](README.md) for conventions and the literature-counterexample p
 | [0014](0014-pta-zone-mdp-pmax-only.md) | PTA forward zone-MDP is exact for Pmax reachability; Pmin needs backward/game construction | resolved | low | design-decision, timed-automata, scope |
 | [0015](0015-robust-interval-pomdp.md) | Robust (interval) POMDP solving — research item, transfer to the big machine | open | medium | research, pomdp, robust, needs-big-machine |
 | [0016](0016-full-ltl-ldba-external.md) | Full arbitrary-LTL -> LDBA front-end (Spot/Owl) — needs external toolchain | open | medium | enhancement, omega-regular, ltl, needs-big-machine |
+| [0017](0017-sycl-infinite-vi-slow-vs-peers.md) | SYCL infinite-horizon robust VI slow on recurrent IMDPs vs Storm/IntervalMDP.jl | open | medium | performance, solver, cross-tool |
+| [0018](0018-optimistic-bound-is-robust-policy-bracket.md) | Optimistic value is a bracket of the robust controller, not the cooperative optimum | open | low | semantics, documentation, cross-tool |

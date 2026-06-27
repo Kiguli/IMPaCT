@@ -4,6 +4,7 @@
 
 #include <limits>
 #include <algorithm>
+#include <functional>
 
 namespace impact {
 namespace stl {

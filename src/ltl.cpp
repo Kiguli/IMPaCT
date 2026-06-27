@@ -1,7 +1,9 @@
 #include "ltl.h"
 
+#include <algorithm>
 #include <cctype>
 #include <stdexcept>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 #include <string>

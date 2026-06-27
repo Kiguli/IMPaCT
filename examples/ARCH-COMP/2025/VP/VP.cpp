@@ -87,6 +87,9 @@ int main() {
     /* ###### calculate abstraction for transition matrices ######*/
     mdp.transitionMatrixBounds();
     
+    /* ###### export abstracted IMDP for cross-tool comparison ######*/
+    mdp.exportIMDP("VP.imdp");
+
     /* ###### synthesize infinite horizon controller (true = pessimistic, false = optimistic) ######*/
     mdp.infiniteHorizonReachControllerSorted(true);
     

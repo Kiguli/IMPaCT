@@ -102,6 +102,9 @@ int main() {
     //mdp.saveMinTransitionMatrix();
     //mdp.saveMaxTransitionMatrix();
     
+    /* ###### export abstracted IMDP for cross-tool comparison ######*/
+    mdp.exportIMDP("AV_minimal.imdp");
+
     /* ###### synthesize infinite horizon controller (true = pessimistic, false = optimistic) ######*/
     mdp.infiniteHorizonReachControllerSorted(true);
     
@@ -109,7 +112,7 @@ int main() {
     //mdp.finiteHorizonReachControllerSorted(true,10);
     
     /* ###### save controller ######*/
-    //mdp.saveController();
+    mdp.saveController();
     
     return 0;
 }

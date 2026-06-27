@@ -1,0 +1,6 @@
+[build] IC_safe
+[run] IC_safe
+synthesis_seconds=0.47
+wall_clock=0:03.14
+max_rss_kb=351208
+[done] IC_safe -> models/IC_safe.imdp

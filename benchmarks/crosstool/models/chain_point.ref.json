@@ -5,5 +5,10 @@
   "checks": [
     {"prop": "reach", "label": "target", "state": 0, "pess": 0.25, "opt": 0.25, "tol": 1e-4},
     {"prop": "reach", "label": "target", "state": 1, "pess": 0.5,  "opt": 0.5,  "tol": 1e-4}
-  ]
+  ],
+  "measured": {
+    "note": "Live peer runs, 2026-06-27 (see TOOL_COMPARISONS.md). Point MDP, so all four tools agree exactly. PRISM reports only the initial-state (s0) value.",
+    "state0": {"impact": 0.25, "intervalmdp": 0.25, "storm": 0.25, "prism": 0.25},
+    "state1": {"impact": 0.5,  "intervalmdp": 0.5,  "storm": 0.5,  "prism": "init-state only"}
+  }
 }

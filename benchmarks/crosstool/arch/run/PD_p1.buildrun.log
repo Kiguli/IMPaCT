@@ -1,0 +1,6 @@
+[build] PD_p1
+[run] PD_p1
+synthesis_seconds=6.467
+wall_clock=0:43.53
+max_rss_kb=3406208
+[done] PD_p1 -> models/PD_p1.imdp

@@ -1,0 +1,18 @@
+# Generated cross-tool artifacts (regenerate with the harness in peers/ and arch/).
+# We keep the harness scripts, the small result TSVs, and the .ref.json values;
+# the large exported models, peer model files, binaries, controllers and logs are
+# reproducible and too big to track.
+
+# exported ARCH abstractions + Storm DRNs (tens-to-hundreds of MB each)
+arch/models/
+
+# per-benchmark run artifacts (binaries, controller.h5, copied .imdp, logs, dumps)
+# -- but keep the small *.tsv summaries that live directly in arch/run/
+arch/run/*/
+
+# generated peer model files for the small crosstool models
+models/*.drn
+models/*.pm
+peers/*.drn
+run_peers/*.pm
+run_peers/*.json

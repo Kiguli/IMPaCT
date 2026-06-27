@@ -1,0 +1,24 @@
+[build] PD_p3
+[run] PD_p3
+bash: line 28: 29243 Killed                  /usr/bin/time -v "./$NAME.bin" > run.log 2>&1
+RUN FAILED
+Max: 0.997671, Min: 8.23785e-14
+[;35m[AdaptiveCpp Warning] [0mkernel_operation: Could not find embedded pointer in kernel blob for this requirement; do you have unnecessary accessors that are unused in your kernel?
+Max: 0.997671, Min: 8.23785e-14
+[;35m[AdaptiveCpp Warning] [0mkernel_operation: Could not find embedded pointer in kernel blob for this requirement; do you have unnecessary accessors that are unused in your kernel?
+Max: 0.997671, Min: 8.23785e-14
+[;35m[AdaptiveCpp Warning] [0mkernel_operation: Could not find embedded pointer in kernel blob for this requirement; do you have unnecessary accessors that are unused in your kernel?
+Max: 0.997671, Min: 8.23785e-14
+[;35m[AdaptiveCpp Warning] [0mkernel_operation: Could not find embedded pointer in kernel blob for this requirement; do you have unnecessary accessors that are unused in your kernel?
+Max: 0.997671, Min: 8.23785e-14
+[;35m[AdaptiveCpp Warning] [0mkernel_operation: Could not find embedded pointer in kernel blob for this requirement; do you have unnecessary accessors that are unused in your kernel?
+Max: 0.997671, Min: 8.23785e-14
+[;35m[AdaptiveCpp Warning] [0mkernel_operation: Could not find embedded pointer in kernel blob for this requirement; do you have unnecessary accessors that are unused in your kernel?
+Max: 0.997671, Min: 8.23785e-14
+[;35m[AdaptiveCpp Warning] [0mkernel_operation: Could not find embedded pointer in kernel blob for this requirement; do you have unnecessary accessors that are unused in your kernel?
+Max: 0.997671, Min: 8.23785e-14
+[;35m[AdaptiveCpp Warning] [0mkernel_operation: Could not find embedded pointer in kernel blob for this requirement; do you have unnecessary accessors that are unused in your kernel?
+Max: 0.997671, Min: 8.23785e-14
+[;35m[AdaptiveCpp Warning] [0mkernel_operation: Could not find embedded pointer in kernel blob for this requirement; do you have unnecessary accessors that are unused in your kernel?
+Max: 0.997671, Min: 8.23785e-14
+[;35m[AdaptiveCpp Warning] [0mkernel_operation: Could not find embedded pointer in kernel blob for this requirement; do you have unnecessary accessors that are unused in your kernel?

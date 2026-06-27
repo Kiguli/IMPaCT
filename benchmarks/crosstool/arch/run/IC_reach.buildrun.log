@@ -1,0 +1,6 @@
+[build] IC_reach
+[run] IC_reach
+synthesis_seconds=0.063
+wall_clock=0:01.81
+max_rss_kb=64072
+[done] IC_reach -> models/IC_reach.imdp

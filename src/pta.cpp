@@ -1,5 +1,6 @@
 #include "pta.h"
 
+#include <algorithm>
 #include <deque>
 #include <map>
 #include <string>

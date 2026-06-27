@@ -4,5 +4,12 @@
   "provenance": "Exact O-maximization: pess pushes mass to the dead successor (s1=0.4) => 0.4; opt pushes to the reaching successor (s1=0.6) => 0.6. IntervalMDP.jl robust value interval = [0.4, 0.6].",
   "checks": [
     {"prop": "reach", "label": "target", "state": 0, "pess": 0.4, "opt": 0.6, "tol": 1e-4}
-  ]
+  ],
+  "measured": {
+    "note": "Live peer runs, 2026-06-27 (see TOOL_COMPARISONS.md). PRISM has no interval-MDP support.",
+    "impact":      {"pess": 0.4, "opt": 0.6},
+    "intervalmdp": {"pess": 0.4, "opt": 0.6},
+    "storm":       {"pess": 0.4, "opt": 0.6},
+    "prism":       "unsupported (no interval-MDP support)"
+  }
 }

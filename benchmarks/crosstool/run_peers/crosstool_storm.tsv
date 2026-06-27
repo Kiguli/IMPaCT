@@ -1,0 +1,9 @@
+model	query	robust	cooperative
+chain_point.drn	reach target	0.25	0.25
+safety_point.drn	reach avoid (safety=1-x)	0.28	0.28
+choice_interval.drn	reach target	0.4	0.5
+fork_interval.drn	reach target	0.4	0.6
+buchi_reach.drn	GF acc (Buchi)	unsupported	unsupported
+persist_leak.drn	FG safe (persistence)	unsupported	unsupported
+patrol_cycle.drn	GF r0 & GF r2 (patrol)	unsupported	unsupported
+buchi_routearound.drn	GF acc (route-around)	unsupported	unsupported

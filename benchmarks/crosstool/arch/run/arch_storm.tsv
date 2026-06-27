@@ -1,0 +1,15 @@
+tool	name	prop	mode	comp	min	max	avg	init	mc_s	con_s
+storm	AS	reach	robust	comp=0	min=0	max=1	avg=0.004926990821	init=0	mc_s=0.2050	con_s=0.499
+storm	AS	reach	coop	comp=0	min=0	max=1	avg=0.2489225901	init=0	mc_s=0.2140	con_s=0.484
+storm	BA	safety	robust	comp=1	min=0.3326507768	max=1	avg=0.5294391972	init=0.5466756005	mc_s=5.8600	con_s=6.048
+storm	BA	safety	coop	comp=1	min=0.0001200443304	max=1	avg=0.003240163674	init=0.003378989448	mc_s=5.8340	con_s=5.908
+storm	VP	reach	robust	comp=0	min=0	max=1	avg=0.001730778981	init=0	mc_s=1.3460	con_s=0.366
+storm	VP	reach	coop	comp=0	min=0	max=1	avg=0.1963057328	init=0	mc_s=1.6910	con_s=0.367
+storm	IC_reach	reach	robust	comp=0	min=0	max=1	avg=0.0733759208	init=0	mc_s=0.0290	con_s=0.052
+storm	IC_reach	reach	coop	comp=0	min=0	max=1	avg=0.7269470371	init=0	mc_s=0.0290	con_s=0.049
+storm	IC_safe	safety	robust	comp=1	min=0	max=1	avg=0.2397731392	init=1	mc_s=0.0940	con_s=0.179
+storm	IC_safe	safety	coop	comp=1	min=0	max=1	avg=0.04850117161	init=1	mc_s=0.0960	con_s=0.178
+storm	PD_p1	reach	robust	comp=0	min=0	max=1	avg=0.9982540965	init=1	mc_s=8.3140	con_s=7.255
+storm	PD_p1	reach	coop	comp=0	min=0	max=1	avg=0.9982547993	init=1	mc_s=8.3320	con_s=7.312
+storm	PD_p3	reach	robust	comp=0	min=0	max=1	avg=0.9982540965	init=1	mc_s=8.3220	con_s=7.270
+storm	PD_p3	reach	coop	comp=0	min=0	max=1	avg=0.9982547993	init=1	mc_s=8.2950	con_s=7.222

@@ -4,5 +4,9 @@
   "provenance": "Exact: safe(1)=0.6, safe(0)=0.7*0.6+0.3*1=0.72. Point MDP, so PRISM Pmax=?[ !(F avoid) ] / Storm / IntervalMDP.jl all return exactly 0.72.",
   "checks": [
     {"prop": "safety", "label": "avoid", "state": 0, "pess": 0.72, "opt": 0.72, "tol": 1e-4}
-  ]
+  ],
+  "measured": {
+    "note": "Live peer runs, 2026-06-27 (see TOOL_COMPARISONS.md). Point MDP; all four agree. Storm via 1 - Pmin[F avoid] = 1 - 0.28.",
+    "state0": {"impact": 0.72, "intervalmdp": 0.72, "storm": 0.72, "prism": 0.72}
+  }
 }

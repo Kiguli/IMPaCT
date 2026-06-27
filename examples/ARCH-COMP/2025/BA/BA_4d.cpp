@@ -78,11 +78,14 @@ int main() {
     
     /* ###### calculate abstraction for transition matrices ######*/
     mdp.transitionMatrixBounds();
-    
+
     /* ###### save transition matrices ######*/
     //mdp.saveMinTransitionMatrix();
     //mdp.saveMaxTransitionMatrix();
-    
+
+    /* ###### export abstracted IMDP for cross-tool comparison (IntervalMDP.jl / Storm / PRISM) ######*/
+    mdp.exportIMDP("BA.imdp");
+
     /* ###### synthesize infinite horizon controller (true = pessimistic, false = optimistic) ######*/
     //mdp.infiniteHorizonSafeControllerSorted(true);
     

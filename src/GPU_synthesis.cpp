@@ -7,6 +7,8 @@
 #include <string>
 #include <nlopt.hpp>
 #include <iomanip>
+#include <fstream>
+#include <sstream>
 #include <AdaptiveCpp/sycl/sycl.hpp>
 #include <chrono>
 #include <armadillo>
@@ -61,6 +63,95 @@ void IMDP::saveController(){
 }
 void IMDP::loadController(string filename){
     IMPaCT_IO::loadData(controller, filename, "controller");
+}
+
+/// Export the abstracted Interval MDP to the neutral .imdp text format so peer
+/// tools (IntervalMDP.jl / Storm / PRISM) can solve the SAME model. Cells are
+/// states 0..state_space_size-1; an accepting target sink and a dead avoid sink
+/// (explicit avoid region + mass leaving the bounded domain) are appended. Because
+/// cells + target + avoid partition the one-step probability mass, every
+/// (state,action) interval row is a sound interval distribution. The disturbance
+/// dimension is assumed 0 (true for the ARCH-COMP cross-tool benchmarks).
+void IMDP::exportIMDP(const string& filename){
+    auto start = chrono::steady_clock::now();
+    cout << "Exporting abstracted IMDP to neutral .imdp format: " << filename << endl;
+
+    const bool has_target = !minTargetM.is_empty();
+    const bool has_avoid  = !minAvoidM.is_empty();
+    const size_t ss = state_space_size;
+    const size_t n_actions = (input_space_size == 0 ? 1 : input_space_size);
+
+    if (disturb_space_size != 0)
+        cout << "  warning: exportIMDP ignores the disturbance dimension (dim_w>0)." << endl;
+    if (minTransitionM.is_empty()) {
+        cout << "  error: transition matrices not computed; call transitionMatrixBounds() first." << endl;
+        return;
+    }
+
+    size_t N = ss;
+    long long T_idx = -1, A_idx = -1;
+    if (has_target) { T_idx = (long long)N; N++; }
+    if (has_avoid)  { A_idx = (long long)N; N++; }
+
+    ofstream f(filename);
+    if(!f){ cout << "  error: cannot open " << filename << " for writing." << endl; return; }
+    f << setprecision(12);
+    f << "# Exported by IMPaCT abstraction. cells=" << ss
+      << " actions/state=" << n_actions
+      << (has_target ? " target-sink" : "")
+      << (has_avoid  ? " avoid-sink"  : "") << "\n";
+    f << "states " << N << "\n";
+    f << "init 0\n";
+    if (has_target) f << "label target " << T_idx << "\n";
+    if (has_avoid)  f << "label avoid " << A_idx << "\n";
+
+    auto clamp01 = [](double v){ return v < 0.0 ? 0.0 : (v > 1.0 ? 1.0 : v); };
+    const double EPS = 1e-12;
+
+    for (size_t i = 0; i < ss; ++i) {
+        for (size_t k = 0; k < n_actions; ++k) {
+            const size_t row = k * ss + i;          // (state i, action k), dim_w == 0
+            ostringstream line;
+            line << "tran " << i << " " << k;
+            bool any = false;
+            for (size_t col = 0; col < ss; ++col) {
+                double hi = clamp01(maxTransitionM(row, col));
+                if (hi <= EPS) continue;
+                double lo = clamp01(minTransitionM(row, col));
+                if (lo > hi) lo = hi;
+                line << " " << col << ":" << lo << ":" << hi;
+                any = true;
+            }
+            if (has_target) {
+                double hi = clamp01(maxTargetM(row));
+                if (hi > EPS) {
+                    double lo = clamp01(minTargetM(row));
+                    if (lo > hi) lo = hi;
+                    line << " " << T_idx << ":" << lo << ":" << hi;
+                    any = true;
+                }
+            }
+            if (has_avoid) {
+                double hi = clamp01(maxAvoidM(row));
+                if (hi > EPS) {
+                    double lo = clamp01(minAvoidM(row));
+                    if (lo > hi) lo = hi;
+                    line << " " << A_idx << ":" << lo << ":" << hi;
+                    any = true;
+                }
+            }
+            if (!any) line << " " << i << ":1:1";   // isolated cell -> self loop
+            f << line.str() << "\n";
+        }
+    }
+    if (has_target) f << "tran " << T_idx << " 0 " << T_idx << ":1:1\n";
+    if (has_avoid)  f << "tran " << A_idx << " 0 " << A_idx << ":1:1\n";
+    f.close();
+
+    auto end = chrono::steady_clock::now();
+    cout << "  wrote " << N << " states ("
+         << ss << " cells x " << n_actions << " actions) in "
+         << chrono::duration<double>(end - start).count() << " s." << endl;
 }
 
 /// Sorted Implementation of infinite horizon reachability

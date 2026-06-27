@@ -115,11 +115,14 @@ int main() {
     /* ###### synthesize infinite horizon controller (true = pessimistic, false = optimistic) ######*/
     //mdp.infiniteHorizonReachControllerSorted(true);
     
+    /* ###### export abstracted IMDP for cross-tool comparison ######*/
+    mdp.exportIMDP("LM.imdp");
+
     /* ###### synthesize finite horizon controller (true = pessimistic, false = optimistic) ######*/
     mdp.finiteHorizonReachControllerSorted(true,200);
-    
+
     /* ###### save controller ######*/
-    //mdp.saveController();
+    mdp.saveController();
     
     return 0;
 }

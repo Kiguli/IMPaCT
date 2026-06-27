@@ -83,7 +83,15 @@ public:
     void saveMaxAvoidTransitionVector();
     void saveMaxTransitionMatrix();
     void saveController();
-    
+
+    /// Export the abstracted Interval MDP to the neutral .imdp exchange format
+    /// (src/imdp_io.h) for cross-tool comparison against IntervalMDP.jl / Storm /
+    /// PRISM. Cells become states 0..state_space_size-1; an accepting target sink
+    /// and a dead avoid sink (capturing the explicit avoid region plus mass leaving
+    /// the bounded domain) are appended so each (state,action) row is a sound
+    /// interval distribution. Call AFTER the transition/target/avoid abstractions.
+    void exportIMDP(const string& filename);
+
     /// Functions to Load the Vectors, Matrices and Controller
     void loadMinTargetTransitionVector(string filename);
     void loadMinAvoidTransitionVector(string filename);

@@ -1,0 +1,6 @@
+[build] VP
+[run] VP
+synthesis_seconds=214.429
+wall_clock=3:36.34
+max_rss_kb=283152
+[done] VP -> models/VP.imdp

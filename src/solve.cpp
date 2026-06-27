@@ -3,6 +3,7 @@
 #include "graph_utils.h"
 
 #include <algorithm>
+#include <cmath>
 #include <vector>
 #include <set>
 

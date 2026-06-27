@@ -1,0 +1,6 @@
+[build] BA
+[run] BA
+synthesis_seconds=0.272
+wall_clock=0:07.85
+max_rss_kb=160256
+[done] BA -> models/BA.imdp

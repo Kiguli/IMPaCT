@@ -2,6 +2,7 @@
 
 #include <cmath>
 #include <algorithm>
+#include <functional>
 
 namespace impact {
 namespace abstraction {
