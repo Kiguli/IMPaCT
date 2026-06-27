@@ -19,11 +19,12 @@
 using namespace impact;
 
 int main(int argc, char** argv) {
-    if (argc < 2) { fprintf(stderr, "usage: grid_heatmap MODEL.sys [--eps E] [--emit-imdp]\n"); return 2; }
-    double eps = 1e-6; bool emitImdp = false;
+    if (argc < 2) { fprintf(stderr, "usage: grid_heatmap MODEL.sys [--eps E] [--emit-imdp] [--emit-graph]\n"); return 2; }
+    double eps = 1e-6; bool emitImdp = false, emitGraph = false;
     for (int i = 2; i < argc; ++i) { std::string a = argv[i];
         if (a == "--eps" && i + 1 < argc) eps = atof(argv[++i]);
-        else if (a == "--emit-imdp") emitImdp = true; }
+        else if (a == "--emit-imdp") emitImdp = true;
+        else if (a == "--emit-graph") emitGraph = true; }
 
     system_io::SystemSpec spec;
     try { spec = system_io::parseFile(argv[1]); }
@@ -61,6 +62,43 @@ int main(int argc, char** argv) {
             opt  = solve::maxReachOptimistic (ab.model, ab.targets, eps);
         }
     } catch (const std::exception& e) { fprintf(stderr, "solve error: %s\n", e.what()); return 1; }
+
+    // Emit the abstracted IMDP as a node-link graph (same JSON the graph renderer
+    // consumes): states/init/labels/edges + per-state pessimistic & optimistic values.
+    if (emitGraph) {
+        const int N = (int)ab.model.size();
+        const std::string lbl = (spec.prop == "safety") ? "avoid" : "target";
+        printf("{\n  \"nStates\": %d, \"init\": 0, \"prop\": \"%s\",\n", N, spec.prop.c_str());
+        printf("  \"labels\": {\"%s\": [", lbl.c_str());
+        { bool f = true; for (int t : ab.targets) { printf("%s%d", f ? "" : ",", t); f = false; } }
+        printf("]},\n  \"edges\": [");
+        bool firstE = true;
+        for (int from = 0; from < N; ++from)
+            for (size_t a = 0; a < ab.model[from].size(); ++a)
+                for (const auto& iv : ab.model[from][a]) {
+                    printf("%s{\"from\":%d,\"action\":%zu,\"to\":%d,\"lo\":%.6f,\"hi\":%.6f}",
+                           firstE ? "" : ",", from, a, iv.to, iv.lo, iv.hi);
+                    firstE = false;
+                }
+        printf("],\n  \"values\": {\"pess\": [");
+        for (int st = 0; st < N; ++st) printf("%s{\"lower\":%.6f,\"upper\":%.6f}", st ? "," : "", pess.lower[st], pess.upper[st]);
+        printf("], \"opt\": [");
+        for (int st = 0; st < N; ++st) printf("%s{\"lower\":%.6f,\"upper\":%.6f}", st ? "," : "", opt.lower[st], opt.upper[st]);
+        printf("]},\n");
+        // per-state descriptor: which quantized cell (region box) of the state space.
+        const char* absorbName = (spec.prop == "safety") ? "AVOID" : "TARGET";
+        printf("  \"descr\": [");
+        for (int st = 0; st < N; ++st) {
+            if (st < ab.nCells) {
+                int j0 = st % Nx, j1 = st / Nx;
+                double x0 = s.xlb[0] + j0 * s.eta[0], y0 = s.xlb[1] + j1 * s.eta[1];
+                printf("%s\"x[%.3g,%.3g] y[%.3g,%.3g]\"", st ? "," : "", x0, x0 + s.eta[0], y0, y0 + s.eta[1]);
+            } else if (st == ab.nCells) printf("%s\"%s\"", st ? "," : "", absorbName);
+            else printf("%s\"SINK (off-grid)\"", st ? "," : "");
+        }
+        printf("]\n}\n");
+        return 0;
+    }
 
     // cell linear index c = j0 + j1*Nx (stride_0 = 1, stride_1 = Nx).
     auto dump = [&](const char* name, const solve::IntervalResult& r, bool useLower) {

@@ -121,9 +121,23 @@ const IMDP_EX = [
   { name:"LTL: G F r",        format:"imdp", prop:"ltl", label:"G F r", bound:"both", model:M_CYC2 },
   { name:"PRISM input",       format:"prism", prop:"reach", label:"target", bound:"both", model:M_PRISM },
 ];
+const SYS_COARSE=`# coarse 3x3 grid so the abstracted IMDP is a readable graph
+xlb -3 -3
+xub 3 3
+eta 2 2
+ulb -1 -1
+uub 1 1
+ueta 2 2
+A 0.8 0 0 0.8
+B 0.5 0 0 0.5
+sigma 0.6 0.6
+region 1 3 1 3
+prop reach
+prune 1e-3`;
 const GRID_EX = [
-  { name:"reach a target box",      model:SYS_REACH },
-  { name:"safety around obstacle",  model:SYS_SAFE },
+  { name:"coarse → IMDP graph",     model:SYS_COARSE, view:"graph" },
+  { name:"reach (heatmap)",         model:SYS_REACH,  view:"heatmap" },
+  { name:"safety obstacle (heatmap)", model:SYS_SAFE, view:"heatmap" },
 ];
 
 const PTA_PROB=`# PTA: at clock x>=2 a probabilistic edge -> 0.7 target L1 / 0.3 dead L2
@@ -271,12 +285,14 @@ function drawGraph() {
     const colorVal=GFR?(GFR[i]||0):(GCB==="opt"?hi:lo);      // colour by lower (robust) by default; upper if "Color by: optimistic"
     const g=mk("g",{style:"cursor:grab"}), isInit=(i===data.init), lab=labelOf[i];
     const c=mk("circle",{cx:x,cy:y,r:r,fill:heat(colorVal),stroke:isInit?"#e6edf3":"#0f1419","stroke-width":isInit?3.5:1.5});
-    const tt=mk("title",{}); tt.textContent=`state ${i}${lab?" {"+lab.join(",")+"}":""}${isInit?" (init)":""}\n`+(GFR?`iteration value = ${colorVal.toFixed(3)}`:Object.keys(data.values).map(k=>`${k} [${data.values[k][i].lower.toFixed(3)}, ${data.values[k][i].upper.toFixed(3)}]`).join("\n"));
+    const cell = (data.descr && data.descr[i]) ? data.descr[i] : null;   // quantized cell of the state space (abstraction)
+    const tt=mk("title",{}); tt.textContent=`state ${i}${cell?" — "+cell:""}${lab?" {"+lab.join(",")+"}":""}${isInit?" (init)":""}\n`+(GFR?`iteration value = ${colorVal.toFixed(3)}`:Object.keys(data.values).map(k=>`${k} [${data.values[k][i].lower.toFixed(3)}, ${data.values[k][i].upper.toFixed(3)}]`).join("\n"));
     c.appendChild(tt);
     c.addEventListener("pointerdown", ev=>{ GdragIdx=i; ev.preventDefault(); if(c.setPointerCapture) try{c.setPointerCapture(ev.pointerId);}catch(e){} });
     g.appendChild(c);
     g.appendChild(mk("text",{x:x,y:y+4,"text-anchor":"middle",fill:"#0f1419","font-size":Math.max(9,r*0.6),"font-weight":"700","pointer-events":"none"})).textContent=i;
-    if(lab){const s=mk("text",{x:x,y:y-r-4,"text-anchor":"middle",fill:"#edae49","font-size":13,"pointer-events":"none"});s.textContent="★";g.appendChild(s);}
+    if(cell){ g.appendChild(mk("text",{x:x,y:y-r-5,"text-anchor":"middle",fill:"#c9d1d9","font-size":9,"pointer-events":"none"})).textContent=cell; }
+    else if(lab){const s=mk("text",{x:x,y:y-r-4,"text-anchor":"middle",fill:"#edae49","font-size":13,"pointer-events":"none"});s.textContent="★";g.appendChild(s);}
     // value label: lower / upper (animation: single iterate value). Draggable AROUND
     // the node at a clamped radius so it can be moved off overlapping edges.
     const off = (GLBLOFF && GLBLOFF[i]) || [0, 24];
@@ -400,9 +416,14 @@ const MODES = {
             render:(d)=>{ if(d.nStates>(parseInt($("cap").value)||60)){showMsg(`${d.nStates} states > cap — increase "Max states".`);clearView();return;}
                           let cb=$("colorby").value; if(!d.values[cb]) cb=Object.keys(d.values)[0]; renderGraph(d,cb);
                           $("status").textContent=`${d.nStates} states · ${d.edges.length} edges · ${d.prop}`; } },
-  grid:   { label:"Abstraction → IMDP", modelLabel:"Discrete-time stochastic system (.sys) → IMDP", endpoint:"/api/grid", controls:["eps","sysform"], examples:GRID_EX,
-            body:()=>({model:$("model").value, eps:$("eps").value}),
-            render:renderHeatmap },
+  grid:   { label:"Abstraction → IMDP", modelLabel:"Discrete-time stochastic system (.sys) → IMDP", endpoint:"/api/grid", controls:["eps","sysform","view","cap"], examples:GRID_EX,
+            body:()=>({model:$("model").value, eps:$("eps").value, view:$("viewsel").value}),
+            render:(d)=>{
+              if(d.min){ renderHeatmap(d); return; }                       // heatmap JSON
+              if(d.nStates>(parseInt($("cap").value)||60)){ showMsg(`abstracted IMDP has ${d.nStates} states (> cap) — coarsen the grid (larger eta) or switch View to Heatmap.`); clearView(); return; }
+              renderGraph(d,"pess");                                        // abstracted IMDP graph
+              $("status").textContent=`abstracted IMDP: ${d.nStates} states · ${d.edges.length} edges`;
+            } },
   zone:   { label:"Zone graph", modelLabel:"Timed automaton (.pta)", endpoint:"/api/zonegraph", controls:["bound"], examples:PTA_EX,
             body:()=>({model:$("model").value, bound:($("bound").value==="opt"?"opt":"pess"), engine:"zone"}),
             render:renderZoneGraph },
@@ -425,7 +446,7 @@ const TUT_PROP = {
   ltl:    "<b>LTL formula</b> — parsed and dispatched to the matching engine (F/G/U/X, G F, F G, patrol over boolean atoms). Arbitrary nested LTL needs the LDBA route (Spot/Owl, ISSUE-0016).",
 };
 const TUT_MODE = {
-  grid:  "<b>Abstraction → IMDP</b> — IMPaCT's core feature: a discrete-time stochastic control system x' = A x + B u + noise is <b>abstracted to a sparse Interval-MDP</b> over quantized grid cells (sound transition-probability intervals), then analysed. The two heatmaps are the <b>robust (min)</b> and <b>optimistic (max)</b> probability of the spec for each cell. Export the abstracted IMDP with the button below.",
+  grid:  "<b>Abstraction → IMDP</b> — IMPaCT's core feature: a discrete-time stochastic control system x' = A x + B u + noise is <b>abstracted to a sparse Interval-MDP</b> over quantized grid cells (sound transition-probability intervals), then analysed. <b>View: IMDP graph</b> draws the abstracted Interval-MDP (use a coarse grid / large η so it stays readable); <b>View: Heatmap</b> shows the per-cell robust (min) &amp; optimistic (max) spec probability for fine grids. Export the abstracted .imdp with the button below.",
   zone:  "<b>Zone graph</b> — a (probabilistic) timed automaton is explored symbolically: each node is a (location, clock-zone), heat-mapped by reach probability; extrapolation keeps the graph finite.",
   belief:"<b>Belief tree</b> — under partial observation the controller acts on the belief (state distribution). This is the optimal-policy belief tree; each node shows the belief (stacked bar) and its finite-horizon reach value.",
   about: "",
@@ -446,6 +467,7 @@ function showControls() {
   $("c_eps").style.display    = want.has("eps")    ? "" : "none";
   $("c_horizon").style.display= want.has("horizon")? "" : "none";
   $("c_sysform").style.display= want.has("sysform")? "" : "none";
+  $("c_view").style.display   = want.has("view")   ? "" : "none";
   $("animate").style.display = (mode === "imdp") ? "" : "none";
   $("exportImdp").style.display = (mode === "grid") ? "" : "none";
   const isAbout = (mode === "about");
@@ -540,6 +562,7 @@ function loadExample(i) {
   const e=MODES[mode].examples[i]; if(!e) return;
   $("model").value=e.model;
   if(mode==="imdp"){ $("format").value=e.format; $("prop").value=e.prop; $("label").value=e.label; $("bound").value=e.bound; }
+  if(mode==="grid" && e.view){ $("viewsel").value=e.view; }
   if(mode==="belief" && e.horizon){ $("horizon").value=e.horizon; }
 }
 

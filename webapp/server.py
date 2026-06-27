@@ -37,7 +37,10 @@ SOLVER = tool("imdp_solve")
 STATE_CAP = 200          # hard safety cap for the backend (front-end caps rendering)
 
 # (endpoint, tool, file-suffix, extra-args-builder) for the model-file CLIs.
-def _grid_args(req):    return ["--eps", str(req.get("eps", 1e-6))]
+def _grid_args(req):
+    a = ["--eps", str(req.get("eps", 1e-6))]
+    if req.get("view") == "graph": a.append("--emit-graph")
+    return a
 def _abstract_args(req):return ["--emit-imdp"]
 def _zone_args(req):    return [str(req.get("target", "-")), req.get("engine", "zone"), req.get("bound", "pess")]
 def _belief_args(req):  return [str(req.get("horizon", 4)), req.get("bound", "max")]
