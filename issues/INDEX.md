@@ -24,3 +24,5 @@ See [`README.md`](README.md) for conventions and the literature-counterexample p
 | [0016](0016-full-ltl-ldba-external.md) | Full arbitrary-LTL -> LDBA front-end (Spot/Owl) — needs external toolchain | open | medium | enhancement, omega-regular, ltl, needs-big-machine |
 | [0017](0017-sycl-infinite-vi-slow-vs-peers.md) | SYCL infinite-horizon robust VI slow on recurrent IMDPs vs Storm/IntervalMDP.jl | resolved | low | performance, solver, cross-tool |
 | [0018](0018-optimistic-bound-is-robust-policy-bracket.md) | Optimistic value is a bracket of the robust controller, not the cooperative optimum | open | low | semantics, documentation, cross-tool |
+| [0019](0019-sparse-default-abstraction.md) | Make the sparse abstraction the default everywhere (design decision) | in-progress | medium | design-decision, scalability, abstraction |
+| [0020](0020-sparse-vs-dense-abstraction-discrepancy.md) | Sparse (closed-form) and dense (nlopt) abstractions disagree on AS/BA | open | medium | correctness, abstraction, soundness |
