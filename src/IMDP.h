@@ -8,6 +8,18 @@
 using namespace arma;
 using namespace std;
 
+/// Convergence method for the INFINITE-horizon robust value iteration.
+///   IntervalIteration (default) — sound interval iteration: iterate from 0 (lower)
+///     and from 1 (upper) and stop when the gap |upper-lower| < epsilon. Rigorous
+///     two-sided bracket, but on weakly-contracting / end-component models it can be
+///     slow or (with end components) never close the gap (see ISSUE-0003).
+///   ValueIteration — the method peer tools (PRISM / Storm / IntervalMDP.jl) use:
+///     plain value iteration with RESIDUAL stopping (stop when the per-sweep change
+///     of the iterates < epsilon). Far fewer sweeps and it converges even with end
+///     components (the from-0 iterate -> least fixed point = robust value), but the
+///     residual stopping is not a sound two-sided certificate.
+enum class IterationMethod { IntervalIteration, ValueIteration };
+
 /* IMDP class with is a child of MDP class*/
 
 class IMDP: public MDP {
@@ -30,6 +42,9 @@ protected:
     ///Algorithm used for nonlinear optimization
     nlopt::algorithm algo = nlopt::LN_SBPLX;
 
+    ///Convergence method for infinite-horizon synthesis (see IterationMethod above)
+    IterationMethod iterMethod = IterationMethod::IntervalIteration;
+
     // Internal implementation helpers for controller synthesis
     void infiniteHorizonControllerImpl(bool IMDP_lower, bool is_reach);
     void finiteHorizonControllerImpl(bool IMDP_lower, size_t timeHorizon, bool is_reach);
@@ -48,6 +63,10 @@ public:
     
     /// Set the Nonlinear Optimization Algorithm (choice of others found at: https://nlopt.readthedocs.io/en/latest/NLopt_Algorithms/, e.g. LN_COBYLA)
     void setAlgorithm(nlopt::algorithm alg);
+
+    /// Select the infinite-horizon convergence method: IterationMethod::IntervalIteration
+    /// (default, sound bracket) or IterationMethod::ValueIteration (peer-style residual VI).
+    void setIterationMethod(IterationMethod m);
 
     /// Matrix and Vector Abstraction Functions
     void minTransitionMatrix();

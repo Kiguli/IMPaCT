@@ -53,18 +53,19 @@ Full cross-tool comparison vs PRISM / Storm / IntervalMDP.jl is in the top-level
 |---|---|---|---|---|---|
 | AS | finite reach H=10 | 2460 | 27.0 | 4.3 | yes (Δ≤4.8e-7) |
 | BA | finite safety H=6 | 1225 | 7.6 | 0.27 | yes (Δ≤4.3e-7) |
-| VP | infinite reach | 2591 | 1.9 | 34.6 (was 214; ISSUE-0017 fix) | yes (Δ≤2.3e-5) |
+| VP | infinite reach | 2591 | 1.9 | 29.1 II / 0.59 VI (was 214) | yes (Δ≤2.3e-5) |
 | IC_reach | finite reach H=5 | 592 | 1.8 | 0.06 | yes (Δ≤6.3e-7) |
 | IC_safe | finite safety H=5 | 1681 | 2.7 | 0.47 | yes (Δ≤6.3e-7) |
-| PD_p1 | infinite reach | 571 | 37 | 1.29 (was 6.5; ISSUE-0017 fix) | yes (Δ≤7.1e-7) |
-| PD_p3 | infinite reach | 571 | ~37 | SYCL VI non-convergent (ISSUE-0003) | yes via imdp_solve/peers (1.0) |
+| PD_p1 | infinite reach | 571 | 37 | 1.29 II / 1.34 VI (was 6.5) | yes (Δ≤7.1e-7) |
+| PD_p3 | infinite reach | 571 | ~37 | 1.36 VI (II non-convergent, ISSUE-0003) | yes (1.0 = peers) |
 | PR_minimal | infinite reach | 1583 | ~533 (8.84 GB×2) | (SYCL VI did not converge) | abstraction OK (was OOM @4 GB) |
 | AV_minimal | infinite reach | 5562 | (7.42 GB×2) | — | abstraction fits (14.8 GB) |
 | LM | finite reach H=200 | 36450 | dense-infeasible (~96 GB/matrix) | — | needs sparse storage |
 
-Findings: robust values agree with the peers everywhere applicable; the
-infinite-horizon SYCL VI was sped up 5–6× by hoisting per-sweep loop-invariant work
-(ISSUE-0017 fix; PD_p1 now ≈ IntervalMDP.jl); PD_p3 stays non-convergent due to the
-interval-iteration nature-trap (ISSUE-0003, separate); robust ω-regular is IMPaCT-only
-(Storm/IntervalMDP.jl unsupported); the dense abstraction is the memory wall
-(ISSUE-0006), cleared by the big machine except for the 6-D LM case.
+Findings: robust values agree with the peers everywhere applicable; IMPaCT now offers
+two infinite-horizon solvers (`setIterationMethod`) — sound interval iteration
+(default; sped up ~7× by hoisting per-sweep loop-invariant work) and peer-style pure
+value iteration (VP 0.59 s ≤ peers; converges on PD_p3 where interval iteration cannot,
+ISSUE-0017/0003); robust ω-regular is IMPaCT-only (Storm/IntervalMDP.jl unsupported);
+the dense abstraction is the memory wall (ISSUE-0006), cleared by the big machine
+except for the 6-D LM case.

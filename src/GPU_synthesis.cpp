@@ -164,6 +164,7 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
             vec first0(state_space_size, 1, fill::zeros);
             mat firstnew0(state_space_size, 1, fill::zeros);
             vec first1(state_space_size, 1, fill::ones);
+            if (iterMethod == IterationMethod::ValueIteration) first1.zeros();
             mat firstnew1(state_space_size, 1, fill::zeros);
 
             double max_diff = 1.0;
@@ -175,6 +176,12 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                 vec diffR = maxTargetM - minTargetM;
                 vec diffA = maxAvoidM - minAvoidM;
             sycl::queue queue;
+                    sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
+                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
+                    sycl::buffer<double> bufminTT(minTargetM.memptr(),minTargetM.n_rows);
+                    sycl::buffer<double> bufdTT(diffR.memptr(),diffR.n_rows);
+                    sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
+                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
             while (max_diff > epsilon) {
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
@@ -190,12 +197,6 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                     sycl::buffer<double> cdfBuffer1(firstnew1.memptr(),firstnew1.n_rows);
                     sycl::buffer<double> buff1(first1.memptr(),first1.n_rows);
                     sycl::buffer<double> buff0(first0.memptr(),first0.n_rows);
-                    sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
-                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
-                    sycl::buffer<double> bufminTT(minTargetM.memptr(),minTargetM.n_rows);
-                    sycl::buffer<double> bufdTT(diffR.memptr(),diffR.n_rows);
-                    sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
-                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
 
                     // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                     queue.submit([&](sycl::handler& cgh) {
@@ -279,10 +280,11 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                     cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is an absorbing state in the solution, try running the finite Horizon solution using this number of steps." << endl;
                     break;
                 }
+                double viResid = (iterMethod == IterationMethod::ValueIteration) ? (double)(max(abs(check0 - first0))) : 0.0;
                 first0 = check0;
                 first1 = check1;
 
-                max_diff = max(abs(first1-first0));
+                max_diff = (iterMethod == IterationMethod::ValueIteration) ? viResid : max(abs(first1-first0));
                 min_diff = min(abs(first1-first0));
             }
             }
@@ -292,6 +294,7 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
             vec second0(state_space_size, 1, fill::zeros);
             mat secondnew0(state_space_size, 1, fill::zeros);
             vec second1(state_space_size, 1, fill::ones);
+            if (iterMethod == IterationMethod::ValueIteration) second1.zeros();
             mat secondnew1(state_space_size, 1, fill::zeros);
             max_diff = 1.0;
             min_diff = 1.0;
@@ -318,6 +321,9 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                 vec diffR = tempTTmax - tempTTmin;
                 vec diffA = tempATmax - tempATmin;
             sycl::queue Q;
+                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
+                    sycl::buffer<double> bufdTT(diffR.memptr(),diffR.n_rows);
+                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
             while (max_diff > epsilon) {
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
@@ -336,11 +342,8 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                     sycl::buffer<double> bufs1(second1.memptr(),second1.n_rows);
                     sycl::buffer<double> bufs0(second0.memptr(),second0.n_rows);
                     sycl::buffer<double> bufminT(tempTmin.memptr(),tempTmin.n_rows*tempTmin.n_cols);
-                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
                     sycl::buffer<double> bufminTT(tempTTmin.memptr(),tempTTmin.n_rows);
-                    sycl::buffer<double> bufdTT(diffR.memptr(),diffR.n_rows);
                     sycl::buffer<double> bufminAT(tempATmin.memptr(),tempATmin.n_rows);
-                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
 
                     // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                     Q.submit([&](sycl::handler& cgh) {
@@ -416,10 +419,11 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                     cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is an absorbing state in the solution, try running the finite Horizon solution using this number of steps." << endl;
                     break;
                 }
+                double viResid = (iterMethod == IterationMethod::ValueIteration) ? (double)(max(abs(secondnew0 - second0))) : 0.0;
                 second0 = secondnew0;
                 second1 = secondnew1;
 
-                max_diff = max(abs(second1-second0));
+                max_diff = (iterMethod == IterationMethod::ValueIteration) ? viResid : max(abs(second1-second0));
                 min_diff = min(abs(second1-second0));
             }
             }
@@ -435,6 +439,7 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
             vec first0(state_space_size, 1, fill::zeros);
             mat firstnew0(state_space_size, 1, fill::zeros);
             vec first1(state_space_size, 1, fill::ones);
+            if (iterMethod == IterationMethod::ValueIteration) first1.zeros();
             mat firstnew1(state_space_size, 1, fill::zeros);
             
             double max_diff = 1.0;
@@ -446,6 +451,12 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                 vec diffR = maxTargetM - minTargetM;
                 vec diffA = maxAvoidM - minAvoidM;
             sycl::queue queue;
+                    sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
+                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
+                    sycl::buffer<double> bufminTT(minTargetM.memptr(),minTargetM.n_rows);
+                    sycl::buffer<double> bufdTT(diffR.memptr(),diffR.n_rows);
+                    sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
+                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
             while (max_diff > epsilon) {
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
@@ -461,12 +472,6 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                     sycl::buffer<double> cdfBuffer1(firstnew1.memptr(),firstnew1.n_rows);
                     sycl::buffer<double> buff1(first1.memptr(),first1.n_rows);
                     sycl::buffer<double> buff0(first0.memptr(),first0.n_rows);
-                    sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
-                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
-                    sycl::buffer<double> bufminTT(minTargetM.memptr(),minTargetM.n_rows);
-                    sycl::buffer<double> bufdTT(diffR.memptr(),diffR.n_rows);
-                    sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
-                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
 
                     // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                     queue.submit([&](sycl::handler& cgh) {
@@ -548,10 +553,11 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                     cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is an absorbing state in the solution, try running the finite Horizon solution using this number of steps." << endl;
                     break;
                 }
+                double viResid = (iterMethod == IterationMethod::ValueIteration) ? (double)(max(abs(check0 - first0))) : 0.0;
                 first0 = check0;
                 first1 = check1;
                 
-                max_diff = max(abs(first1-first0));
+                max_diff = (iterMethod == IterationMethod::ValueIteration) ? viResid : max(abs(first1-first0));
                 min_diff = min(abs(first1-first0));
             }
             }
@@ -561,6 +567,7 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
             vec second0(state_space_size, 1, fill::zeros);
             mat secondnew0(state_space_size, 1, fill::zeros);
             vec second1(state_space_size, 1, fill::ones);
+            if (iterMethod == IterationMethod::ValueIteration) second1.zeros();
             mat secondnew1(state_space_size, 1, fill::zeros);
             max_diff = 1.0;
             min_diff = 1.0;
@@ -587,6 +594,9 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                 vec diffR = tempTTmax - tempTTmin;
                 vec diffA = tempATmax - tempATmin;
             sycl::queue Q;
+                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
+                    sycl::buffer<double> bufdTT(diffR.memptr(),diffR.n_rows);
+                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
             while (max_diff > epsilon) {
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
@@ -605,11 +615,8 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                     sycl::buffer<double> bufs1(second1.memptr(),second1.n_rows);
                     sycl::buffer<double> bufs0(second0.memptr(),second0.n_rows);
                     sycl::buffer<double> bufminT(tempTmin.memptr(),tempTmin.n_rows*tempTmin.n_cols);
-                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
                     sycl::buffer<double> bufminTT(tempTTmin.memptr(),tempTTmin.n_rows);
-                    sycl::buffer<double> bufdTT(diffR.memptr(),diffR.n_rows);
                     sycl::buffer<double> bufminAT(tempATmin.memptr(),tempATmin.n_rows);
-                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
                     
                     // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                     Q.submit([&](sycl::handler& cgh) {
@@ -689,10 +696,11 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                     cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is an absorbing state in the solution, try running the finite Horizon solution using this number of steps." << endl;
                     break;
                 }
+                double viResid = (iterMethod == IterationMethod::ValueIteration) ? (double)(max(abs(secondnew0 - second0))) : 0.0;
                 second0 = secondnew0;
                 second1 = secondnew1;
                 
-                max_diff = max(abs(second1-second0));
+                max_diff = (iterMethod == IterationMethod::ValueIteration) ? viResid : max(abs(second1-second0));
                 min_diff = min(abs(second1-second0));
             }
             }
@@ -709,6 +717,7 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
             vec first0(state_space_size, 1, fill::zeros);
             mat firstnew0(state_space_size*input_space_size, 1, fill::zeros);
             vec first1(state_space_size, 1, fill::ones);
+            if (iterMethod == IterationMethod::ValueIteration) first1.zeros();
             mat firstnew1(state_space_size*input_space_size, 1, fill::zeros);
             uvec U_pos(state_space_size, 1, fill::zeros);
             
@@ -721,6 +730,12 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                 vec diffR = maxTargetM - minTargetM;
                 vec diffA = maxAvoidM - minAvoidM;
             sycl::queue queue;
+                    sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
+                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
+                    sycl::buffer<double> bufminTT(minTargetM.memptr(),minTargetM.n_rows);
+                    sycl::buffer<double> bufdTT(diffR.memptr(),diffR.n_rows);
+                    sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
+                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
             while (max_diff > epsilon) {
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
@@ -736,12 +751,6 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                     sycl::buffer<double> cdfBuffer1(firstnew1.memptr(),firstnew1.n_rows);
                     sycl::buffer<double> buff1(first1.memptr(),first1.n_rows);
                     sycl::buffer<double> buff0(first0.memptr(),first0.n_rows);
-                    sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
-                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
-                    sycl::buffer<double> bufminTT(minTargetM.memptr(),minTargetM.n_rows);
-                    sycl::buffer<double> bufdTT(diffR.memptr(),diffR.n_rows);
-                    sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
-                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
                     
                     // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                     queue.submit([&](sycl::handler& cgh) {
@@ -827,6 +836,7 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                     cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is an absorbing state in the solution, try running the finite Horizon solution using this number of steps." << endl;
                     break;
                 }
+                double viResid = (iterMethod == IterationMethod::ValueIteration) ? (double)(max(abs(check0 - first0))) : 0.0;
                 first0 = check0;
                 first1 = check1;
                 
@@ -834,7 +844,7 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                     firstnew0.row(i).max(U_pos[i]);
                 }
                 
-                max_diff = max(abs(first1-first0));
+                max_diff = (iterMethod == IterationMethod::ValueIteration) ? viResid : max(abs(first1-first0));
                 min_diff = min(abs(first1-first0));
             }
             }
@@ -844,6 +854,7 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
             vec second0(state_space_size, 1, fill::zeros);
             mat secondnew0(state_space_size, 1, fill::zeros);
             vec second1(state_space_size, 1, fill::ones);
+            if (iterMethod == IterationMethod::ValueIteration) second1.zeros();
             mat secondnew1(state_space_size, 1, fill::zeros);
             max_diff = 1.0;
             min_diff = 1.0;
@@ -872,6 +883,9 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                 vec diffR = tempTTmax - tempTTmin;
                 vec diffA = tempATmax - tempATmin;
             sycl::queue Q;
+                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
+                    sycl::buffer<double> bufdTT(diffR.memptr(),diffR.n_rows);
+                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
             while (max_diff > epsilon) {
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
@@ -890,11 +904,8 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                     sycl::buffer<double> bufs1(second1.memptr(),second1.n_rows);
                     sycl::buffer<double> bufs0(second0.memptr(),second0.n_rows);
                     sycl::buffer<double> bufminT(tempTmin.memptr(),tempTmin.n_rows*tempTmin.n_cols);
-                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
                     sycl::buffer<double> bufminTT(tempTTmin.memptr(),tempTTmin.n_rows);
-                    sycl::buffer<double> bufdTT(diffR.memptr(),diffR.n_rows);
                     sycl::buffer<double> bufminAT(tempATmin.memptr(),tempATmin.n_rows);
-                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
                     
                     // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                     Q.submit([&](sycl::handler& cgh) {
@@ -968,10 +979,11 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                     cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is an absorbing state in the solution, try running the finite Horizon solution using this number of steps." << endl;
                     break;
                 }
+                double viResid = (iterMethod == IterationMethod::ValueIteration) ? (double)(max(abs(secondnew0 - second0))) : 0.0;
                 second0 = secondnew0;
                 second1 = secondnew1;
                 
-                max_diff = max(abs(second1-second0));
+                max_diff = (iterMethod == IterationMethod::ValueIteration) ? viResid : max(abs(second1-second0));
                 min_diff = min(abs(second1-second0));
             }
             }
@@ -990,6 +1002,7 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
             vec first0(state_space_size, 1, fill::zeros);
             mat firstnew0(state_space_size*input_space_size, 1, fill::zeros);
             vec first1(state_space_size, 1, fill::ones);
+            if (iterMethod == IterationMethod::ValueIteration) first1.zeros();
             mat firstnew1(state_space_size*input_space_size, 1, fill::zeros);
             uvec U_pos(state_space_size, 1, fill::zeros);
             
@@ -1002,6 +1015,12 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                 vec diffR = maxTargetM - minTargetM;
                 vec diffA = maxAvoidM - minAvoidM;
             sycl::queue queue;
+                    sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
+                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
+                    sycl::buffer<double> bufminTT(minTargetM.memptr(),minTargetM.n_rows);
+                    sycl::buffer<double> bufdTT(diffR.memptr(),diffR.n_rows);
+                    sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
+                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
             while (max_diff > epsilon) {
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
@@ -1016,12 +1035,6 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                     sycl::buffer<double> cdfBuffer1(firstnew1.memptr(),firstnew1.n_rows);
                     sycl::buffer<double> buff1(first1.memptr(),first1.n_rows);
                     sycl::buffer<double> buff0(first0.memptr(),first0.n_rows);
-                    sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
-                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
-                    sycl::buffer<double> bufminTT(minTargetM.memptr(),minTargetM.n_rows);
-                    sycl::buffer<double> bufdTT(diffR.memptr(),diffR.n_rows);
-                    sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
-                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
                     
                     // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                     queue.submit([&](sycl::handler& cgh) {
@@ -1106,6 +1119,7 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                     cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is an absorbing state in the solution, try running the finite Horizon solution using this number of steps." << endl;
                     break;
                 }
+                double viResid = (iterMethod == IterationMethod::ValueIteration) ? (double)(max(abs(check0 - first0))) : 0.0;
                 first0 = check0;
                 first1 = check1;
                 
@@ -1113,7 +1127,7 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                     firstnew0.row(i).max(U_pos[i]);
                 }
                 
-                max_diff = max(abs(first1-first0));
+                max_diff = (iterMethod == IterationMethod::ValueIteration) ? viResid : max(abs(first1-first0));
                 min_diff = min(abs(first1-first0));
             }
             }
@@ -1123,6 +1137,7 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
             vec second0(state_space_size, 1, fill::zeros);
             mat secondnew0(state_space_size, 1, fill::zeros);
             vec second1(state_space_size, 1, fill::ones);
+            if (iterMethod == IterationMethod::ValueIteration) second1.zeros();
             mat secondnew1(state_space_size, 1, fill::zeros);
             max_diff = 1.0;
             min_diff = 1.0;
@@ -1151,6 +1166,9 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                 vec diffR = tempTTmax - tempTTmin;
                 vec diffA = tempATmax - tempATmin;
             sycl::queue Q;
+                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
+                    sycl::buffer<double> bufdTT(diffR.memptr(),diffR.n_rows);
+                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
             while (max_diff > epsilon) {
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
@@ -1168,11 +1186,8 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                     sycl::buffer<double> bufs1(second1.memptr(),second1.n_rows);
                     sycl::buffer<double> bufs0(second0.memptr(),second0.n_rows);
                     sycl::buffer<double> bufminT(tempTmin.memptr(),tempTmin.n_rows*tempTmin.n_cols);
-                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
                     sycl::buffer<double> bufminTT(tempTTmin.memptr(),tempTTmin.n_rows);
-                    sycl::buffer<double> bufdTT(diffR.memptr(),diffR.n_rows);
                     sycl::buffer<double> bufminAT(tempATmin.memptr(),tempATmin.n_rows);
-                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
                     
                     // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                     Q.submit([&](sycl::handler& cgh) {
@@ -1252,10 +1267,11 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                     cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is an absorbing state in the solution, try running the finite Horizon solution using this number of steps." << endl;
                     break;
                 }
+                double viResid = (iterMethod == IterationMethod::ValueIteration) ? (double)(max(abs(secondnew0 - second0))) : 0.0;
                 second0 = secondnew0;
                 second1 = secondnew1;
                 
-                max_diff = max(abs(second1-second0));
+                max_diff = (iterMethod == IterationMethod::ValueIteration) ? viResid : max(abs(second1-second0));
                 min_diff = min(abs(second1-second0));
             }
             }
@@ -1275,6 +1291,7 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
             vec first0(state_space_size, 1, fill::zeros);
             mat firstnew0(state_space_size*input_space_size*disturb_space_size, 1, fill::zeros);
             vec first1(state_space_size, 1, fill::ones);
+            if (iterMethod == IterationMethod::ValueIteration) first1.zeros();
             mat firstnew1(state_space_size*input_space_size*disturb_space_size, 1, fill::zeros);
             
             double max_diff = 1.0;
@@ -1286,6 +1303,12 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                 vec diffR = maxTargetM - minTargetM;
                 vec diffA = maxAvoidM - minAvoidM;
             sycl::queue queue;
+                    sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
+                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
+                    sycl::buffer<double> bufminTT(minTargetM.memptr(),minTargetM.n_rows);
+                    sycl::buffer<double> bufdTT(diffR.memptr(),diffR.n_rows);
+                    sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
+                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
             while (max_diff > epsilon) {
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
@@ -1301,12 +1324,6 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                     sycl::buffer<double> cdfBuffer1(firstnew1.memptr(),firstnew1.n_rows);
                     sycl::buffer<double> buff1(first1.memptr(),first1.n_rows);
                     sycl::buffer<double> buff0(first0.memptr(),first0.n_rows);
-                    sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
-                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
-                    sycl::buffer<double> bufminTT(minTargetM.memptr(),minTargetM.n_rows);
-                    sycl::buffer<double> bufdTT(diffR.memptr(),diffR.n_rows);
-                    sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
-                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
                     
                     // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                     queue.submit([&](sycl::handler& cgh) {
@@ -1394,10 +1411,11 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                     cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is an absorbing state in the solution, try running the finite Horizon solution using this number of steps." << endl;
                     break;
                 }
+                double viResid = (iterMethod == IterationMethod::ValueIteration) ? (double)(max(abs(check0 - first0))) : 0.0;
                 first0 = check0;
                 first1 = check1;
                 
-                max_diff = max(abs(first1-first0));
+                max_diff = (iterMethod == IterationMethod::ValueIteration) ? viResid : max(abs(first1-first0));
                 min_diff = min(abs(first1-first0));
             }
             }
@@ -1407,6 +1425,7 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
             vec second0(state_space_size, 1, fill::zeros);
             mat secondnew0(state_space_size*disturb_space_size, 1, fill::zeros);
             vec second1(state_space_size, 1, fill::ones);
+            if (iterMethod == IterationMethod::ValueIteration) second1.zeros();
             mat secondnew1(state_space_size*disturb_space_size, 1, fill::zeros);
             max_diff = 1.0;
             min_diff = 1.0;
@@ -1417,6 +1436,12 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                 vec diffR = maxTargetM - minTargetM;
                 vec diffA = maxAvoidM - minAvoidM;
             sycl::queue queue;
+                    sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
+                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
+                    sycl::buffer<double> bufminTT(minTargetM.memptr(),minTargetM.n_rows);
+                    sycl::buffer<double> bufdTT(diffR.memptr(),diffR.n_rows);
+                    sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
+                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
             while (max_diff > epsilon) {
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
@@ -1432,12 +1457,6 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                     sycl::buffer<double> cdfBuffer1(secondnew1.memptr(),secondnew1.n_rows);
                     sycl::buffer<double> buff1(second1.memptr(),second1.n_rows);
                     sycl::buffer<double> buff0(second0.memptr(),second0.n_rows);
-                    sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
-                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
-                    sycl::buffer<double> bufminTT(minTargetM.memptr(),minTargetM.n_rows);
-                    sycl::buffer<double> bufdTT(diffR.memptr(),diffR.n_rows);
-                    sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
-                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
                     
                     // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                     queue.submit([&](sycl::handler& cgh) {
@@ -1525,10 +1544,11 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                     cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is an absorbing state in the solution, try running the finite Horizon solution using this number of steps." << endl;
                     break;
                 }
+                double viResid = (iterMethod == IterationMethod::ValueIteration) ? (double)(max(abs(check0 - second0))) : 0.0;
                 second0 = check0;
                 second1 = check1;
                 
-                max_diff = max(abs(second1-second0));
+                max_diff = (iterMethod == IterationMethod::ValueIteration) ? viResid : max(abs(second1-second0));
                 min_diff = min(abs(second1-second0));
             }
             }
@@ -1544,6 +1564,7 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
             vec first0(state_space_size, 1, fill::zeros);
             mat firstnew0(state_space_size*input_space_size*disturb_space_size, 1, fill::zeros);
             vec first1(state_space_size, 1, fill::ones);
+            if (iterMethod == IterationMethod::ValueIteration) first1.zeros();
             mat firstnew1(state_space_size*input_space_size*disturb_space_size, 1, fill::zeros);
             
             double max_diff = 1.0;
@@ -1555,6 +1576,12 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                 vec diffR = maxTargetM - minTargetM;
                 vec diffA = maxAvoidM - minAvoidM;
             sycl::queue queue;
+                    sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
+                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
+                    sycl::buffer<double> bufminTT(minTargetM.memptr(),minTargetM.n_rows);
+                    sycl::buffer<double> bufdTT(diffR.memptr(),diffR.n_rows);
+                    sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
+                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
             while (max_diff > epsilon) {
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
@@ -1569,12 +1596,6 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                     sycl::buffer<double> cdfBuffer1(firstnew1.memptr(),firstnew1.n_rows);
                     sycl::buffer<double> buff1(first1.memptr(),first1.n_rows);
                     sycl::buffer<double> buff0(first0.memptr(),first0.n_rows);
-                    sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
-                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
-                    sycl::buffer<double> bufminTT(minTargetM.memptr(),minTargetM.n_rows);
-                    sycl::buffer<double> bufdTT(diffR.memptr(),diffR.n_rows);
-                    sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
-                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
                     
                     // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                     queue.submit([&](sycl::handler& cgh) {
@@ -1662,10 +1683,11 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                     cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is an absorbing state in the solution, try running the finite Horizon solution using this number of steps." << endl;
                     break;
                 }
+                double viResid = (iterMethod == IterationMethod::ValueIteration) ? (double)(max(abs(check0 - first0))) : 0.0;
                 first0 = check0;
                 first1 = check1;
                 
-                max_diff = max(abs(first1-first0));
+                max_diff = (iterMethod == IterationMethod::ValueIteration) ? viResid : max(abs(first1-first0));
                 min_diff = min(abs(first1-first0));
             }
             }
@@ -1675,6 +1697,7 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
             vec second0(state_space_size, 1, fill::zeros);
             mat secondnew0(state_space_size*disturb_space_size, 1, fill::zeros);
             vec second1(state_space_size, 1, fill::ones);
+            if (iterMethod == IterationMethod::ValueIteration) second1.zeros();
             mat secondnew1(state_space_size*disturb_space_size, 1, fill::zeros);
             max_diff = 1.0;
             min_diff = 1.0;
@@ -1685,6 +1708,12 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                 vec diffR = maxTargetM - minTargetM;
                 vec diffA = maxAvoidM - minAvoidM;
             sycl::queue queue;
+                    sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
+                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
+                    sycl::buffer<double> bufminTT(minTargetM.memptr(),minTargetM.n_rows);
+                    sycl::buffer<double> bufdTT(diffR.memptr(),diffR.n_rows);
+                    sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
+                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
             while (max_diff > epsilon) {
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
@@ -1699,12 +1728,6 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                     sycl::buffer<double> cdfBuffer1(secondnew1.memptr(),secondnew1.n_rows);
                     sycl::buffer<double> buff1(second1.memptr(),second1.n_rows);
                     sycl::buffer<double> buff0(second0.memptr(),second0.n_rows);
-                    sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
-                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
-                    sycl::buffer<double> bufminTT(minTargetM.memptr(),minTargetM.n_rows);
-                    sycl::buffer<double> bufdTT(diffR.memptr(),diffR.n_rows);
-                    sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
-                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
                     
                     // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                     queue.submit([&](sycl::handler& cgh) {
@@ -1792,10 +1815,11 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                     cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is an absorbing state in the solution, try running the finite Horizon solution using this number of steps." << endl;
                     break;
                 }
+                double viResid = (iterMethod == IterationMethod::ValueIteration) ? (double)(max(abs(check0 - second0))) : 0.0;
                 second0 = check0;
                 second1 = check1;
                 
-                max_diff = max(abs(second1-second0));
+                max_diff = (iterMethod == IterationMethod::ValueIteration) ? viResid : max(abs(second1-second0));
                 min_diff = min(abs(second1-second0));
             }
             }
@@ -1813,6 +1837,7 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
             vec first0(state_space_size, 1, fill::zeros);
             mat firstnew0(state_space_size*input_space_size*disturb_space_size, 1, fill::zeros);
             vec first1(state_space_size, 1, fill::ones);
+            if (iterMethod == IterationMethod::ValueIteration) first1.zeros();
             mat firstnew1(state_space_size*input_space_size*disturb_space_size, 1, fill::zeros);
             uvec U_pos(state_space_size, 1, fill::zeros);
             mat input_and_state0(input_space_size*state_space_size, 1, fill::zeros);
@@ -1828,6 +1853,12 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                 vec diffR = maxTargetM - minTargetM;
                 vec diffA = maxAvoidM - minAvoidM;
             sycl::queue queue;
+                    sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
+                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
+                    sycl::buffer<double> bufminTT(minTargetM.memptr(),minTargetM.n_rows);
+                    sycl::buffer<double> bufdTT(diffR.memptr(),diffR.n_rows);
+                    sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
+                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
             while (max_diff > epsilon) {
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
@@ -1843,12 +1874,6 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                     sycl::buffer<double> cdfBuffer1(firstnew1.memptr(),firstnew1.n_rows);
                     sycl::buffer<double> buff1(first1.memptr(),first1.n_rows);
                     sycl::buffer<double> buff0(first0.memptr(),first0.n_rows);
-                    sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
-                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
-                    sycl::buffer<double> bufminTT(minTargetM.memptr(),minTargetM.n_rows);
-                    sycl::buffer<double> bufdTT(diffR.memptr(),diffR.n_rows);
-                    sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
-                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
                     
                     // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                     queue.submit([&](sycl::handler& cgh) {
@@ -1941,6 +1966,7 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                     cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is an absorbing state in the solution, try running the finite Horizon solution using this number of steps." << endl;
                     break;
                 }
+                double viResid = (iterMethod == IterationMethod::ValueIteration) ? (double)(max(abs(check0 - first0))) : 0.0;
                 first0 = check0;
                 first1 = check1;
                 
@@ -1948,7 +1974,7 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                     firstnew0.row(i).max(U_pos[i]);
                 }
                 
-                max_diff = max(abs(first1-first0));
+                max_diff = (iterMethod == IterationMethod::ValueIteration) ? viResid : max(abs(first1-first0));
                 min_diff = min(abs(first1-first0));
             }
             }
@@ -1958,6 +1984,7 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
             vec second0(state_space_size, 1, fill::zeros);
             mat secondnew0(state_space_size*disturb_space_size, 1, fill::zeros);
             vec second1(state_space_size, 1, fill::ones);
+            if (iterMethod == IterationMethod::ValueIteration) second1.zeros();
             mat secondnew1(state_space_size*disturb_space_size, 1, fill::zeros);
             max_diff = 1.0;
             min_diff = 1.0;
@@ -1988,6 +2015,9 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                 vec diffR = tempTTmax - tempTTmin;
                 vec diffA = tempATmax - tempATmin;
             sycl::queue Q;
+                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
+                    sycl::buffer<double> bufdTT(diffR.memptr(),diffR.n_rows);
+                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
             while (max_diff > epsilon) {
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
@@ -2006,11 +2036,8 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                     sycl::buffer<double> bufs1(second1.memptr(),second1.n_rows);
                     sycl::buffer<double> bufs0(second0.memptr(),second0.n_rows);
                     sycl::buffer<double> bufminT(tempTmin.memptr(),tempTmin.n_rows*tempTmin.n_cols);
-                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
                     sycl::buffer<double> bufminTT(tempTTmin.memptr(),tempTTmin.n_rows);
-                    sycl::buffer<double> bufdTT(diffR.memptr(),diffR.n_rows);
                     sycl::buffer<double> bufminAT(tempATmin.memptr(),tempATmin.n_rows);
-                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
                     
                     // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                     Q.submit([&](sycl::handler& cgh) {
@@ -2091,10 +2118,11 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                     cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is an absorbing state in the solution, try running the finite Horizon solution using this number of steps." << endl;
                     break;
                 }
+                double viResid = (iterMethod == IterationMethod::ValueIteration) ? (double)(max(abs(check0 - second0))) : 0.0;
                 second0 = check0;
                 second1 = check1;
                 
-                max_diff = max(abs(second1-second0));
+                max_diff = (iterMethod == IterationMethod::ValueIteration) ? viResid : max(abs(second1-second0));
                 min_diff = min(abs(second1-second0));
             }
             }
@@ -2113,6 +2141,7 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
             vec first0(state_space_size, 1, fill::zeros);
             mat firstnew0(state_space_size*input_space_size*disturb_space_size, 1, fill::zeros);
             vec first1(state_space_size, 1, fill::ones);
+            if (iterMethod == IterationMethod::ValueIteration) first1.zeros();
             mat firstnew1(state_space_size*input_space_size*disturb_space_size, 1, fill::zeros);
             uvec U_pos(state_space_size, 1, fill::zeros);
             mat input_and_state0(input_space_size*state_space_size, 1, fill::zeros);
@@ -2127,6 +2156,12 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                 vec diffR = maxTargetM - minTargetM;
                 vec diffA = maxAvoidM - minAvoidM;
             sycl::queue queue;
+                    sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
+                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
+                    sycl::buffer<double> bufminTT(minTargetM.memptr(),minTargetM.n_rows);
+                    sycl::buffer<double> bufdTT(diffR.memptr(),diffR.n_rows);
+                    sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
+                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
             while (max_diff > epsilon) {
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
@@ -2141,12 +2176,6 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                     sycl::buffer<double> cdfBuffer1(firstnew1.memptr(),firstnew1.n_rows);
                     sycl::buffer<double> buff1(first1.memptr(),first1.n_rows);
                     sycl::buffer<double> buff0(first0.memptr(),first0.n_rows);
-                    sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
-                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
-                    sycl::buffer<double> bufminTT(minTargetM.memptr(),minTargetM.n_rows);
-                    sycl::buffer<double> bufdTT(diffR.memptr(),diffR.n_rows);
-                    sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
-                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
                     
                     // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                     queue.submit([&](sycl::handler& cgh) {
@@ -2237,6 +2266,7 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                     cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is an absorbing state in the solution, try running the finite Horizon solution using this number of steps." << endl;
                     break;
                 }
+                double viResid = (iterMethod == IterationMethod::ValueIteration) ? (double)(max(abs(check0 - first0))) : 0.0;
                 first0 = check0;
                 first1 = check1;
                 
@@ -2244,7 +2274,7 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                     firstnew0.row(i).max(U_pos[i]);
                 }
                 
-                max_diff = max(abs(first1-first0));
+                max_diff = (iterMethod == IterationMethod::ValueIteration) ? viResid : max(abs(first1-first0));
                 min_diff = min(abs(first1-first0));
             }
             }
@@ -2254,6 +2284,7 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
             vec second0(state_space_size, 1, fill::zeros);
             mat secondnew0(state_space_size*disturb_space_size, 1, fill::zeros);
             vec second1(state_space_size, 1, fill::ones);
+            if (iterMethod == IterationMethod::ValueIteration) second1.zeros();
             mat secondnew1(state_space_size*disturb_space_size, 1, fill::zeros);
             max_diff = 1.0;
             min_diff = 1.0;
@@ -2284,6 +2315,9 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                 vec diffR = tempTTmax - tempTTmin;
                 vec diffA = tempATmax - tempATmin;
             sycl::queue Q;
+                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
+                    sycl::buffer<double> bufdTT(diffR.memptr(),diffR.n_rows);
+                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
             while (max_diff > epsilon) {
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
@@ -2301,11 +2335,8 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                     sycl::buffer<double> bufs1(second1.memptr(),second1.n_rows);
                     sycl::buffer<double> bufs0(second0.memptr(),second0.n_rows);
                     sycl::buffer<double> bufminT(tempTmin.memptr(),tempTmin.n_rows*tempTmin.n_cols);
-                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
                     sycl::buffer<double> bufminTT(tempTTmin.memptr(),tempTTmin.n_rows);
-                    sycl::buffer<double> bufdTT(diffR.memptr(),diffR.n_rows);
                     sycl::buffer<double> bufminAT(tempATmin.memptr(),tempATmin.n_rows);
-                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
                     
                     // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                     Q.submit([&](sycl::handler& cgh) {
@@ -2391,10 +2422,11 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                     cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is an absorbing state in the solution, try running the finite Horizon solution using this number of steps." << endl;
                     break;
                 }
+                double viResid = (iterMethod == IterationMethod::ValueIteration) ? (double)(max(abs(check0 - second0))) : 0.0;
                 second0 = check0;
                 second1 = check1;
                 
-                max_diff = max(abs(second1-second0));
+                max_diff = (iterMethod == IterationMethod::ValueIteration) ? viResid : max(abs(second1-second0));
                 min_diff = min(abs(second1-second0));
             }
             }
@@ -4227,6 +4259,7 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
             vec first0(state_space_size, 1, fill::zeros);
             mat firstnew0(state_space_size, 1, fill::zeros);
             vec first1(state_space_size, 1, fill::ones);
+            if (iterMethod == IterationMethod::ValueIteration) first1.zeros();
             mat firstnew1(state_space_size, 1, fill::zeros);
             
             double max_diff = 1.0;
@@ -4237,6 +4270,10 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffA = maxAvoidM - minAvoidM;
             sycl::queue queue;
+                    sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
+                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
+                    sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
+                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
             while (max_diff > epsilon) {
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
@@ -4251,10 +4288,6 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                     sycl::buffer<double> cdfBuffer1(firstnew1.memptr(),firstnew1.n_rows);
                     sycl::buffer<double> buff1(first1.memptr(),first1.n_rows);
                     sycl::buffer<double> buff0(first0.memptr(),first0.n_rows);
-                    sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
-                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
-                    sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
-                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
                     
                     // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                     queue.submit([&](sycl::handler& cgh) {
@@ -4326,10 +4359,11 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                     cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is an absorbing state in the solution, try running the finite Horizon solution using this number of steps." << endl;
                     break;
                 }
+                double viResid = (iterMethod == IterationMethod::ValueIteration) ? (double)(max(abs(check0 - first0))) : 0.0;
                 first0 = check0;
                 first1 = check1;
                 
-                max_diff = max(abs(first1-first0));
+                max_diff = (iterMethod == IterationMethod::ValueIteration) ? viResid : max(abs(first1-first0));
                 min_diff = min(abs(first1-first0));
             }
             }
@@ -4339,6 +4373,7 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
             vec second0(state_space_size, 1, fill::zeros);
             mat secondnew0(state_space_size, 1, fill::zeros);
             vec second1(state_space_size, 1, fill::ones);
+            if (iterMethod == IterationMethod::ValueIteration) second1.zeros();
             mat secondnew1(state_space_size, 1, fill::zeros);
             max_diff = 1.0;
             min_diff = 1.0;
@@ -4360,6 +4395,8 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                 mat diffT = tempTmax-tempTmin;
                 vec diffA = tempATmax - tempATmin;
             sycl::queue Q;
+                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
+                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
             while (max_diff > epsilon) {
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
@@ -4376,9 +4413,7 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                     sycl::buffer<double> bufs1(second1.memptr(),second1.n_rows);
                     sycl::buffer<double> bufs0(second0.memptr(),second0.n_rows);
                     sycl::buffer<double> bufminT(tempTmin.memptr(),tempTmin.n_rows*tempTmin.n_cols);
-                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
                     sycl::buffer<double> bufminAT(tempATmin.memptr(),tempATmin.n_rows);
-                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
                     
                     // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                     Q.submit([&](sycl::handler& cgh) {
@@ -4448,10 +4483,11 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                     cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is an absorbing state in the solution, try running the finite Horizon solution using this number of steps." << endl;
                     break;
                 }
+                double viResid = (iterMethod == IterationMethod::ValueIteration) ? (double)(max(abs(secondnew0 - second0))) : 0.0;
                 second0 = secondnew0;
                 second1 = secondnew1;
                 
-                max_diff = max(abs(second1-second0));
+                max_diff = (iterMethod == IterationMethod::ValueIteration) ? viResid : max(abs(second1-second0));
                 min_diff = min(abs(second1-second0));
             }
             }
@@ -4467,6 +4503,7 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
             vec first0(state_space_size, 1, fill::zeros);
             mat firstnew0(state_space_size, 1, fill::zeros);
             vec first1(state_space_size, 1, fill::ones);
+            if (iterMethod == IterationMethod::ValueIteration) first1.zeros();
             mat firstnew1(state_space_size, 1, fill::zeros);
             
             double max_diff = 1.0;
@@ -4477,6 +4514,10 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffA = maxAvoidM - minAvoidM;
             sycl::queue queue;
+                    sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
+                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
+                    sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
+                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
             while (max_diff > epsilon) {
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
@@ -4491,10 +4532,6 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                     sycl::buffer<double> cdfBuffer1(firstnew1.memptr(),firstnew1.n_rows);
                     sycl::buffer<double> buff1(first1.memptr(),first1.n_rows);
                     sycl::buffer<double> buff0(first0.memptr(),first0.n_rows);
-                    sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
-                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
-                    sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
-                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
                     
                     // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                     queue.submit([&](sycl::handler& cgh) {
@@ -4570,10 +4607,11 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                     cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is an absorbing state in the solution, try running the finite Horizon solution using this number of steps." << endl;
                     break;
                 }
+                double viResid = (iterMethod == IterationMethod::ValueIteration) ? (double)(max(abs(check0 - first0))) : 0.0;
                 first0 = check0;
                 first1 = check1;
                 
-                max_diff = max(abs(first1-first0));
+                max_diff = (iterMethod == IterationMethod::ValueIteration) ? viResid : max(abs(first1-first0));
                 min_diff = min(abs(first1-first0));
             }
             }
@@ -4583,6 +4621,7 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
             vec second0(state_space_size, 1, fill::zeros);
             mat secondnew0(state_space_size, 1, fill::zeros);
             vec second1(state_space_size, 1, fill::ones);
+            if (iterMethod == IterationMethod::ValueIteration) second1.zeros();
             mat secondnew1(state_space_size, 1, fill::zeros);
             max_diff = 1.0;
             min_diff = 1.0;
@@ -4604,6 +4643,8 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                 mat diffT = tempTmax-tempTmin;
                 vec diffA = tempATmax - tempATmin;
             sycl::queue Q;
+                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
+                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
             while (max_diff > epsilon) {
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
@@ -4620,9 +4661,7 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                     sycl::buffer<double> bufs1(second1.memptr(),second1.n_rows);
                     sycl::buffer<double> bufs0(second0.memptr(),second0.n_rows);
                     sycl::buffer<double> bufminT(tempTmin.memptr(),tempTmin.n_rows*tempTmin.n_cols);
-                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
                     sycl::buffer<double> bufminAT(tempATmin.memptr(),tempATmin.n_rows);
-                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
                     
                     // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                     Q.submit([&](sycl::handler& cgh) {
@@ -4691,10 +4730,11 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                     cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is an absorbing state in the solution, try running the finite Horizon solution using this number of steps." << endl;
                     break;
                 }
+                double viResid = (iterMethod == IterationMethod::ValueIteration) ? (double)(max(abs(secondnew0 - second0))) : 0.0;
                 second0 = secondnew0;
                 second1 = secondnew1;
                 
-                max_diff = max(abs(second1-second0));
+                max_diff = (iterMethod == IterationMethod::ValueIteration) ? viResid : max(abs(second1-second0));
                 min_diff = min(abs(second1-second0));
             }
             }
@@ -4711,6 +4751,7 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
             vec first0(state_space_size, 1, fill::zeros);
             mat firstnew0(state_space_size*input_space_size, 1, fill::zeros);
             vec first1(state_space_size, 1, fill::ones);
+            if (iterMethod == IterationMethod::ValueIteration) first1.zeros();
             mat firstnew1(state_space_size*input_space_size, 1, fill::zeros);
             uvec U_pos(state_space_size, 1, fill::zeros);
             
@@ -4722,6 +4763,10 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffA = maxAvoidM - minAvoidM;
             sycl::queue queue;
+                    sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
+                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
+                    sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
+                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
             while (max_diff > epsilon) {
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
@@ -4736,10 +4781,6 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                     sycl::buffer<double> cdfBuffer1(firstnew1.memptr(),firstnew1.n_rows);
                     sycl::buffer<double> buff1(first1.memptr(),first1.n_rows);
                     sycl::buffer<double> buff0(first0.memptr(),first0.n_rows);
-                    sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
-                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
-                    sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
-                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
                     
                     // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                     queue.submit([&](sycl::handler& cgh) {
@@ -4814,6 +4855,7 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                     cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is an absorbing state in the solution, try running the finite Horizon solution using this number of steps." << endl;
                     break;
                 }
+                double viResid = (iterMethod == IterationMethod::ValueIteration) ? (double)(max(abs(check0 - first0))) : 0.0;
                 first0 = check0;
                 first1 = check1;
                 
@@ -4821,7 +4863,7 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                     firstnew0.row(i).min(U_pos[i]);
                 }
                 
-                max_diff = max(abs(first1-first0));
+                max_diff = (iterMethod == IterationMethod::ValueIteration) ? viResid : max(abs(first1-first0));
                 min_diff = min(abs(first1-first0));
             }
             }
@@ -4832,6 +4874,7 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
             vec second0(state_space_size, 1, fill::zeros);
             mat secondnew0(state_space_size, 1, fill::zeros);
             vec second1(state_space_size, 1, fill::ones);
+            if (iterMethod == IterationMethod::ValueIteration) second1.zeros();
             mat secondnew1(state_space_size, 1, fill::zeros);
             max_diff = 1.0;
             min_diff = 1.0;
@@ -4856,6 +4899,8 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                 mat diffT = tempTmax-tempTmin;
                 vec diffA = tempATmax - tempATmin;
             sycl::queue Q;
+                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
+                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
             while (max_diff > epsilon) {
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
@@ -4873,9 +4918,7 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                     sycl::buffer<double> bufs1(second1.memptr(),second1.n_rows);
                     sycl::buffer<double> bufs0(second0.memptr(),second0.n_rows);
                     sycl::buffer<double> bufminT(tempTmin.memptr(),tempTmin.n_rows*tempTmin.n_cols);
-                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
                     sycl::buffer<double> bufminAT(tempATmin.memptr(),tempATmin.n_rows);
-                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
                     
                     // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                     Q.submit([&](sycl::handler& cgh) {
@@ -4945,10 +4988,11 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                     cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is an absorbing state in the solution, try running the finite Horizon solution using this number of steps." << endl;
                     break;
                 }
+                double viResid = (iterMethod == IterationMethod::ValueIteration) ? (double)(max(abs(secondnew0 - second0))) : 0.0;
                 second0 = secondnew0;
                 second1 = secondnew1;
                 
-                max_diff = max(abs(second1-second0));
+                max_diff = (iterMethod == IterationMethod::ValueIteration) ? viResid : max(abs(second1-second0));
                 min_diff = min(abs(second1-second0));
             }
             }
@@ -4967,6 +5011,7 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
             vec first0(state_space_size, 1, fill::zeros);
             mat firstnew0(state_space_size*input_space_size, 1, fill::zeros);
             vec first1(state_space_size, 1, fill::ones);
+            if (iterMethod == IterationMethod::ValueIteration) first1.zeros();
             mat firstnew1(state_space_size*input_space_size, 1, fill::zeros);
             uvec U_pos(state_space_size, 1, fill::zeros);
             
@@ -4978,6 +5023,10 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffA = maxAvoidM - minAvoidM;
             sycl::queue queue;
+                    sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
+                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
+                    sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
+                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
             while (max_diff > epsilon) {
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
@@ -4992,10 +5041,6 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                     sycl::buffer<double> cdfBuffer1(firstnew1.memptr(),firstnew1.n_rows);
                     sycl::buffer<double> buff1(first1.memptr(),first1.n_rows);
                     sycl::buffer<double> buff0(first0.memptr(),first0.n_rows);
-                    sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
-                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
-                    sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
-                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
                     
                     // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                     queue.submit([&](sycl::handler& cgh) {
@@ -5076,6 +5121,7 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                     cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is an absorbing state in the solution, try running the finite Horizon solution using this number of steps." << endl;
                     break;
                 }
+                double viResid = (iterMethod == IterationMethod::ValueIteration) ? (double)(max(abs(check0 - first0))) : 0.0;
                 first0 = check0;
                 first1 = check1;
                 
@@ -5083,7 +5129,7 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                     firstnew0.row(i).min(U_pos[i]);
                 }
                 
-                max_diff = max(abs(first1-first0));
+                max_diff = (iterMethod == IterationMethod::ValueIteration) ? viResid : max(abs(first1-first0));
                 min_diff = min(abs(first1-first0));
             }
             }
@@ -5093,6 +5139,7 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
             vec second0(state_space_size, 1, fill::zeros);
             mat secondnew0(state_space_size, 1, fill::zeros);
             vec second1(state_space_size, 1, fill::ones);
+            if (iterMethod == IterationMethod::ValueIteration) second1.zeros();
             mat secondnew1(state_space_size, 1, fill::zeros);
             max_diff = 1.0;
             min_diff = 1.0;
@@ -5116,6 +5163,8 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                 mat diffT = tempTmax-tempTmin;
                 vec diffA = tempATmax - tempATmin;
             sycl::queue Q;
+                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
+                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
             while (max_diff > epsilon) {
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
@@ -5133,9 +5182,7 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                     sycl::buffer<double> bufs1(second1.memptr(),second1.n_rows);
                     sycl::buffer<double> bufs0(second0.memptr(),second0.n_rows);
                     sycl::buffer<double> bufminT(tempTmin.memptr(),tempTmin.n_rows*tempTmin.n_cols);
-                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
                     sycl::buffer<double> bufminAT(tempATmin.memptr(),tempATmin.n_rows);
-                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
                     
                     // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                     Q.submit([&](sycl::handler& cgh) {
@@ -5207,10 +5254,11 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                     cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is an absorbing state in the solution, try running the finite Horizon solution using this number of steps." << endl;
                     break;
                 }
+                double viResid = (iterMethod == IterationMethod::ValueIteration) ? (double)(max(abs(secondnew0 - second0))) : 0.0;
                 second0 = secondnew0;
                 second1 = secondnew1;
                 
-                max_diff = max(abs(second1-second0));
+                max_diff = (iterMethod == IterationMethod::ValueIteration) ? viResid : max(abs(second1-second0));
                 min_diff = min(abs(second1-second0));
             }
             }
@@ -5230,6 +5278,7 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
             vec first0(state_space_size, 1, fill::zeros);
             mat firstnew0(state_space_size*input_space_size*disturb_space_size, 1, fill::zeros);
             vec first1(state_space_size, 1, fill::ones);
+            if (iterMethod == IterationMethod::ValueIteration) first1.zeros();
             mat firstnew1(state_space_size*input_space_size*disturb_space_size, 1, fill::zeros);
             
             double max_diff = 1.0;
@@ -5240,6 +5289,10 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffA = maxAvoidM - minAvoidM;
             sycl::queue queue;
+                    sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
+                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
+                    sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
+                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
             while (max_diff > epsilon) {
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
@@ -5254,10 +5307,6 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                     sycl::buffer<double> cdfBuffer1(firstnew1.memptr(),firstnew1.n_rows);
                     sycl::buffer<double> buff1(first1.memptr(),first1.n_rows);
                     sycl::buffer<double> buff0(first0.memptr(),first0.n_rows);
-                    sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
-                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
-                    sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
-                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
                     
                     // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                     queue.submit([&](sycl::handler& cgh) {
@@ -5335,10 +5384,11 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                     cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is an absorbing state in the solution, try running the finite Horizon solution using this number of steps." << endl;
                     break;
                 }
+                double viResid = (iterMethod == IterationMethod::ValueIteration) ? (double)(max(abs(check0 - first0))) : 0.0;
                 first0 = check0;
                 first1 = check1;
                 
-                max_diff = max(abs(first1-first0));
+                max_diff = (iterMethod == IterationMethod::ValueIteration) ? viResid : max(abs(first1-first0));
                 min_diff = min(abs(first1-first0));
             }
             }
@@ -5348,6 +5398,7 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
             vec second0(state_space_size, 1, fill::zeros);
             mat secondnew0(state_space_size*disturb_space_size, 1, fill::zeros);
             vec second1(state_space_size, 1, fill::ones);
+            if (iterMethod == IterationMethod::ValueIteration) second1.zeros();
             mat secondnew1(state_space_size*disturb_space_size, 1, fill::zeros);
             max_diff = 1.0;
             min_diff = 1.0;
@@ -5357,6 +5408,10 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffA = maxAvoidM - minAvoidM;
             sycl::queue queue;
+                    sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
+                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
+                    sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
+                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
             while (max_diff > epsilon) {
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
@@ -5371,10 +5426,6 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                     sycl::buffer<double> cdfBuffer1(secondnew1.memptr(),secondnew1.n_rows);
                     sycl::buffer<double> buff1(second1.memptr(),second1.n_rows);
                     sycl::buffer<double> buff0(second0.memptr(),second0.n_rows);
-                    sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
-                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
-                    sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
-                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
                     
                     // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                     queue.submit([&](sycl::handler& cgh) {
@@ -5452,10 +5503,11 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                     cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is an absorbing state in the solution, try running the finite Horizon solution using this number of steps." << endl;
                     break;
                 }
+                double viResid = (iterMethod == IterationMethod::ValueIteration) ? (double)(max(abs(check0 - second0))) : 0.0;
                 second0 = check0;
                 second1 = check1;
                 
-                max_diff = max(abs(second1-second0));
+                max_diff = (iterMethod == IterationMethod::ValueIteration) ? viResid : max(abs(second1-second0));
                 min_diff = min(abs(second1-second0));
             }
             }
@@ -5471,6 +5523,7 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
             vec first0(state_space_size, 1, fill::zeros);
             mat firstnew0(state_space_size*input_space_size*disturb_space_size, 1, fill::zeros);
             vec first1(state_space_size, 1, fill::ones);
+            if (iterMethod == IterationMethod::ValueIteration) first1.zeros();
             mat firstnew1(state_space_size*input_space_size*disturb_space_size, 1, fill::zeros);
             
             double max_diff = 1.0;
@@ -5481,6 +5534,10 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffA = maxAvoidM - minAvoidM;
             sycl::queue queue;
+                    sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
+                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
+                    sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
+                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
             while (max_diff > epsilon) {
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
@@ -5495,10 +5552,6 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                     sycl::buffer<double> cdfBuffer1(firstnew1.memptr(),firstnew1.n_rows);
                     sycl::buffer<double> buff1(first1.memptr(),first1.n_rows);
                     sycl::buffer<double> buff0(first0.memptr(),first0.n_rows);
-                    sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
-                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
-                    sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
-                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
                     
                     // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                     queue.submit([&](sycl::handler& cgh) {
@@ -5576,10 +5629,11 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                     cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is an absorbing state in the solution, try running the finite Horizon solution using this number of steps." << endl;
                     break;
                 }
+                double viResid = (iterMethod == IterationMethod::ValueIteration) ? (double)(max(abs(check0 - first0))) : 0.0;
                 first0 = check0;
                 first1 = check1;
                 
-                max_diff = max(abs(first1-first0));
+                max_diff = (iterMethod == IterationMethod::ValueIteration) ? viResid : max(abs(first1-first0));
                 min_diff = min(abs(first1-first0));
             }
             }
@@ -5589,6 +5643,7 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
             vec second0(state_space_size, 1, fill::zeros);
             mat secondnew0(state_space_size*disturb_space_size, 1, fill::zeros);
             vec second1(state_space_size, 1, fill::ones);
+            if (iterMethod == IterationMethod::ValueIteration) second1.zeros();
             mat secondnew1(state_space_size*disturb_space_size, 1, fill::zeros);
             max_diff = 1.0;
             min_diff = 1.0;
@@ -5598,6 +5653,10 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffA = maxAvoidM - minAvoidM;
             sycl::queue queue;
+                    sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
+                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
+                    sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
+                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
             while (max_diff > epsilon) {
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
@@ -5612,10 +5671,6 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                     sycl::buffer<double> cdfBuffer1(secondnew1.memptr(),secondnew1.n_rows);
                     sycl::buffer<double> buff1(second1.memptr(),second1.n_rows);
                     sycl::buffer<double> buff0(second0.memptr(),second0.n_rows);
-                    sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
-                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
-                    sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
-                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
                     
                     // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                     queue.submit([&](sycl::handler& cgh) {
@@ -5693,10 +5748,11 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                     cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is an absorbing state in the solution, try running the finite Horizon solution using this number of steps." << endl;
                     break;
                 }
+                double viResid = (iterMethod == IterationMethod::ValueIteration) ? (double)(max(abs(check0 - second0))) : 0.0;
                 second0 = check0;
                 second1 = check1;
                 
-                max_diff = max(abs(second1-second0));
+                max_diff = (iterMethod == IterationMethod::ValueIteration) ? viResid : max(abs(second1-second0));
                 min_diff = min(abs(second1-second0));
             }
             }
@@ -5714,6 +5770,7 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
             vec first0(state_space_size, 1, fill::zeros);
             mat firstnew0(state_space_size*input_space_size*disturb_space_size, 1, fill::zeros);
             vec first1(state_space_size, 1, fill::ones);
+            if (iterMethod == IterationMethod::ValueIteration) first1.zeros();
             mat firstnew1(state_space_size*input_space_size*disturb_space_size, 1, fill::zeros);
             uvec U_pos(state_space_size, 1, fill::zeros);
             mat input_and_state0(input_space_size*state_space_size, 1, fill::zeros);
@@ -5727,6 +5784,10 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffA = maxAvoidM - minAvoidM;
             sycl::queue queue;
+                    sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
+                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
+                    sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
+                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
             while (max_diff > epsilon) {
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
@@ -5741,10 +5802,6 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                     sycl::buffer<double> cdfBuffer1(firstnew1.memptr(),firstnew1.n_rows);
                     sycl::buffer<double> buff1(first1.memptr(),first1.n_rows);
                     sycl::buffer<double> buff0(first0.memptr(),first0.n_rows);
-                    sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
-                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
-                    sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
-                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
                     
                     // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                     queue.submit([&](sycl::handler& cgh) {
@@ -5829,6 +5886,7 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                     cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is an absorbing state in the solution, try running the finite Horizon solution using this number of steps." << endl;
                     break;
                 }
+                double viResid = (iterMethod == IterationMethod::ValueIteration) ? (double)(max(abs(check0 - first0))) : 0.0;
                 first0 = check0;
                 first1 = check1;
                 
@@ -5836,7 +5894,7 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                     firstnew0.row(i).min(U_pos[i]);
                 }
                 
-                max_diff = max(abs(first1-first0));
+                max_diff = (iterMethod == IterationMethod::ValueIteration) ? viResid : max(abs(first1-first0));
                 min_diff = min(abs(first1-first0));
             }
             }
@@ -5846,6 +5904,7 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
             vec second0(state_space_size, 1, fill::zeros);
             mat secondnew0(state_space_size*disturb_space_size, 1, fill::zeros);
             vec second1(state_space_size, 1, fill::ones);
+            if (iterMethod == IterationMethod::ValueIteration) second1.zeros();
             mat secondnew1(state_space_size*disturb_space_size, 1, fill::zeros);
             max_diff = 1.0;
             min_diff = 1.0;
@@ -5871,6 +5930,8 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                 mat diffT = tempTmax-tempTmin;
                 vec diffA = tempATmax - tempATmin;
             sycl::queue Q;
+                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
+                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
             while (max_diff > epsilon) {
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
@@ -5888,9 +5949,7 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                     sycl::buffer<double> bufs1(second1.memptr(),second1.n_rows);
                     sycl::buffer<double> bufs0(second0.memptr(),second0.n_rows);
                     sycl::buffer<double> bufminT(tempTmin.memptr(),tempTmin.n_rows*tempTmin.n_cols);
-                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
                     sycl::buffer<double> bufminAT(tempATmin.memptr(),tempATmin.n_rows);
-                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
                     
                     // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                     Q.submit([&](sycl::handler& cgh) {
@@ -5967,10 +6026,11 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                     cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is an absorbing state in the solution, try running the finite Horizon solution using this number of steps." << endl;
                     break;
                 }
+                double viResid = (iterMethod == IterationMethod::ValueIteration) ? (double)(max(abs(check0 - second0))) : 0.0;
                 second0 = check0;
                 second1 = check1;
                 
-                max_diff = max(abs(second1-second0));
+                max_diff = (iterMethod == IterationMethod::ValueIteration) ? viResid : max(abs(second1-second0));
                 min_diff = min(abs(second1-second0));
             }
             }
@@ -5989,6 +6049,7 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
             vec first0(state_space_size, 1, fill::zeros);
             mat firstnew0(state_space_size*input_space_size*disturb_space_size, 1, fill::zeros);
             vec first1(state_space_size, 1, fill::ones);
+            if (iterMethod == IterationMethod::ValueIteration) first1.zeros();
             mat firstnew1(state_space_size*input_space_size*disturb_space_size, 1, fill::zeros);
             uvec U_pos(state_space_size, 1, fill::zeros);
             mat input_and_state0(input_space_size*state_space_size, 1, fill::zeros);
@@ -6002,6 +6063,10 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffA = maxAvoidM - minAvoidM;
             sycl::queue queue;
+                    sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
+                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
+                    sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
+                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
             while (max_diff > epsilon) {
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
@@ -6016,10 +6081,6 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                     sycl::buffer<double> cdfBuffer1(firstnew1.memptr(),firstnew1.n_rows);
                     sycl::buffer<double> buff1(first1.memptr(),first1.n_rows);
                     sycl::buffer<double> buff0(first0.memptr(),first0.n_rows);
-                    sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
-                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
-                    sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
-                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
                     //sycl::buffer<double> bufS(s.memptr(),s.n_rows);
                     
                     // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
@@ -6108,6 +6169,7 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                     cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is an absorbing state in the solution, try running the finite Horizon solution using this number of steps." << endl;
                     break;
                 }
+                double viResid = (iterMethod == IterationMethod::ValueIteration) ? (double)(max(abs(check0 - first0))) : 0.0;
                 first0 = check0;
                 first1 = check1;
                 
@@ -6115,7 +6177,7 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                     firstnew0.row(i).min(U_pos[i]);
                 }
                 
-                max_diff = max(abs(first1-first0));
+                max_diff = (iterMethod == IterationMethod::ValueIteration) ? viResid : max(abs(first1-first0));
                 min_diff = min(abs(first1-first0));
             }
             }
@@ -6125,6 +6187,7 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
             vec second0(state_space_size, 1, fill::zeros);
             mat secondnew0(state_space_size*disturb_space_size, 1, fill::zeros);
             vec second1(state_space_size, 1, fill::ones);
+            if (iterMethod == IterationMethod::ValueIteration) second1.zeros();
             mat secondnew1(state_space_size*disturb_space_size, 1, fill::zeros);
             max_diff = 1.0;
             min_diff = 1.0;
@@ -6150,6 +6213,8 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                 mat diffT = tempTmax-tempTmin;
                 vec diffA = tempATmax - tempATmin;
             sycl::queue Q;
+                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
+                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
             while (max_diff > epsilon) {
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
@@ -6166,9 +6231,7 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                     sycl::buffer<double> bufs1(second1.memptr(),second1.n_rows);
                     sycl::buffer<double> bufs0(second0.memptr(),second0.n_rows);
                     sycl::buffer<double> bufminT(tempTmin.memptr(),tempTmin.n_rows*tempTmin.n_cols);
-                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
                     sycl::buffer<double> bufminAT(tempATmin.memptr(),tempATmin.n_rows);
-                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
                     
                     // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                     Q.submit([&](sycl::handler& cgh) {
@@ -6243,10 +6306,11 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                     cout << "Bounds both converged after " << converge << " steps, but they did not converge to each other. It is likely there is an absorbing state in the solution, try running the finite Horizon solution using this number of steps." << endl;
                     break;
                 }
+                double viResid = (iterMethod == IterationMethod::ValueIteration) ? (double)(max(abs(check0 - second0))) : 0.0;
                 second0 = check0;
                 second1 = check1;
                 
-                max_diff = max(abs(second1-second0));
+                max_diff = (iterMethod == IterationMethod::ValueIteration) ? viResid : max(abs(second1-second0));
                 min_diff = min(abs(second1-second0));
             }
             }

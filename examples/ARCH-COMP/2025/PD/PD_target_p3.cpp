@@ -99,6 +99,10 @@ int main() {
     /* ###### export abstracted IMDP for cross-tool comparison ######*/
     mdp.exportIMDP("PD_p3.imdp");
 
+    /* ###### (optional) ValueIteration = peer-style pure VI (faster; converges with end
+       components — PD_p3's interval iteration does NOT converge, this mode does) ###### */
+    //mdp.setIterationMethod(IterationMethod::ValueIteration);
+
     /* ###### synthesize infinite horizon controller (true = pessimistic, false = optimistic) ######*/
     mdp.infiniteHorizonReachController(true);
     

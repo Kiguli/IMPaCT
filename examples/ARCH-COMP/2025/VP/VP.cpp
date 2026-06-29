@@ -90,6 +90,11 @@ int main() {
     /* ###### export abstracted IMDP for cross-tool comparison ######*/
     mdp.exportIMDP("VP.imdp");
 
+    /* ###### (optional) solver for infinite horizon: IntervalIteration (default, sound bracket)
+       or ValueIteration (peer-style pure VI: far fewer sweeps, and converges with end
+       components — but residual stopping, not a sound two-sided certificate) ###### */
+    //mdp.setIterationMethod(IterationMethod::ValueIteration);
+
     /* ###### synthesize infinite horizon controller (true = pessimistic, false = optimistic) ######*/
     mdp.infiniteHorizonReachControllerSorted(true);
     

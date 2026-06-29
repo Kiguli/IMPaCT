@@ -29,6 +29,11 @@ void IMDP::setAlgorithm(nlopt::algorithm alg){
     algo = alg;
 }
 
+/// Select the infinite-horizon convergence method (interval iteration vs peer-style VI)
+void IMDP::setIterationMethod(IterationMethod m){
+    iterMethod = m;
+}
+
 /// Initialize NLopt optimizer with state space bounds (free function for SYCL kernel use)
 inline void initializeOptimizer(nlopt::opt& opt, const vec& state_start, const vec& eta) {
     vector<double> lb(state_start.size());

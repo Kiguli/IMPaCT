@@ -105,6 +105,9 @@ int main() {
     /* ###### export abstracted IMDP for cross-tool comparison ######*/
     mdp.exportIMDP("AV_minimal.imdp");
 
+    /* ###### (optional) ValueIteration = peer-style pure VI (faster; converges with end components) ###### */
+    //mdp.setIterationMethod(IterationMethod::ValueIteration);
+
     /* ###### synthesize infinite horizon controller (true = pessimistic, false = optimistic) ######*/
     mdp.infiniteHorizonReachControllerSorted(true);
     

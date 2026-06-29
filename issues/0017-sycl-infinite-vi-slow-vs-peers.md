@@ -1,7 +1,7 @@
 ---
 id: ISSUE-0017
 title: SYCL infinite-horizon robust VI is slow on recurrent IMDPs vs Storm / IntervalMDP.jl
-status: in-progress
+status: resolved
 severity: low
 labels: performance, solver, tool-v1, cross-tool
 created: 2026-06-27
@@ -76,19 +76,36 @@ robust VI is much faster:
 | VP (infinite reach) | 214.4 s / 6119 sweeps | **34.6 s** (6.2x) | 0.6 s |
 | PD_p1 (infinite reach) | 6.5 s | **1.29 s** (5x, ~= peer) | 1.33 s |
 
-**Remaining (kept open, low severity):** VP is still slower than the peers because of
-(a) the per-sweep construction of the ~11 SYCL buffers (the *constant* matrix buffers
-could also be hoisted — more invasive, needs GPU re-verification), and (b) the
-iteration count itself: IMPaCT does **sound interval iteration** (iterate from 0 and
-from 1, stop when the gap < ε), which is more rigorous but slower-converging than the
-peers' residual-stopping VI. Adopting OVI (Quatmann–Katoen / Hartmanns–Kaminski) as
-the SYCL default (ROADMAP Phase 1) would close both gaps.
+**Resolved (2026-06-28) — both the per-sweep cost AND the iteration count.**
 
-**Note on PD_p3 (re-diagnosed).** PD_p3's non-termination is NOT this performance
-issue — it is the **interval-iteration nature-trap (ISSUE-0003)**: with an end
-component the from-1 iterate converges to the greatest fixed point while the from-0
-iterate converges to the (correct, smaller) least fixed point, so the gap never closes
-and the loop runs to the timeout (observed: gap stuck at 0.9997 after 15 380 sweeps).
-The v2 light-weight `solve::maxReach` (OVI + MEC handling) returns the correct value
-(1.0, = IntervalMDP.jl / Storm); porting that MEC-collapse to the SYCL path is the fix
-for PD_p3 and is tracked under ISSUE-0003 / ISSUE-0010, separate from this item.
+(2) **Per-sweep SYCL buffer construction hoisted.** The ~11 SYCL buffers were
+reconstructed every sweep; the read-only CONSTANT ones (`minTransitionM`,
+`minTargetM`, `minAvoidM`, and the once-hoisted `diffT`/`diffR`/`diffA`) are now built
+once per loop (in the per-loop block scope), leaving only the changing buffers
+(`sorted_indices`, `firstnew*`, `first*`/`second*`) per sweep. Interval-iteration VP
+dropped a further 34.6 s → **29.1 s** (values bit-for-bit identical).
+
+(3) **Pure value iteration offered as a selectable method** (`setIterationMethod`),
+matching the peers' solver. Implementation trick (no per-branch controller rewrites):
+in `ValueIteration` mode the "upper" iterate (`first1`/`second1`, normally
+`fill::ones`) is initialised to ZEROS, so both iterates run value iteration from 0 ->
+least fixed point (= robust value); the gap is then identically 0 so stopping switches
+to the residual ‖V_{k+1}-V_k‖. Every existing controller assignment then reports the
+correct pure-VI value automatically. Results:
+  * VP: **0.59 s / 102 sweeps** (vs interval-iteration 29.1 s; vs IntervalMDP.jl 0.61 s).
+  * PD_p1: **1.34 s / 27 sweeps**.
+  * **PD_p3: 1.36 s / 28 sweeps — CONVERGES** to the correct robust value 1.0
+    (= IntervalMDP.jl / Storm), where interval iteration could not (ISSUE-0003).
+All return the same robust value as interval iteration where both converge.
+
+Interval iteration remains the **default** (sound two-sided bracket) and pays no extra
+per-sweep cost (the residual is computed only when `ValueIteration` is selected). Pure
+VI's residual stopping is not a sound two-sided certificate — it is exactly the peer
+semantics. Transforms: `benchmarks/crosstool/peers/{hoist_diffs,hoist_queue,
+hoist_const_buffers,add_vi_mode}.py`.
+
+**Future work (separate):** make a sound solver that ALSO converges on end components
+the default — i.e. port the v2 light-weight `solve::maxReach` OVI + MEC-collapse
+(ISSUE-0003 / ISSUE-0010 / ROADMAP Phase 1) to the SYCL path, so the default need not
+choose between soundness (interval iteration, may not converge with ECs) and
+convergence (pure VI, residual stopping).
