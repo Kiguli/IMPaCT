@@ -1,0 +1,12 @@
+# ISSUE-0003 minimal nature-trap. target = {2}.
+# state 0 action a: stay [0.5,1.0] OR leave to 1 [0.0,0.5]
+# Nature (adversarial) can zero the 0->1 edge (lo=0) and keep all mass at 0 forever,
+# so the true robust max-reach value V*(0) = 0 (controller can never escape state 0).
+# {0} is NOT a support-graph MEC (its action has hi=0.5>0 to state 1), so support-MEC
+# collapse leaves it untouched -> interval iteration's upper bound sticks at U(0)=1.
+states 3
+init 0
+label target 2
+tran 0 0  0:0.5:1.0 1:0.0:0.5
+tran 1 0  2:1:1
+tran 2 0  2:1:1

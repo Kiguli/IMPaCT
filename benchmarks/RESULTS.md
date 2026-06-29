@@ -62,6 +62,46 @@ Full cross-tool comparison vs PRISM / Storm / IntervalMDP.jl is in the top-level
 | AV_minimal | infinite reach | 5562 | (7.42 GB×2) | — | abstraction fits (14.8 GB) |
 | LM | finite reach H=200 | 36450 | dense-infeasible (~96 GB/matrix) | — | needs sparse storage |
 
+## Sparse abstraction rerun (2026-06-29, `benchmarks/sparse_arch.cpp`)
+
+Re-ran the AFFINE-in-state ARCH cases (mean range EXACT → no abstraction loss) through
+the v2 **sparse** abstraction (`src/abstraction.cpp`, O(nnz)) + sparse OVI solver
+(`src/solve.cpp`), instead of the dense SYCL `IMDP` class. Pure std C++, single thread.
+
+| bench | cells×act | nnz | sparse | dense | build+solve | sparse interior mean | dense (nlopt) |
+|---|---|---|---|---|---|---|---|
+| AS (fin reach H10) | 2000×16 | 0.83M | 19.9 MB | 1.02 GB | 0.11+0.07 s | 0.0003 | 0.0045 |
+| BA (fin safe H6) | 576×4 | 1.09M | 26.2 MB | 0.02 GB | 0.25+0.22 s | 0.107 | 0.471 |
+| IC_reach (fin H5) | 1600×5 | 0.04M | 1.0 MB | 0.20 GB | 0.01+0.00 s | 0.057 | 0.072 |
+| IC_safe (fin H5) | 1600×5 | 0.13M | 3.0 MB | 0.20 GB | 0.02+0.01 s | 0.750 | 0.761 |
+| PD_p1 (inf r-avoid) | 576×441 | 5.1M | 122 MB | 2.34 GB | 0.8+15 s | 1.000 | 1.000 |
+| PD_p3 (inf r-avoid) | 576×441 | 5.1M | 122 MB | 2.34 GB | 0.7+1.1 s | 1.000 | 1.0 (peers) |
+| **PR_minimal** (inf) | 1600×441 | **161M** | **3.86 GB** | **18.1 GB** | 28.5+814 s | ~1.0 | (dense OOM) |
+
+Wins: (1) **PR_minimal — the ISSUE-0006 dense-OOM case — now completes** (3.86 GB
+vs 18 GB; would not run on the dense path). (2) Memory 5–51× smaller. (3) AS solves in
+**0.07 s vs the dense SYCL 4.3 s** (the dense finite path still recomputes the big
+`diff` matrix each sweep — the loop-invariant hoist was applied only to the infinite
+functions). PR_minimal's 814 s solve is its very wide noise kernel (σ≈0.87 ≫ η=0.5 →
+~217 nnz/row) under single-threaded OVI.
+
+Accuracy: IC_safe and PD match the dense values; **AS and BA differ markedly** (BA
+safety 0.11 vs 0.47). Likely cause: the sparse abstraction is **closed-form EXACT for
+affine** dynamics, whereas the dense path uses `nlopt` (LN_SBPLX, a *local* optimiser)
+per source cell, which can miss the adversarial worst case → looser/optimistic bounds
+(BA's noise window ~7 cells exceeds its 4-cell domain, so low safety is plausible).
+Needs Monte-Carlo to declare a winner (cf. abstraction-soundness ISSUE-0007/0008).
+Nonlinear VP/AV/LM (interval-arithmetic mean enclosures) are the next pass.
+
+## ISSUE-0003 nature-trap — MEC-collapse does NOT fix it (empirical, `models/naturetrap.imdp`)
+
+On the canonical nature-trap (true robust V*(0)=0): **OVI** → `lower=0, upper=1e-6`
+in **2** iters; **MEC-collapse** (support-graph) → `lower=0, upper=1` stuck, **2 000 000**
+iters. Support-graph MEC misses nature-confinable ECs (state 0's action has a positive
+*upper*-bound leaving edge, so it is not a support EC, yet nature can zero that edge's
+*lower* bound and confine). The fix is OVI (no EC needed) or robust-EC deflation — not
+plain MEC preprocessing.
+
 Findings: robust values agree with the peers everywhere applicable; IMPaCT now offers
 two infinite-horizon solvers (`setIterationMethod`) — sound interval iteration
 (default; sped up ~7× by hoisting per-sweep loop-invariant work) and peer-style pure
