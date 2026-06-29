@@ -95,10 +95,14 @@ static void markAvoid(abstraction::SparseReach& R, const abstraction::GridSpec& 
 
 enum Mode { INF_REACH, FIN_REACH, FIN_SAFETY };
 
+// Point dynamics: mu = f(x, u). For affine, f_i(x,u) = A_i . x + offset_i(u).
+using PointMeanFn = std::function<void(const std::vector<double>& x, const std::vector<double>& u,
+                                       std::vector<double>& mu)>;
+
 struct Bench {
     const char* name;
     abstraction::GridSpec g;
-    abstraction::MeanBoundFn mean;
+    PointMeanFn mean;
     Mode mode; int H;
     bool hasAvoid; std::vector<double> alo, ahi;
 };
@@ -120,6 +124,103 @@ static abstraction::MeanBoundFn affine(std::vector<std::vector<double>> A,
     };
 }
 
+// ---- JOINT enclosure (matches the dense joint optimisation; no coupled-A over-approx) ----
+static PointMeanFn affinePoint(std::vector<std::vector<double>> A,
+                               std::function<void(const std::vector<double>&, std::vector<double>&)> offset) {
+    int dx = (int)A.size();
+    return [A, offset, dx](const std::vector<double>& x, const std::vector<double>& u, std::vector<double>& mu) {
+        std::vector<double> off(dx); offset(u, off);
+        mu.assign(dx, 0.0);
+        for (int i = 0; i < dx; ++i) { double v = off[i];
+            for (int j = 0; j < dx; ++j) v += A[i][j] * x[j];
+            mu[i] = v; }
+    };
+}
+
+// Build the sparse IMDP with a JOINT box-mass enclosure over each source cell:
+//   lo (min mass) = min over the 2^dim source-cell CORNERS  (the box mass is log-concave
+//                   in x, so its minimum over the cell is attained at a vertex -> EXACT),
+//   hi (max mass) = product of per-dimension maxima  (a sound upper bound).
+// This removes the per-dimension MIN over-approximation that made the sparse abstraction
+// more conservative than the dense joint nlopt on coupled (non-diagonal A) systems.
+static abstraction::SparseReach buildSparseReachJoint(const abstraction::GridSpec& g,
+                                                      const PointMeanFn& fmean, double prune) {
+    const int dx = g.dim_x, du = g.dim_u;
+    std::vector<int> Nd(dx); std::vector<long long> stride(dx); long long N = 1;
+    for (int i = 0; i < dx; ++i) { Nd[i] = std::max(1, (int)std::llround((g.xub[i]-g.xlb[i])/g.eta[i])); stride[i]=N; N*=Nd[i]; }
+    const int TARGET = (int)N, SINK = (int)N + 1;
+
+    std::vector<std::vector<double>> upts(du);
+    for (int k = 0; k < du; ++k) { int Mk = std::max(0,(int)std::llround((g.uub[k]-g.ulb[k])/g.ueta[k]));
+        for (int t = 0; t <= Mk; ++t) upts[k].push_back(g.ulb[k] + t*g.ueta[k]); }
+    std::vector<std::vector<double>> actions;
+    if (du == 0) actions.push_back({});
+    else { std::vector<int> id(du,0); while (true) { std::vector<double> u(du);
+        for (int k=0;k<du;++k) u[k]=upts[k][id[k]]; actions.push_back(std::move(u));
+        int k=0; for(;k<du;++k){ if(++id[k]<(int)upts[k].size()) break; id[k]=0; } if(k==du) break; } }
+
+    abstraction::SparseReach out; out.nCells=(int)N; out.nnz=0;
+    out.model.assign((size_t)N+2, {}); out.targets.insert(TARGET); out.actions = actions;
+
+    auto cellLoDim = [&](int i, int j){ return g.xlb[i] + j*g.eta[i]; };
+    std::vector<int> mi(dx), jt(dx);
+    std::vector<double> cl(dx), ch(dx), muLo(dx), muHi(dx);
+    const int nCorner = 1 << dx;
+    std::vector<std::vector<double>> cornerMu(nCorner, std::vector<double>(dx));
+    std::vector<double> xc(dx), mu(dx);
+
+    auto isTargetMi = [&](const std::vector<int>& m){ for(int i=0;i<dx;++i){ double lo=cellLoDim(i,m[i]),hi=lo+g.eta[i];
+        if(!(lo>=g.tlo[i]-1e-12 && hi<=g.thi[i]+1e-12)) return false; } return true; };
+
+    for (long long lin = 0; lin < N; ++lin) {
+        for (int i=0;i<dx;++i) mi[i]=(int)((lin/stride[i])%Nd[i]);
+        if (isTargetMi(mi)) { out.model[lin].push_back({ {TARGET,1.0,1.0} }); out.nnz+=1; continue; }
+        for (int i=0;i<dx;++i){ cl[i]=cellLoDim(i,mi[i]); ch[i]=cl[i]+g.eta[i]; }
+        for (const auto& u : actions) {
+            // evaluate the dynamics at the 2^dim source-cell corners; cache the means
+            for (int c=0;c<nCorner;++c){ for(int i=0;i<dx;++i) xc[i]=((c>>i)&1)?ch[i]:cl[i];
+                fmean(xc,u,mu); cornerMu[c]=mu; }
+            for (int i=0;i<dx;++i){ muLo[i]=1e300; muHi[i]=-1e300;
+                for(int c=0;c<nCorner;++c){ muLo[i]=std::min(muLo[i],cornerMu[c][i]); muHi[i]=std::max(muHi[i],cornerMu[c][i]); } }
+
+            // window of candidate dest cells (per-dim mean range +/- 6 sigma)
+            std::vector<int> wlo(dx), whi(dx); bool any=true;
+            for (int i=0;i<dx;++i){ double W=6.0*g.sigma[i];
+                wlo[i]=std::max(0,(int)std::floor((muLo[i]-W-g.xlb[i])/g.eta[i]));
+                whi[i]=std::min(Nd[i]-1,(int)std::floor((muHi[i]+W-g.xlb[i])/g.eta[i]));
+                if(wlo[i]>whi[i]) any=false; jt[i]=wlo[i]; }
+            solve::ActionDist row;
+            if (any) while (true) {
+                // hi = product of per-dim maxima (sound); lo = min over corners (exact joint min)
+                double ph=1.0;
+                for(int i=0;i<dx;++i){ double a=cellLoDim(i,jt[i]), b=a+g.eta[i];
+                    abstraction::Bound bd=abstraction::transitionInterval1D(muLo[i],muHi[i],g.sigma[i],a,b); ph*=bd.hi; }
+                double pl=1e300;
+                for(int c=0;c<nCorner;++c){ double p=1.0;
+                    for(int i=0;i<dx;++i){ double a=cellLoDim(i,jt[i]), b=a+g.eta[i];
+                        p*=abstraction::massInInterval(cornerMu[c][i],g.sigma[i],a,b); }
+                    pl=std::min(pl,p); }
+                if (ph>prune){ if(pl>ph) pl=ph;
+                    if(isTargetMi(jt)) row.push_back({TARGET,pl,ph});
+                    else { long long lj=0; for(int i=0;i<dx;++i) lj+=(long long)jt[i]*stride[i]; row.push_back({(int)lj,pl,ph}); } }
+                int i=0; for(;i<dx;++i){ if(++jt[i]<=whi[i]) break; jt[i]=wlo[i]; } if(i==dx) break;
+            }
+            // outside-grid (SINK): mass-in-grid hi via per-dim product (sound), lo via corner min (exact)
+            double gh=1.0;
+            for(int i=0;i<dx;++i){ abstraction::Bound gg=abstraction::transitionInterval1D(muLo[i],muHi[i],g.sigma[i],g.xlb[i],g.xub[i]); gh*=gg.hi; }
+            double gl=1e300;
+            for(int c=0;c<nCorner;++c){ double p=1.0;
+                for(int i=0;i<dx;++i) p*=abstraction::massInInterval(cornerMu[c][i],g.sigma[i],g.xlb[i],g.xub[i]); gl=std::min(gl,p); }
+            row.push_back({SINK, std::max(0.0,1.0-gh), std::min(1.0,1.0-gl)});
+            out.nnz += (long long)row.size();
+            out.model[lin].push_back(std::move(row));
+        }
+    }
+    out.model[TARGET].push_back({ {TARGET,1.0,1.0} });
+    out.model[SINK].push_back({ {SINK,1.0,1.0} });
+    return out;
+}
+
 int main(int argc, char** argv) {
     const double eps = 1e-6, prune = 1e-7;
     const bool fast = (argc > 1 && std::string(argv[1]) == "fast");  // skip the slow PR_minimal
@@ -133,7 +234,7 @@ int main(int argc, char** argv) {
       g.tlo={4,8,8}; g.thi={6,10,10};
       std::vector<std::vector<double>> A={{0.8192,0.03412,0.01265},{0.01646,0.9822,0.0001},{0.0009,0.00002,0.9989}};
       auto off=[](const std::vector<double>& u, std::vector<double>& o){ double s=u[0]+u[1]; o={0.01883*s,0.0002*s,0.00001*s}; };
-      benches.push_back({"AS", g, affine(A,off), FIN_REACH, 10, false, {}, {}}); }
+      benches.push_back({"AS", g, affinePoint(A,off), FIN_REACH, 10, false, {}, {}}); }
 
     // ---- BA: 4D building automation, affine, finite safety H=6 (avoid = leave grid) ----
     { abstraction::GridSpec g; g.dim_x=4; g.dim_u=1;
@@ -143,7 +244,7 @@ int main(int argc, char** argv) {
       g.tlo={100,100,100,100}; g.thi={101,101,101,101};   // no target
       std::vector<std::vector<double>> A={{0.6682,0,0.02632,0},{0,0.6830,0,0.02096},{1.0005,0,-0.000499,0},{0,0.8004,0,0.1996}};
       auto off=[](const std::vector<double>& u, std::vector<double>& o){ double v=u[0]; o={0.1320*v+3.4378,0.1402*v+2.9272,13.0207,10.4166}; };
-      benches.push_back({"BA", g, affine(A,off), FIN_SAFETY, 6, false, {}, {}}); }
+      benches.push_back({"BA", g, affinePoint(A,off), FIN_SAFETY, 6, false, {}, {}}); }
 
     // ---- IC_reach: 2D integrator, affine, finite reach H=5 ----
     { abstraction::GridSpec g; g.dim_x=2; g.dim_u=1;
@@ -153,7 +254,7 @@ int main(int argc, char** argv) {
       g.tlo={-8,-8}; g.thi={8,8};
       std::vector<std::vector<double>> A={{1,0.1},{0,1}};
       auto off=[](const std::vector<double>& u, std::vector<double>& o){ o={0.005*u[0],0.1*u[0]}; };
-      benches.push_back({"IC_reach", g, affine(A,off), FIN_REACH, 5, false, {}, {}}); }
+      benches.push_back({"IC_reach", g, affinePoint(A,off), FIN_REACH, 5, false, {}, {}}); }
 
     // ---- IC_safe: same dynamics, finite safety H=5 ----
     { abstraction::GridSpec g; g.dim_x=2; g.dim_u=1;
@@ -163,7 +264,7 @@ int main(int argc, char** argv) {
       g.tlo={100,100}; g.thi={101,101};   // no target
       std::vector<std::vector<double>> A={{1,0.1},{0,1}};
       auto off=[](const std::vector<double>& u, std::vector<double>& o){ o={0.005*u[0],0.1*u[0]}; };
-      benches.push_back({"IC_safe", g, affine(A,off), FIN_SAFETY, 5, false, {}, {}}); }
+      benches.push_back({"IC_safe", g, affinePoint(A,off), FIN_SAFETY, 5, false, {}, {}}); }
 
     // ---- PD_p1: 2D package delivery, affine, infinite reach-avoid ----
     { abstraction::GridSpec g; g.dim_x=2; g.dim_u=2;
@@ -173,7 +274,7 @@ int main(int argc, char** argv) {
       g.tlo={5,-1}; g.thi={6,1};
       std::vector<std::vector<double>> A={{0.9,0},{0,0.8}};
       auto off=[](const std::vector<double>& u, std::vector<double>& o){ o={1.4*u[0],1.4*u[1]}; };
-      benches.push_back({"PD_p1", g, affine(A,off), INF_REACH, 0, true, {0,-5}, {1,1}}); }
+      benches.push_back({"PD_p1", g, affinePoint(A,off), INF_REACH, 0, true, {0,-5}, {1,1}}); }
 
     // ---- PD_p3: different target ----
     { abstraction::GridSpec g; g.dim_x=2; g.dim_u=2;
@@ -183,7 +284,7 @@ int main(int argc, char** argv) {
       g.tlo={-4,-4}; g.thi={-2,-3};
       std::vector<std::vector<double>> A={{0.9,0},{0,0.8}};
       auto off=[](const std::vector<double>& u, std::vector<double>& o){ o={1.4*u[0],1.4*u[1]}; };
-      benches.push_back({"PD_p3", g, affine(A,off), INF_REACH, 0, true, {0,-5}, {1,1}}); }
+      benches.push_back({"PD_p3", g, affinePoint(A,off), INF_REACH, 0, true, {0,-5}, {1,1}}); }
 
     // ---- PR_minimal: 2D robot, affine-in-state (cos/sin of u), infinite reach-avoid.
     //      This is the ISSUE-0006 dense-OOM case (698103 x 1583 ~ 8.84 GB dense). ----
@@ -194,7 +295,7 @@ int main(int argc, char** argv) {
       g.tlo={5,5}; g.thi={8,8};
       std::vector<std::vector<double>> A={{1,0},{0,1}};
       auto off=[](const std::vector<double>& u, std::vector<double>& o){ o={2*u[0]*std::cos(u[1]),2*u[0]*std::sin(u[1])}; };
-      benches.push_back({"PR_minimal", g, affine(A,off), INF_REACH, 0, true, {-1.5,-1.5}, {1.5,1.5}}); }
+      benches.push_back({"PR_minimal", g, affinePoint(A,off), INF_REACH, 0, true, {-1.5,-1.5}, {1.5,1.5}}); }
 
     std::printf("%-11s %7s %7s %12s %11s %9s %8s %9s  interior[min,max,mean]\n",
                 "bench","cells","actions","nnz","sparse(MB)","dense(GB)","build_s","solve_s");
@@ -215,7 +316,7 @@ int main(int argc, char** argv) {
             if (b.hasAvoid) { b.alo[i] -= h; b.ahi[i] += h; }
         }
         auto t0 = std::chrono::steady_clock::now();
-        abstraction::SparseReach R = abstraction::buildSparseReachGeneral(b.g, b.mean, prune);
+        abstraction::SparseReach R = buildSparseReachJoint(b.g, b.mean, prune);
         if (b.hasAvoid) markAvoid(R, b.g, b.alo, b.ahi);
         auto t1 = std::chrono::steady_clock::now();
 
