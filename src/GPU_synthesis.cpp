@@ -170,6 +170,11 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
             double min_diff = 1.0;
             size_t converge = 0;
             cout << "first loop iterations: " << endl;
+            {
+                mat diffT = maxTransitionM-minTransitionM;
+                vec diffR = maxTargetM - minTargetM;
+                vec diffA = maxAvoidM - minAvoidM;
+            sycl::queue queue;
             while (max_diff > epsilon) {
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
@@ -177,11 +182,7 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                 std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first1, true);
 
                 //Get difference between max and min for incrementing values
-                mat diffT = maxTransitionM-minTransitionM;
-                vec diffR = maxTargetM - minTargetM;
-                vec diffA = maxAvoidM - minAvoidM;
 
-                sycl::queue queue;
                 {
                     // Create a SYCL buffer to store the space
                     sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
@@ -284,6 +285,7 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                 max_diff = max(abs(first1-first0));
                 min_diff = min(abs(first1-first0));
             }
+            }
             cout << endl;
             cout << "control policy for lower bound found, finding upper bound." << endl;
 
@@ -311,6 +313,11 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                 tempATmax = maxAvoidM;
 
             cout << "Matrix Fixed" << endl;
+            {
+                mat diffT = tempTmax-tempTmin;
+                vec diffR = tempTTmax - tempTTmin;
+                vec diffA = tempATmax - tempATmin;
+            sycl::queue Q;
             while (max_diff > epsilon) {
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
@@ -319,12 +326,8 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                 std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second1, false);
 
                 //Get difference between max and min for incrementing values
-                mat diffT = tempTmax-tempTmin;
-                vec diffR = tempTTmax - tempTTmin;
-                vec diffA = tempATmax - tempATmin;
 
 
-                sycl::queue Q;
                 {
                     // Create a SYCL buffer to store the space
                     sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
@@ -419,6 +422,7 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                 max_diff = max(abs(second1-second0));
                 min_diff = min(abs(second1-second0));
             }
+            }
             cout << endl;
             cout << "Upper bound found." << endl;
 
@@ -437,6 +441,11 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
             double min_diff = 1.0;
             size_t converge = 0;
             cout << "first loop iterations: " << endl;
+            {
+                mat diffT = maxTransitionM-minTransitionM;
+                vec diffR = maxTargetM - minTargetM;
+                vec diffA = maxAvoidM - minAvoidM;
+            sycl::queue queue;
             while (max_diff > epsilon) {
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
@@ -444,11 +453,7 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                 std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first1, false);
 
                 //Get difference between max and min for incrementing values
-                mat diffT = maxTransitionM-minTransitionM;
-                vec diffR = maxTargetM - minTargetM;
-                vec diffA = maxAvoidM - minAvoidM;
 
-                sycl::queue queue;
                 {
                     // Create a SYCL buffer to store the space
                     sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
@@ -549,6 +554,7 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                 max_diff = max(abs(first1-first0));
                 min_diff = min(abs(first1-first0));
             }
+            }
             cout << endl;
             cout << "control policy for lower bound found, finding upper bound." << endl;
             
@@ -576,6 +582,11 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                 tempATmax = maxAvoidM;
                 
             cout << "Matrix Fixed" << endl;
+            {
+                mat diffT = tempTmax-tempTmin;
+                vec diffR = tempTTmax - tempTTmin;
+                vec diffA = tempATmax - tempATmin;
+            sycl::queue Q;
             while (max_diff > epsilon) {
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
@@ -584,12 +595,8 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                 std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second1, true);
 
                 //Get difference between max and min for incrementing values
-                mat diffT = tempTmax-tempTmin;
-                vec diffR = tempTTmax - tempTTmin;
-                vec diffA = tempATmax - tempATmin;
                 
                 
-                sycl::queue Q;
                 {
                     // Create a SYCL buffer to store the space
                     sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
@@ -688,6 +695,7 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                 max_diff = max(abs(second1-second0));
                 min_diff = min(abs(second1-second0));
             }
+            }
             cout << endl;
             cout << "Upper bound found." << endl;
             
@@ -708,6 +716,11 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
             double min_diff = 1.0;
             size_t converge = 0;
             cout << "first loop iterations: " << endl;
+            {
+                mat diffT = maxTransitionM-minTransitionM;
+                vec diffR = maxTargetM - minTargetM;
+                vec diffA = maxAvoidM - minAvoidM;
+            sycl::queue queue;
             while (max_diff > epsilon) {
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
@@ -715,11 +728,7 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                 std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first1, true);
 
                 //Get difference between max and min for incrementing values
-                mat diffT = maxTransitionM-minTransitionM;
-                vec diffR = maxTargetM - minTargetM;
-                vec diffA = maxAvoidM - minAvoidM;
 
-                sycl::queue queue;
                 {
                     // Create a SYCL buffer to store the space
                     sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
@@ -828,6 +837,7 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                 max_diff = max(abs(first1-first0));
                 min_diff = min(abs(first1-first0));
             }
+            }
             cout << endl;
             cout << "control policy for lower bound found, finding upper bound." << endl;
             
@@ -857,6 +867,11 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
             }
             
             cout << "Matrix Fixed" << endl;
+            {
+                mat diffT = tempTmax-tempTmin;
+                vec diffR = tempTTmax - tempTTmin;
+                vec diffA = tempATmax - tempATmin;
+            sycl::queue Q;
             while (max_diff > epsilon) {
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
@@ -865,12 +880,8 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                 std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second1, false);
 
                 //Get difference between max and min for incrementing values
-                mat diffT = tempTmax-tempTmin;
-                vec diffR = tempTTmax - tempTTmin;
-                vec diffA = tempATmax - tempATmin;
                 
                 
-                sycl::queue Q;
                 {
                     // Create a SYCL buffer to store the space
                     sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
@@ -963,6 +974,7 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                 max_diff = max(abs(second1-second0));
                 min_diff = min(abs(second1-second0));
             }
+            }
             cout << endl;
             cout << "Upper bound found." << endl;
             
@@ -985,17 +997,18 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
             double min_diff = 1.0;
             size_t converge = 0;
             cout << "first loop iterations: " << endl;
+            {
+                mat diffT = maxTransitionM-minTransitionM;
+                vec diffR = maxTargetM - minTargetM;
+                vec diffA = maxAvoidM - minAvoidM;
+            sycl::queue queue;
             while (max_diff > epsilon) {
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
                 
                 std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first1, false);
 
-                mat diffT = maxTransitionM-minTransitionM;
-                vec diffR = maxTargetM - minTargetM;
-                vec diffA = maxAvoidM - minAvoidM;
                 
-                sycl::queue queue;
                 {
                     // Create a SYCL buffer to store the space
                     sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
@@ -1103,6 +1116,7 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                 max_diff = max(abs(first1-first0));
                 min_diff = min(abs(first1-first0));
             }
+            }
             cout << endl;
             cout << "control policy for lower bound found, finding upper bound." << endl;
             
@@ -1132,6 +1146,11 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
             }
             
             cout << "Matrix Fixed" << endl;
+            {
+                mat diffT = tempTmax-tempTmin;
+                vec diffR = tempTTmax - tempTTmin;
+                vec diffA = tempATmax - tempATmin;
+            sycl::queue Q;
             while (max_diff > epsilon) {
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
@@ -1139,12 +1158,8 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                 
                 std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second1, true);
 
-                mat diffT = tempTmax-tempTmin;
-                vec diffR = tempTTmax - tempTTmin;
-                vec diffA = tempATmax - tempATmin;
                 
                 
-                sycl::queue Q;
                 {
                     // Create a SYCL buffer to store the space
                     sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
@@ -1243,6 +1258,7 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                 max_diff = max(abs(second1-second0));
                 min_diff = min(abs(second1-second0));
             }
+            }
             cout << endl;
             cout << "Upper bound found." << endl;
             
@@ -1265,6 +1281,11 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
             double min_diff = 1.0;
             size_t converge = 0;
             cout << "first loop iterations: " << endl;
+            {
+                mat diffT = maxTransitionM-minTransitionM;
+                vec diffR = maxTargetM - minTargetM;
+                vec diffA = maxAvoidM - minAvoidM;
+            sycl::queue queue;
             while (max_diff > epsilon) {
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
@@ -1272,11 +1293,7 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                 std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first1, true);
 
                 //Get difference between max and min for incrementing values
-                mat diffT = maxTransitionM-minTransitionM;
-                vec diffR = maxTargetM - minTargetM;
-                vec diffA = maxAvoidM - minAvoidM;
 
-                sycl::queue queue;
                 {
                     // Create a SYCL buffer to store the space
                     sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
@@ -1383,6 +1400,7 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                 max_diff = max(abs(first1-first0));
                 min_diff = min(abs(first1-first0));
             }
+            }
             cout << endl;
             cout << "control policy for lower bound found, finding upper bound." << endl;
             
@@ -1394,6 +1412,11 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
             min_diff = 1.0;
             converge = 0;
             cout << "second loop iterations: " << endl;
+            {
+                mat diffT = maxTransitionM-minTransitionM;
+                vec diffR = maxTargetM - minTargetM;
+                vec diffA = maxAvoidM - minAvoidM;
+            sycl::queue queue;
             while (max_diff > epsilon) {
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
@@ -1401,11 +1424,7 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                 std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second1, false);
 
                 //Get difference between max and min for incrementing values
-                mat diffT = maxTransitionM-minTransitionM;
-                vec diffR = maxTargetM - minTargetM;
-                vec diffA = maxAvoidM - minAvoidM;
                 
-                sycl::queue queue;
                 {
                     // Create a SYCL buffer to store the space
                     sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
@@ -1511,6 +1530,7 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                 
                 max_diff = max(abs(second1-second0));
                 min_diff = min(abs(second1-second0));
+            }
             }
             cout << endl;
             cout << "Upper bound found." << endl;
@@ -1530,17 +1550,18 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
             double min_diff = 1.0;
             size_t converge = 0;
             cout << "first loop iterations: " << endl;
+            {
+                mat diffT = maxTransitionM-minTransitionM;
+                vec diffR = maxTargetM - minTargetM;
+                vec diffA = maxAvoidM - minAvoidM;
+            sycl::queue queue;
             while (max_diff > epsilon) {
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
                 
                 std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first1, false);
 
-                mat diffT = maxTransitionM-minTransitionM;
-                vec diffR = maxTargetM - minTargetM;
-                vec diffA = maxAvoidM - minAvoidM;
                 
-                sycl::queue queue;
                 {
                     // Create a SYCL buffer to store the space
                     sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
@@ -1647,6 +1668,7 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                 max_diff = max(abs(first1-first0));
                 min_diff = min(abs(first1-first0));
             }
+            }
             cout << endl;
             cout << "control policy for lower bound found, finding upper bound." << endl;
             
@@ -1658,17 +1680,18 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
             min_diff = 1.0;
             converge = 0;
             cout << "second loop iterations: " << endl;
+            {
+                mat diffT = maxTransitionM-minTransitionM;
+                vec diffR = maxTargetM - minTargetM;
+                vec diffA = maxAvoidM - minAvoidM;
+            sycl::queue queue;
             while (max_diff > epsilon) {
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
                 
                 std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second1, true);
 
-                mat diffT = maxTransitionM-minTransitionM;
-                vec diffR = maxTargetM - minTargetM;
-                vec diffA = maxAvoidM - minAvoidM;
                 
-                sycl::queue queue;
                 {
                     // Create a SYCL buffer to store the space
                     sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
@@ -1774,6 +1797,7 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                 
                 max_diff = max(abs(second1-second0));
                 min_diff = min(abs(second1-second0));
+            }
             }
             cout << endl;
             cout << "Upper bound found." << endl;
@@ -1799,6 +1823,11 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
             size_t converge = 0;
             
             cout << "first loop iterations: " << endl;
+            {
+                mat diffT = maxTransitionM-minTransitionM;
+                vec diffR = maxTargetM - minTargetM;
+                vec diffA = maxAvoidM - minAvoidM;
+            sycl::queue queue;
             while (max_diff > epsilon) {
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
@@ -1806,11 +1835,7 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                 std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first1, true);
 
                 //Get difference between max and min for incrementing values
-                mat diffT = maxTransitionM-minTransitionM;
-                vec diffR = maxTargetM - minTargetM;
-                vec diffA = maxAvoidM - minAvoidM;
 
-                sycl::queue queue;
                 {
                     // Create a SYCL buffer to store the space
                     sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
@@ -1926,6 +1951,7 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                 max_diff = max(abs(first1-first0));
                 min_diff = min(abs(first1-first0));
             }
+            }
             cout << endl;
             cout << "control policy for lower bound found, finding upper bound." << endl;
             
@@ -1957,6 +1983,11 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
             }
             
             cout << "Matrix Fixed" << endl;
+            {
+                mat diffT = tempTmax-tempTmin;
+                vec diffR = tempTTmax - tempTTmin;
+                vec diffA = tempATmax - tempATmin;
+            sycl::queue Q;
             while (max_diff > epsilon) {
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
@@ -1965,12 +1996,8 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                 std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second1, false);
 
                 //Get difference between max and min for incrementing values
-                mat diffT = tempTmax-tempTmin;
-                vec diffR = tempTTmax - tempTTmin;
-                vec diffA = tempATmax - tempATmin;
                 
                 
-                sycl::queue Q;
                 {
                     // Create a SYCL buffer to store the space
                     sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
@@ -2070,6 +2097,7 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                 max_diff = max(abs(second1-second0));
                 min_diff = min(abs(second1-second0));
             }
+            }
             cout << endl;
             cout << "Upper bound found." << endl;
             
@@ -2094,17 +2122,18 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
             double min_diff = 1.0;
             size_t converge = 0;
             cout << "first loop iterations: " << endl;
+            {
+                mat diffT = maxTransitionM-minTransitionM;
+                vec diffR = maxTargetM - minTargetM;
+                vec diffA = maxAvoidM - minAvoidM;
+            sycl::queue queue;
             while (max_diff > epsilon) {
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
                 
                 std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first1, false);
 
-                mat diffT = maxTransitionM-minTransitionM;
-                vec diffR = maxTargetM - minTargetM;
-                vec diffA = maxAvoidM - minAvoidM;
                 
-                sycl::queue queue;
                 {
                     // Create a SYCL buffer to store the space
                     sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
@@ -2218,6 +2247,7 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                 max_diff = max(abs(first1-first0));
                 min_diff = min(abs(first1-first0));
             }
+            }
             cout << endl;
             cout << "control policy for lower bound found, finding upper bound." << endl;
             
@@ -2249,6 +2279,11 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
             }
             
             cout << "Matrix Fixed" << endl;
+            {
+                mat diffT = tempTmax-tempTmin;
+                vec diffR = tempTTmax - tempTTmin;
+                vec diffA = tempATmax - tempATmin;
+            sycl::queue Q;
             while (max_diff > epsilon) {
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
@@ -2256,12 +2291,8 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                 
                 std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second1, true);
 
-                mat diffT = tempTmax-tempTmin;
-                vec diffR = tempTTmax - tempTTmin;
-                vec diffA = tempATmax - tempATmin;
                 
                 
-                sycl::queue Q;
                 {
                     // Create a SYCL buffer to store the space
                     sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
@@ -2365,6 +2396,7 @@ void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
                 
                 max_diff = max(abs(second1-second0));
                 min_diff = min(abs(second1-second0));
+            }
             }
             cout << endl;
             cout << "Upper bound found." << endl;
@@ -4201,16 +4233,17 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
             double min_diff = 1.0;
             size_t converge = 0;
             cout << "first loop iterations: " << endl;
+            {
+                mat diffT = maxTransitionM-minTransitionM;
+                vec diffA = maxAvoidM - minAvoidM;
+            sycl::queue queue;
             while (max_diff > epsilon) {
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
                 
                 std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first1, false);
 
-                mat diffT = maxTransitionM-minTransitionM;
-                vec diffA = maxAvoidM - minAvoidM;
                 
-                sycl::queue queue;
                 {
                     // Create a SYCL buffer to store the space
                     sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
@@ -4299,6 +4332,7 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                 max_diff = max(abs(first1-first0));
                 min_diff = min(abs(first1-first0));
             }
+            }
             cout << endl;
             cout << "control policy for lower bound found, finding upper bound." << endl;
             
@@ -4322,17 +4356,18 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                 tempATmax = maxAvoidM;
             
             cout << "Matrix Fixed" << endl;
+            {
+                mat diffT = tempTmax-tempTmin;
+                vec diffA = tempATmax - tempATmin;
+            sycl::queue Q;
             while (max_diff > epsilon) {
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
                 
                 std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second1, true);
 
-                mat diffT = tempTmax-tempTmin;
-                vec diffA = tempATmax - tempATmin;
                 
                 
-                sycl::queue Q;
                 {
                     // Create a SYCL buffer to store the space
                     sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
@@ -4419,6 +4454,7 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                 max_diff = max(abs(second1-second0));
                 min_diff = min(abs(second1-second0));
             }
+            }
             cout << endl;
             cout << "Upper bound found." << endl;
             
@@ -4437,16 +4473,17 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
             double min_diff = 1.0;
             size_t converge = 0;
             cout << "first loop iterations: " << endl;
+            {
+                mat diffT = maxTransitionM-minTransitionM;
+                vec diffA = maxAvoidM - minAvoidM;
+            sycl::queue queue;
             while (max_diff > epsilon) {
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
                 
                 std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first1, true);
 
-                mat diffT = maxTransitionM-minTransitionM;
-                vec diffA = maxAvoidM - minAvoidM;
                 
-                sycl::queue queue;
                 {
                     // Create a SYCL buffer to store the space
                     sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
@@ -4539,6 +4576,7 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                 max_diff = max(abs(first1-first0));
                 min_diff = min(abs(first1-first0));
             }
+            }
             cout << endl;
             cout << "control policy for lower bound found, finding upper bound." << endl;
             
@@ -4562,17 +4600,18 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                 tempATmax = maxAvoidM;
             
             cout << "Matrix Fixed" << endl;
+            {
+                mat diffT = tempTmax-tempTmin;
+                vec diffA = tempATmax - tempATmin;
+            sycl::queue Q;
             while (max_diff > epsilon) {
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
                 
                 std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second1, false);
 
-                mat diffT = tempTmax-tempTmin;
-                vec diffA = tempATmax - tempATmin;
                 
                 
-                sycl::queue Q;
                 {
                     // Create a SYCL buffer to store the space
                     sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
@@ -4658,6 +4697,7 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                 max_diff = max(abs(second1-second0));
                 min_diff = min(abs(second1-second0));
             }
+            }
             cout << endl;
             cout << "Upper bound found." << endl;
             
@@ -4678,16 +4718,17 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
             double min_diff = 1.0;
             size_t converge = 0;
             cout << "first loop iterations: " << endl;
+            {
+                mat diffT = maxTransitionM-minTransitionM;
+                vec diffA = maxAvoidM - minAvoidM;
+            sycl::queue queue;
             while (max_diff > epsilon) {
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
                 
                 std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first1, false);
 
-                mat diffT = maxTransitionM-minTransitionM;
-                vec diffA = maxAvoidM - minAvoidM;
                 
-                sycl::queue queue;
                 {
                     // Create a SYCL buffer to store the space
                     sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
@@ -4783,6 +4824,7 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                 max_diff = max(abs(first1-first0));
                 min_diff = min(abs(first1-first0));
             }
+            }
             cout << endl;
             cout << "control policy for lower bound found, finding upper bound." << endl;
             
@@ -4810,6 +4852,10 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
             
             
             cout << "Matrix Fixed" << endl;
+            {
+                mat diffT = tempTmax-tempTmin;
+                vec diffA = tempATmax - tempATmin;
+            sycl::queue Q;
             while (max_diff > epsilon) {
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
@@ -4817,11 +4863,8 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                 
                 std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second1, true);
 
-                mat diffT = tempTmax-tempTmin;
-                vec diffA = tempATmax - tempATmin;
                 
                 
-                sycl::queue Q;
                 {
                     // Create a SYCL buffer to store the space
                     sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
@@ -4908,6 +4951,7 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                 max_diff = max(abs(second1-second0));
                 min_diff = min(abs(second1-second0));
             }
+            }
             cout << endl;
             cout << "Upper bound found." << endl;
             
@@ -4930,16 +4974,17 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
             double min_diff = 1.0;
             size_t converge = 0;
             cout << "first loop iterations: " << endl;
+            {
+                mat diffT = maxTransitionM-minTransitionM;
+                vec diffA = maxAvoidM - minAvoidM;
+            sycl::queue queue;
             while (max_diff > epsilon) {
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
                 
                 std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first1, true);
 
-                mat diffT = maxTransitionM-minTransitionM;
-                vec diffA = maxAvoidM - minAvoidM;
                 
-                sycl::queue queue;
                 {
                     // Create a SYCL buffer to store the space
                     sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
@@ -5041,6 +5086,7 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                 max_diff = max(abs(first1-first0));
                 min_diff = min(abs(first1-first0));
             }
+            }
             cout << endl;
             cout << "control policy for lower bound found, finding upper bound." << endl;
             
@@ -5066,6 +5112,10 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
             }
             
             cout << "Matrix Fixed" << endl;
+            {
+                mat diffT = tempTmax-tempTmin;
+                vec diffA = tempATmax - tempATmin;
+            sycl::queue Q;
             while (max_diff > epsilon) {
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
@@ -5073,11 +5123,8 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                 
                 std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second1, false);
 
-                mat diffT = tempTmax-tempTmin;
-                vec diffA = tempATmax - tempATmin;
                 
                 
-                sycl::queue Q;
                 {
                     // Create a SYCL buffer to store the space
                     sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
@@ -5166,6 +5213,7 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                 max_diff = max(abs(second1-second0));
                 min_diff = min(abs(second1-second0));
             }
+            }
             cout << endl;
             cout << "Upper bound found." << endl;
             
@@ -5188,16 +5236,17 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
             double min_diff = 1.0;
             size_t converge = 0;
             cout << "first loop iterations: " << endl;
+            {
+                mat diffT = maxTransitionM-minTransitionM;
+                vec diffA = maxAvoidM - minAvoidM;
+            sycl::queue queue;
             while (max_diff > epsilon) {
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
                 
                 std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first1, false);
 
-                mat diffT = maxTransitionM-minTransitionM;
-                vec diffA = maxAvoidM - minAvoidM;
                 
-                sycl::queue queue;
                 {
                     // Create a SYCL buffer to store the space
                     sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
@@ -5292,6 +5341,7 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                 max_diff = max(abs(first1-first0));
                 min_diff = min(abs(first1-first0));
             }
+            }
             cout << endl;
             cout << "control policy for lower bound found, finding upper bound." << endl;
             
@@ -5303,16 +5353,17 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
             min_diff = 1.0;
             converge = 0;
             cout << "second loop iterations: " << endl;
+            {
+                mat diffT = maxTransitionM-minTransitionM;
+                vec diffA = maxAvoidM - minAvoidM;
+            sycl::queue queue;
             while (max_diff > epsilon) {
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
                 
                 std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second1, true);
 
-                mat diffT = maxTransitionM-minTransitionM;
-                vec diffA = maxAvoidM - minAvoidM;
                 
-                sycl::queue queue;
                 {
                     // Create a SYCL buffer to store the space
                     sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
@@ -5407,6 +5458,7 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                 max_diff = max(abs(second1-second0));
                 min_diff = min(abs(second1-second0));
             }
+            }
             cout << endl;
             cout << "Upper bound found." << endl;
             
@@ -5425,16 +5477,17 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
             double min_diff = 1.0;
             size_t converge = 0;
             cout << "first loop iterations: " << endl;
+            {
+                mat diffT = maxTransitionM-minTransitionM;
+                vec diffA = maxAvoidM - minAvoidM;
+            sycl::queue queue;
             while (max_diff > epsilon) {
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
                 
                 std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first1, true);
 
-                mat diffT = maxTransitionM-minTransitionM;
-                vec diffA = maxAvoidM - minAvoidM;
                 
-                sycl::queue queue;
                 {
                     // Create a SYCL buffer to store the space
                     sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
@@ -5529,6 +5582,7 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                 max_diff = max(abs(first1-first0));
                 min_diff = min(abs(first1-first0));
             }
+            }
             cout << endl;
             cout << "control policy for lower bound found, finding upper bound." << endl;
             
@@ -5540,16 +5594,17 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
             min_diff = 1.0;
             converge = 0;
             cout << "second loop iterations: " << endl;
+            {
+                mat diffT = maxTransitionM-minTransitionM;
+                vec diffA = maxAvoidM - minAvoidM;
+            sycl::queue queue;
             while (max_diff > epsilon) {
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
                 
                 std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second1, false);
 
-                mat diffT = maxTransitionM-minTransitionM;
-                vec diffA = maxAvoidM - minAvoidM;
                 
-                sycl::queue queue;
                 {
                     // Create a SYCL buffer to store the space
                     sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
@@ -5644,6 +5699,7 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                 max_diff = max(abs(second1-second0));
                 min_diff = min(abs(second1-second0));
             }
+            }
             cout << endl;
             cout << "Upper bound found." << endl;
             
@@ -5667,16 +5723,17 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
             double min_diff = 1.0;
             size_t converge = 0;
             cout << "first loop iterations: " << endl;
+            {
+                mat diffT = maxTransitionM-minTransitionM;
+                vec diffA = maxAvoidM - minAvoidM;
+            sycl::queue queue;
             while (max_diff > epsilon) {
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
                 
                 std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first1, false);
 
-                mat diffT = maxTransitionM-minTransitionM;
-                vec diffA = maxAvoidM - minAvoidM;
                 
-                sycl::queue queue;
                 {
                     // Create a SYCL buffer to store the space
                     sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
@@ -5782,6 +5839,7 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                 max_diff = max(abs(first1-first0));
                 min_diff = min(abs(first1-first0));
             }
+            }
             cout << endl;
             cout << "control policy for lower bound found, finding upper bound." << endl;
             
@@ -5809,6 +5867,10 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
             }
            
             cout << "Matrix Fixed" << endl;
+            {
+                mat diffT = tempTmax-tempTmin;
+                vec diffA = tempATmax - tempATmin;
+            sycl::queue Q;
             while (max_diff > epsilon) {
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
@@ -5816,11 +5878,8 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                 
                 std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second1, true);
 
-                mat diffT = tempTmax-tempTmin;
-                vec diffA = tempATmax - tempATmin;
                 
                 
-                sycl::queue Q;
                 {
                     // Create a SYCL buffer to store the space
                     sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
@@ -5914,6 +5973,7 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                 max_diff = max(abs(second1-second0));
                 min_diff = min(abs(second1-second0));
             }
+            }
             cout << endl;
             cout << "Upper bound found." << endl;
             
@@ -5938,16 +5998,17 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
             double min_diff = 1.0;
             size_t converge = 0;
             cout << "first loop iterations: " << endl;
+            {
+                mat diffT = maxTransitionM-minTransitionM;
+                vec diffA = maxAvoidM - minAvoidM;
+            sycl::queue queue;
             while (max_diff > epsilon) {
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
                 
                 std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first1, true);
 
-                mat diffT = maxTransitionM-minTransitionM;
-                vec diffA = maxAvoidM - minAvoidM;
                 
-                sycl::queue queue;
                 {
                     // Create a SYCL buffer to store the space
                     sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
@@ -6057,6 +6118,7 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                 max_diff = max(abs(first1-first0));
                 min_diff = min(abs(first1-first0));
             }
+            }
             cout << endl;
             cout << "control policy for lower bound found, finding upper bound." << endl;
             
@@ -6084,17 +6146,18 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
             }
             
             cout << "Matrix Fixed" << endl;
+            {
+                mat diffT = tempTmax-tempTmin;
+                vec diffA = tempATmax - tempATmin;
+            sycl::queue Q;
             while (max_diff > epsilon) {
                 converge++;
                 cout << "Max: " << max_diff << ", Min: " << min_diff << endl;
 
                 std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second1, false);
 
-                mat diffT = tempTmax-tempTmin;
-                vec diffA = tempATmax - tempATmin;
                 
                 
-                sycl::queue Q;
                 {
                     // Create a SYCL buffer to store the space
                     sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
@@ -6185,6 +6248,7 @@ void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
                 
                 max_diff = max(abs(second1-second0));
                 min_diff = min(abs(second1-second0));
+            }
             }
             cout << endl;
             cout << "Upper bound found." << endl;

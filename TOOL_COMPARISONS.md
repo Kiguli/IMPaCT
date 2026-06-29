@@ -107,15 +107,22 @@ non-trivial (e.g. BA safety init = **0.4533244** in all three tools).
 
 ### 2.3 Solve-time comparison (seconds)
 
-| Benchmark | IMPaCT abstraction | IMPaCT robust VI | IntervalMDP VI | Storm VI | Storm build |
+IMPaCT robust-VI times below are **after the ISSUE-0017 fix** (loop-invariant
+hoisting of the per-sweep `diff`-matrix recomputation and `sycl::queue` construction
+out of the value-iteration loops); the pre-fix VP/PD numbers are shown for contrast.
+
+| Benchmark | IMPaCT abstraction | IMPaCT robust VI (pre-fix) | IntervalMDP VI | Storm VI | Storm build |
 |---|---|---|---|---|---|
 | AS | 27.05 | 4.32 | 0.40 | 0.21 | 0.50 |
 | BA | 7.58 | **0.27** | 1.14 | 5.86 | 6.05 |
-| VP | 1.91 | **214.4** ⚠ | 0.61 | 1.35 | 0.37 |
+| VP | 1.91 | **34.6** (was 214.4) | 0.61 | 1.35 | 0.37 |
 | IC_reach | 1.75 | 0.06 | 0.38 | 0.03 | 0.05 |
 | IC_safe | 2.67 | 0.47 | 0.42 | 0.09 | 0.18 |
-| PD_p1 | 37.06 | 6.47 | 1.33 | 8.31 | 7.26 |
-| PD_p3 | ~37 | **killed >700s** ⚠ | 1.40 | 8.30 | 7.27 |
+| PD_p1 | 37.06 | **1.29** (was 6.47) | 1.33 | 8.31 | 7.26 |
+| PD_p3 | ~37 | did-not-converge¹ | 1.40 | 8.30 | 7.27 |
+
+¹ PD_p3's SYCL robust VI does not terminate — but this is the interval-iteration
+nature-trap (ISSUE-0003), *not* the ISSUE-0017 performance issue; see §5.
 
 Reading the times:
 
@@ -127,8 +134,11 @@ Reading the times:
 * **IMPaCT's finite-horizon robust VI is competitive or faster** (BA 0.27 s,
   IC 0.06–0.47 s) than the peers — partly because Storm pays a model-construction
   cost (5–8 s) to ingest the dense DRN.
-* **IMPaCT's infinite-horizon VI is much slower on strongly-recurrent models**
-  (VP 214 s, PD_p3 did not finish) — see §5 and ISSUE-0017.
+* **IMPaCT's infinite-horizon VI, after the ISSUE-0017 fix, is 5–6× faster**
+  (VP 214 s → 34.6 s; PD_p1 6.5 s → 1.29 s, now on par with IntervalMDP.jl). The
+  remaining VP gap vs the peers is (a) the per-sweep SYCL buffer construction and
+  (b) IMPaCT using *sound interval iteration* (more rigorous, slower-converging) vs
+  the peers' residual-stopping VI — see §5 / ISSUE-0017.
 
 ---
 
@@ -219,13 +229,25 @@ model.** The findings are filed as issues.
    bug. (For an apples-to-apples optimistic comparison one must synthesise IMPaCT's
    *optimistic* controller, `IMDP_lower = false`.)
 
-2. **Infinite-horizon robust VI converges slowly in IMPaCT vs the peers.** VP needs
-   **6119** interval-iteration sweeps / 214 s where IntervalMDP.jl converges in 31
-   residual sweeps / 0.6 s, and PD_p3 did not finish in 12 min. IMPaCT does *sound
-   interval iteration* (iterate from 0 and from 1, stop when the gap < ε) and
-   re-creates SYCL buffers every sweep; the peers use residual-stopping VI. Same
-   value, very different cost on weakly-contracting (recurrent) models. Filed as
-   **ISSUE-0017**, an instance of the pre-existing **ISSUE-0010**.
+2. **Infinite-horizon robust VI was slow in IMPaCT — now fixed (5–6×).** The
+   value-iteration loops recomputed loop-INVARIANT work every sweep: a full
+   `(state*input) x state` `diff` matrix (`maxTransitionM - minTransitionM`, a ~1.1 GB
+   allocation per sweep for the large with-input cases) and a fresh `sycl::queue`.
+   Hoisting both out of the loops (loop-invariant code motion, values bit-for-bit
+   identical) cut VP from 214 s → **34.6 s** and PD_p1 from 6.5 s → **1.29 s** (now on
+   par with IntervalMDP.jl). The residual VP gap vs the peers is the per-sweep SYCL
+   buffer construction plus IMPaCT's use of *sound interval iteration* (iterate from 0
+   and from 1, stop when the gap < ε — more rigorous, slower-converging) where the
+   peers use residual-stopping VI. **ISSUE-0017** (per-sweep waste resolved; deeper
+   buffer-hoist / OVI tracked as the remainder, an instance of **ISSUE-0010**).
+
+   *Separately,* **PD_p3's SYCL VI does not converge at all** (gap stuck at 0.9997
+   after 15 380 sweeps). This is NOT the performance issue: it is the
+   interval-iteration nature-trap (**ISSUE-0003**) — with an end component the from-1
+   iterate converges to the greatest fixed point, the from-0 iterate to the (correct,
+   smaller) least fixed point, so the gap never closes. IMPaCT's v2 light-weight
+   `solve::maxReach` (OVI + MEC handling) returns the correct value 1.0 (= IntervalMDP
+   / Storm); porting that MEC-collapse to the SYCL path is the PD_p3 fix.
 
 3. **Robust ω-regular is an IMPaCT-only capability.** Neither Storm 1.13.0 (*"LTL
    with intervals … not implemented"*) nor IntervalMDP.jl 0.6.0 solves Büchi /
@@ -264,10 +286,14 @@ Storm and IntervalMDP.jl (BA, IC_safe finite-safety values match to 1e-6).
 * **IMPaCT's niche is confirmed.** It is the only tool here that (a) builds the IMDP
   from continuous stochastic dynamics, and (b) solves robust ω-regular specifications
   on interval MDPs.
-* **The peers are faster solvers on the abstracted IMDP**, especially for
-  infinite-horizon objectives — IMPaCT's sound interval iteration with per-sweep SYCL
-  overhead is the main performance gap (ISSUE-0017 / ISSUE-0010). IMPaCT's
-  finite-horizon VI is competitive.
+* **Solve times are now close.** After the ISSUE-0017 fix (hoisting per-sweep
+  loop-invariant work out of the infinite-horizon VI loops), IMPaCT's robust VI is
+  5–6× faster (PD_p1 1.29 s ≈ IntervalMDP.jl 1.33 s; VP 34.6 s, down from 214 s) and
+  its finite-horizon VI is already competitive. The residual VP gap is per-sweep SYCL
+  buffer construction + IMPaCT's *sound* interval iteration vs the peers'
+  residual-stopping VI. One convergence case remains (PD_p3) — the interval-iteration
+  nature-trap (ISSUE-0003), fixed in IMPaCT's v2 light-weight solver but not yet ported
+  to the SYCL path.
 * **Scalability** is bounded by the *dense* abstraction, not the solve: the big
   machine clears the historical 4 GB OOM (ISSUE-0006) for PR_minimal/AV_minimal but
   the 6-D LM case still needs the v2 sparse representation.

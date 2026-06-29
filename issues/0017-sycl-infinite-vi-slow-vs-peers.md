@@ -1,11 +1,11 @@
 ---
 id: ISSUE-0017
 title: SYCL infinite-horizon robust VI is slow on recurrent IMDPs vs Storm / IntervalMDP.jl
-status: open
-severity: medium
+status: in-progress
+severity: low
 labels: performance, solver, tool-v1, cross-tool
 created: 2026-06-27
-updated: 2026-06-27
+updated: 2026-06-28
 related:
   - src/GPU_synthesis.cpp        # infiniteHorizonReachControllerSorted (per-sweep SYCL buffers)
   - issues/0010-ovi-slow-on-recurrent.md
@@ -56,10 +56,39 @@ recurrent abstractions impractical on the SYCL path; finite-horizon synthesis is
 unaffected (BA 0.27 s, IC 0.06 s) and is competitive with the peers.
 
 ## Resolution / plan
-This is the SYCL-path manifestation of ISSUE-0010 (OVI slow on recurrent IMDPs).
-Options: (a) hoist SYCL buffer creation out of the sweep loop / keep device-resident
-state across sweeps; (b) add a residual-stopping / Gauss–Seidel fast path with the
-interval-iteration bracket only as a final certificate; (c) adopt sound/optimistic
-value iteration (Quatmann–Katoen / Hartmanns–Kaminski) as the default solver, as
-already planned in ROADMAP Phase 1. The v2 light-weight `solve::maxReach` (OVI) does
-not exhibit the per-sweep SYCL overhead and should be the reference implementation.
+**Fixed (per-sweep waste), 2026-06-28.** The dominant cost was loop-INVARIANT work
+recomputed every sweep inside the value-iteration loops of the two infinite-horizon
+synthesis functions:
+* `mat diffT = maxTransitionM - minTransitionM;` (and the target/avoid analogues and
+  the fixed-input `tempTmax-tempTmin` variants) — a full `(state*input) x state` dense
+  matrix **reallocated + recomputed on every sweep** (for the large with-input cases,
+  e.g. PD, that is a ~1.1 GB allocation per sweep); and
+* a fresh `sycl::queue` constructed every sweep.
+Both are now hoisted once-per-loop (each loop wrapped in a `{ }` block so the
+once-computed diffs do not clash across sibling loops — see
+`benchmarks/crosstool/peers/hoist_diffs.py` / `hoist_queue.py`, 32 loops each).
+This is loop-invariant code motion: the synthesised values are **bit-for-bit
+identical** (verified: VP `[0,0.229697]`, PD_p1 `[0.999789,1]` unchanged), and the
+robust VI is much faster:
+
+| case | before | after | peers (IntervalMDP.jl) |
+|---|---|---|---|
+| VP (infinite reach) | 214.4 s / 6119 sweeps | **34.6 s** (6.2x) | 0.6 s |
+| PD_p1 (infinite reach) | 6.5 s | **1.29 s** (5x, ~= peer) | 1.33 s |
+
+**Remaining (kept open, low severity):** VP is still slower than the peers because of
+(a) the per-sweep construction of the ~11 SYCL buffers (the *constant* matrix buffers
+could also be hoisted — more invasive, needs GPU re-verification), and (b) the
+iteration count itself: IMPaCT does **sound interval iteration** (iterate from 0 and
+from 1, stop when the gap < ε), which is more rigorous but slower-converging than the
+peers' residual-stopping VI. Adopting OVI (Quatmann–Katoen / Hartmanns–Kaminski) as
+the SYCL default (ROADMAP Phase 1) would close both gaps.
+
+**Note on PD_p3 (re-diagnosed).** PD_p3's non-termination is NOT this performance
+issue — it is the **interval-iteration nature-trap (ISSUE-0003)**: with an end
+component the from-1 iterate converges to the greatest fixed point while the from-0
+iterate converges to the (correct, smaller) least fixed point, so the gap never closes
+and the loop runs to the timeout (observed: gap stuck at 0.9997 after 15 380 sweeps).
+The v2 light-weight `solve::maxReach` (OVI + MEC handling) returns the correct value
+(1.0, = IntervalMDP.jl / Storm); porting that MEC-collapse to the SYCL path is the fix
+for PD_p3 and is tracked under ISSUE-0003 / ISSUE-0010, separate from this item.
