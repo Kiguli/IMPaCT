@@ -2458,27 +2458,28 @@ void IMDP::finiteHorizonReachControllerSorted(bool IMDP_lower, size_t timeHorizo
             mat firstnew0(state_space_size, 1, fill::zeros);
             size_t k = 0;
             cout << "first loop iterations: " << endl;
-            while (k < timeHorizon) {
-                cout << "." << flush;
-                
-                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first0, true);
-
+            {
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffR = maxTargetM - minTargetM;
                 vec diffA = maxAvoidM - minAvoidM;
-                
                 sycl::queue queue;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
-                    sycl::buffer<double> cdfBuffer0(firstnew0.memptr(),firstnew0.n_rows);
-                    sycl::buffer<double> buff0(first0.memptr(),first0.n_rows);
                     sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
                     sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
                     sycl::buffer<double> bufminTT(minTargetM.memptr(),minTargetM.n_rows);
                     sycl::buffer<double> bufdTT(diffR.memptr(),diffR.n_rows);
                     sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
                     sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
+            while (k < timeHorizon) {
+                cout << "." << flush;
+                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first0, true);
+
+                
+                {
+                    // Create a SYCL buffer to store the space
+                    sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
+                    sycl::buffer<double> cdfBuffer0(firstnew0.memptr(),firstnew0.n_rows);
+                    sycl::buffer<double> buff0(first0.memptr(),first0.n_rows);
                     
 
                     // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
@@ -2546,6 +2547,7 @@ void IMDP::finiteHorizonReachControllerSorted(bool IMDP_lower, size_t timeHorizo
                 first0 = firstnew0;
                 
             }
+            }
             cout << endl;
             cout << "control policy for lower bound found, finding upper bound." << endl;
             
@@ -2573,27 +2575,28 @@ void IMDP::finiteHorizonReachControllerSorted(bool IMDP_lower, size_t timeHorizo
             
             
             cout << "Matrix Fixed" << endl;
-            while (k < timeHorizon) {
-                cout << "." << flush;
-                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second0, false);
-
+            {
                 mat diffT = tempTmax-tempTmin;
                 vec diffR = tempTTmax - tempTTmin;
                 vec diffA = tempATmax - tempATmin;
-                
-                
                 sycl::queue Q;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
-                    sycl::buffer<double> cdfBuffer0(secondnew0.memptr(),secondnew0.n_rows);
-                    sycl::buffer<double> bufs0(second0.memptr(),second0.n_rows);
                     sycl::buffer<double> bufminT(tempTmin.memptr(),tempTmin.n_rows*tempTmin.n_cols);
                     sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
                     sycl::buffer<double> bufminTT(tempTTmin.memptr(),tempTTmin.n_rows);
                     sycl::buffer<double> bufdTT(diffR.memptr(),diffR.n_rows);
                     sycl::buffer<double> bufminAT(tempATmin.memptr(),tempATmin.n_rows);
                     sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
+            while (k < timeHorizon) {
+                cout << "." << flush;
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second0, false);
+
+                
+                
+                {
+                    // Create a SYCL buffer to store the space
+                    sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
+                    sycl::buffer<double> cdfBuffer0(secondnew0.memptr(),secondnew0.n_rows);
+                    sycl::buffer<double> bufs0(second0.memptr(),second0.n_rows);
                     
                     // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                     Q.submit([&](sycl::handler& cgh) {
@@ -2657,6 +2660,7 @@ void IMDP::finiteHorizonReachControllerSorted(bool IMDP_lower, size_t timeHorizo
                 second0 = secondnew0;
                 
             }
+            }
             cout << endl;
             cout << "Upper bound found." << endl;
             
@@ -2672,27 +2676,28 @@ void IMDP::finiteHorizonReachControllerSorted(bool IMDP_lower, size_t timeHorizo
             
             size_t k = 0;
             cout << "first loop iterations: " << endl;
-            while (k < timeHorizon) {
-            cout << "." << flush;
-                
-                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first0, false);
-
+            {
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffR = maxTargetM - minTargetM;
                 vec diffA = maxAvoidM - minAvoidM;
-
                 sycl::queue queue;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
-                    sycl::buffer<double> cdfBuffer0(firstnew0.memptr(),firstnew0.n_rows);
-                    sycl::buffer<double> buff0(first0.memptr(),first0.n_rows);
                     sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
                     sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
                     sycl::buffer<double> bufminTT(minTargetM.memptr(),minTargetM.n_rows);
                     sycl::buffer<double> bufdTT(diffR.memptr(),diffR.n_rows);
                     sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
                     sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
+            while (k < timeHorizon) {
+            cout << "." << flush;
+                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first0, false);
+
+
+                {
+                    // Create a SYCL buffer to store the space
+                    sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
+                    sycl::buffer<double> cdfBuffer0(firstnew0.memptr(),firstnew0.n_rows);
+                    sycl::buffer<double> buff0(first0.memptr(),first0.n_rows);
                     sycl::buffer<double> bufTargetM(TargetM.memptr(), 0);
                     sycl::buffer<double> bufAvoidM(AvoidM.memptr(), 0);
                     sycl::buffer<double> bufTransitionM(TransitionM.memptr(), 0);
@@ -2761,6 +2766,7 @@ void IMDP::finiteHorizonReachControllerSorted(bool IMDP_lower, size_t timeHorizo
                 k++;
                 first0 = firstnew0;
             }
+            }
             cout << endl;
             cout << "control policy for lower bound found, finding upper bound." << endl;
             
@@ -2787,29 +2793,30 @@ void IMDP::finiteHorizonReachControllerSorted(bool IMDP_lower, size_t timeHorizo
                 tempATmax = maxAvoidM;
 
             cout << "Matrix Fixed" << endl;
-            while (k < timeHorizon) {
-                cout << "." << flush;
-                
-                
-                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second0, true);
-
+            {
                 mat diffT = tempTmax-tempTmin;
                 vec diffR = tempTTmax - tempTTmin;
                 vec diffA = tempATmax - tempATmin;
-                
-                
                 sycl::queue Q;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
-                    sycl::buffer<double> cdfBuffer0(secondnew0.memptr(),secondnew0.n_rows);
-                    sycl::buffer<double> bufs0(second0.memptr(),second0.n_rows);
                     sycl::buffer<double> bufminT(tempTmin.memptr(),tempTmin.n_rows*tempTmin.n_cols);
                     sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
                     sycl::buffer<double> bufminTT(tempTTmin.memptr(),tempTTmin.n_rows);
                     sycl::buffer<double> bufdTT(diffR.memptr(),diffR.n_rows);
                     sycl::buffer<double> bufminAT(tempATmin.memptr(),tempATmin.n_rows);
                     sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
+            while (k < timeHorizon) {
+                cout << "." << flush;
+                
+                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second0, true);
+
+                
+                
+                {
+                    // Create a SYCL buffer to store the space
+                    sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
+                    sycl::buffer<double> cdfBuffer0(secondnew0.memptr(),secondnew0.n_rows);
+                    sycl::buffer<double> bufs0(second0.memptr(),second0.n_rows);
                     
                     // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                     Q.submit([&](sycl::handler& cgh) {
@@ -2877,6 +2884,7 @@ void IMDP::finiteHorizonReachControllerSorted(bool IMDP_lower, size_t timeHorizo
                 second0 = secondnew0;
                 
             }
+            }
             cout << endl;
             cout << "Upper bound found." << endl;
             
@@ -2892,27 +2900,28 @@ void IMDP::finiteHorizonReachControllerSorted(bool IMDP_lower, size_t timeHorizo
             
             size_t k = 0;
             cout << "first loop iterations: " << endl;
-            while (k < timeHorizon) {
-                cout << "." << flush;
-                
-                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first0, true);
-
+            {
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffR = maxTargetM - minTargetM;
                 vec diffA = maxAvoidM - minAvoidM;
-
                 sycl::queue queue;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
-                    sycl::buffer<double> cdfBuffer0(firstnew0.memptr(),firstnew0.n_rows);
-                    sycl::buffer<double> buff0(first0.memptr(),first0.n_rows);
                     sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
                     sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
                     sycl::buffer<double> bufminTT(minTargetM.memptr(),minTargetM.n_rows);
                     sycl::buffer<double> bufdTT(diffR.memptr(),diffR.n_rows);
                     sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
                     sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
+            while (k < timeHorizon) {
+                cout << "." << flush;
+                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first0, true);
+
+
+                {
+                    // Create a SYCL buffer to store the space
+                    sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
+                    sycl::buffer<double> cdfBuffer0(firstnew0.memptr(),firstnew0.n_rows);
+                    sycl::buffer<double> buff0(first0.memptr(),first0.n_rows);
 
                     // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                     queue.submit([&](sycl::handler& cgh) {
@@ -2984,6 +2993,7 @@ void IMDP::finiteHorizonReachControllerSorted(bool IMDP_lower, size_t timeHorizo
                 first0 = conv_to< colvec >::from(min(firstnew0,1)); 
                 k++;
             }
+            }
             cout << endl;
             cout << "control policy for lower bound found, finding upper bound." << endl;
             
@@ -2991,27 +3001,28 @@ void IMDP::finiteHorizonReachControllerSorted(bool IMDP_lower, size_t timeHorizo
             mat secondnew0(state_space_size*disturb_space_size, 1, fill::zeros);
             k = 0;
             cout << "second loop iterations: " << endl;
-            while (k < timeHorizon) {
-                cout << "." << flush;
-                
-                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second0, false);
-
+            {
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffR = maxTargetM - minTargetM;
                 vec diffA = maxAvoidM - minAvoidM;
-
                 sycl::queue queue;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
-                    sycl::buffer<double> cdfBuffer0(secondnew0.memptr(),secondnew0.n_rows);
-                    sycl::buffer<double> buff0(second0.memptr(),second0.n_rows);
                     sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
                     sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
                     sycl::buffer<double> bufminTT(minTargetM.memptr(),minTargetM.n_rows);
                     sycl::buffer<double> bufdTT(diffR.memptr(),diffR.n_rows);
                     sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
                     sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
+            while (k < timeHorizon) {
+                cout << "." << flush;
+                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second0, false);
+
+
+                {
+                    // Create a SYCL buffer to store the space
+                    sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
+                    sycl::buffer<double> cdfBuffer0(secondnew0.memptr(),secondnew0.n_rows);
+                    sycl::buffer<double> buff0(second0.memptr(),second0.n_rows);
                     
                     // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                     queue.submit([&](sycl::handler& cgh) {
@@ -3084,6 +3095,7 @@ void IMDP::finiteHorizonReachControllerSorted(bool IMDP_lower, size_t timeHorizo
                 
                 k++;
             }
+            }
             cout << endl;
             cout << "Upper bound found." << endl;
             
@@ -3098,27 +3110,28 @@ void IMDP::finiteHorizonReachControllerSorted(bool IMDP_lower, size_t timeHorizo
             
             size_t k = 0;
             cout << "first loop iterations: " << endl;
-            while (k<timeHorizon) {
-                cout << "." << flush;
-                
-                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first0, false);
-
+            {
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffR = maxTargetM - minTargetM;
                 vec diffA = maxAvoidM - minAvoidM;
-
                 sycl::queue queue;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
-                    sycl::buffer<double> cdfBuffer0(firstnew0.memptr(),firstnew0.n_rows);
-                    sycl::buffer<double> buff0(first0.memptr(),first0.n_rows);
                     sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
                     sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
                     sycl::buffer<double> bufminTT(minTargetM.memptr(),minTargetM.n_rows);
                     sycl::buffer<double> bufdTT(diffR.memptr(),diffR.n_rows);
                     sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
                     sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
+            while (k<timeHorizon) {
+                cout << "." << flush;
+                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first0, false);
+
+
+                {
+                    // Create a SYCL buffer to store the space
+                    sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
+                    sycl::buffer<double> cdfBuffer0(firstnew0.memptr(),firstnew0.n_rows);
+                    sycl::buffer<double> buff0(first0.memptr(),first0.n_rows);
                     
                     // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                     queue.submit([&](sycl::handler& cgh) {
@@ -3183,6 +3196,7 @@ void IMDP::finiteHorizonReachControllerSorted(bool IMDP_lower, size_t timeHorizo
                 first0 = conv_to< colvec >::from(min(firstnew0,1));
                 k++;
             }
+            }
             cout << endl;
             cout << "control policy for lower bound found, finding upper bound." << endl;
             
@@ -3190,27 +3204,28 @@ void IMDP::finiteHorizonReachControllerSorted(bool IMDP_lower, size_t timeHorizo
             mat secondnew0(state_space_size*disturb_space_size, 1, fill::zeros);
             k=0;
             cout << "second loop iterations: " << endl;
-            while (k<timeHorizon) {
-                cout << "." << flush;
-                
-                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second0, true);
-
+            {
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffR = maxTargetM - minTargetM;
                 vec diffA = maxAvoidM - minAvoidM;
-                
                 sycl::queue queue;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
-                    sycl::buffer<double> cdfBuffer0(secondnew0.memptr(),secondnew0.n_rows);
-                    sycl::buffer<double> buff0(second0.memptr(),second0.n_rows);
                     sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
                     sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
                     sycl::buffer<double> bufminTT(minTargetM.memptr(),minTargetM.n_rows);
                     sycl::buffer<double> bufdTT(diffR.memptr(),diffR.n_rows);
                     sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
                     sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
+            while (k<timeHorizon) {
+                cout << "." << flush;
+                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second0, true);
+
+                
+                {
+                    // Create a SYCL buffer to store the space
+                    sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
+                    sycl::buffer<double> cdfBuffer0(secondnew0.memptr(),secondnew0.n_rows);
+                    sycl::buffer<double> buff0(second0.memptr(),second0.n_rows);
                     
                     // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                     queue.submit([&](sycl::handler& cgh) {
@@ -3280,6 +3295,7 @@ void IMDP::finiteHorizonReachControllerSorted(bool IMDP_lower, size_t timeHorizo
                 second0 = conv_to< colvec >::from(min(secondnew0,1));
                 k++;
             }
+            }
             cout << endl;
             cout << "Upper bound found." << endl;
             
@@ -3298,27 +3314,28 @@ void IMDP::finiteHorizonReachControllerSorted(bool IMDP_lower, size_t timeHorizo
             
             size_t k = 0;
             cout << "first loop iterations: " << endl;
-            while (k < timeHorizon) {
-            cout << "." << flush;
-                
-                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first0, true);
-
+            {
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffR = maxTargetM - minTargetM;
                 vec diffA = maxAvoidM - minAvoidM;
-
                 sycl::queue queue;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
-                    sycl::buffer<double> cdfBuffer0(firstnew0.memptr(),firstnew0.n_rows);
-                    sycl::buffer<double> buff0(first0.memptr(),first0.n_rows);
                     sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
                     sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
                     sycl::buffer<double> bufminTT(minTargetM.memptr(),minTargetM.n_rows);
                     sycl::buffer<double> bufdTT(diffR.memptr(),diffR.n_rows);
                     sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
                     sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
+            while (k < timeHorizon) {
+            cout << "." << flush;
+                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first0, true);
+
+
+                {
+                    // Create a SYCL buffer to store the space
+                    sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
+                    sycl::buffer<double> cdfBuffer0(firstnew0.memptr(),firstnew0.n_rows);
+                    sycl::buffer<double> buff0(first0.memptr(),first0.n_rows);
 
 
                     // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
@@ -3396,6 +3413,7 @@ void IMDP::finiteHorizonReachControllerSorted(bool IMDP_lower, size_t timeHorizo
                     firstnew0.row(i).max(U_pos[i]);
                 }
             }
+            }
             cout << endl;
             cout << "control policy for lower bound found, finding upper bound." << endl;
             
@@ -3424,29 +3442,30 @@ void IMDP::finiteHorizonReachControllerSorted(bool IMDP_lower, size_t timeHorizo
             
            
             cout << "Matrix Fixed" << endl;
-            while (k < timeHorizon) {
-                cout << "." << flush;
-                
-                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second0, false);
-
-                //Get difference between max and min for incrementing values
+            {
                 mat diffT = tempTmax-tempTmin;
                 vec diffR = tempTTmax - tempTTmin;
                 vec diffA = tempATmax - tempATmin;
-
-
                 sycl::queue Q;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
-                    sycl::buffer<double> cdfBuffer0(secondnew0.memptr(),secondnew0.n_rows);
-                    sycl::buffer<double> bufs0(second0.memptr(),second0.n_rows);
                     sycl::buffer<double> bufminT(tempTmin.memptr(),tempTmin.n_rows*tempTmin.n_cols);
                     sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
                     sycl::buffer<double> bufminTT(tempTTmin.memptr(),tempTTmin.n_rows);
                     sycl::buffer<double> bufdTT(diffR.memptr(),diffR.n_rows);
                     sycl::buffer<double> bufminAT(tempATmin.memptr(),tempATmin.n_rows);
                     sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
+            while (k < timeHorizon) {
+                cout << "." << flush;
+                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second0, false);
+
+                //Get difference between max and min for incrementing values
+
+
+                {
+                    // Create a SYCL buffer to store the space
+                    sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
+                    sycl::buffer<double> cdfBuffer0(secondnew0.memptr(),secondnew0.n_rows);
+                    sycl::buffer<double> bufs0(second0.memptr(),second0.n_rows);
 
                     // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                     Q.submit([&](sycl::handler& cgh) {
@@ -3508,6 +3527,7 @@ void IMDP::finiteHorizonReachControllerSorted(bool IMDP_lower, size_t timeHorizo
                 k++;
                 second0 = secondnew0;
             }
+            }
             cout << endl;
             cout << "Upper bound found." << endl;
             
@@ -3526,28 +3546,29 @@ void IMDP::finiteHorizonReachControllerSorted(bool IMDP_lower, size_t timeHorizo
             
             size_t k = 0;
             cout << "first loop iterations: " << endl;
-            while (k < timeHorizon) {
-                cout << "." << flush;
-                
-                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first0, false);
-
-                //Get difference between max and min for incrementing values
+            {
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffR = maxTargetM - minTargetM;
                 vec diffA = maxAvoidM - minAvoidM;
-
                 sycl::queue queue;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
-                    sycl::buffer<double> cdfBuffer0(firstnew0.memptr(),firstnew0.n_rows);
-                    sycl::buffer<double> buff0(first0.memptr(),first0.n_rows);
                     sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
                     sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
                     sycl::buffer<double> bufminTT(minTargetM.memptr(),minTargetM.n_rows);
                     sycl::buffer<double> bufdTT(diffR.memptr(),diffR.n_rows);
                     sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
                     sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
+            while (k < timeHorizon) {
+                cout << "." << flush;
+                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first0, false);
+
+                //Get difference between max and min for incrementing values
+
+                {
+                    // Create a SYCL buffer to store the space
+                    sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
+                    sycl::buffer<double> cdfBuffer0(firstnew0.memptr(),firstnew0.n_rows);
+                    sycl::buffer<double> buff0(first0.memptr(),first0.n_rows);
 
 
                     // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
@@ -3622,6 +3643,7 @@ void IMDP::finiteHorizonReachControllerSorted(bool IMDP_lower, size_t timeHorizo
                 }
                 
             }
+            }
             cout << endl;
             cout << "control policy for lower bound found, finding upper bound." << endl;
             
@@ -3649,29 +3671,30 @@ void IMDP::finiteHorizonReachControllerSorted(bool IMDP_lower, size_t timeHorizo
             
             
             cout << "Matrix Fixed" << endl;
-            while (k<timeHorizon) {
-                
-                cout << "." << flush;
-                
-                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second0, true);
-
+            {
                 mat diffT = tempTmax-tempTmin;
                 vec diffR = tempTTmax - tempTTmin;
                 vec diffA = tempATmax - tempATmin;
-                
-                
                 sycl::queue Q;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
-                    sycl::buffer<double> cdfBuffer0(secondnew0.memptr(),secondnew0.n_rows);
-                    sycl::buffer<double> bufs0(second0.memptr(),second0.n_rows);
                     sycl::buffer<double> bufminT(tempTmin.memptr(),tempTmin.n_rows*tempTmin.n_cols);
                     sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
                     sycl::buffer<double> bufminTT(tempTTmin.memptr(),tempTTmin.n_rows);
                     sycl::buffer<double> bufdTT(diffR.memptr(),diffR.n_rows);
                     sycl::buffer<double> bufminAT(tempATmin.memptr(),tempATmin.n_rows);
                     sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
+            while (k<timeHorizon) {
+                
+                cout << "." << flush;
+                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second0, true);
+
+                
+                
+                {
+                    // Create a SYCL buffer to store the space
+                    sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
+                    sycl::buffer<double> cdfBuffer0(secondnew0.memptr(),secondnew0.n_rows);
+                    sycl::buffer<double> bufs0(second0.memptr(),second0.n_rows);
                     
                     // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                     Q.submit([&](sycl::handler& cgh) {
@@ -3740,6 +3763,7 @@ void IMDP::finiteHorizonReachControllerSorted(bool IMDP_lower, size_t timeHorizo
                 second0 = secondnew0;
                 
             }
+            }
             cout << endl;
             cout << "Upper bound found." << endl;
             
@@ -3760,28 +3784,29 @@ void IMDP::finiteHorizonReachControllerSorted(bool IMDP_lower, size_t timeHorizo
             
             size_t k=0;
             cout << "first loop iterations: " << endl;
-            while (k < timeHorizon) {
-                cout << "." << flush;
-                
-                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first0, true);
-
+            {
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffR = maxTargetM - minTargetM;
                 vec diffA = maxAvoidM - minAvoidM;
-
-
                 sycl::queue queue;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
-                    sycl::buffer<double> cdfBuffer0(firstnew0.memptr(),firstnew0.n_rows);
-                    sycl::buffer<double> buff0(first0.memptr(),first0.n_rows);
                     sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
                     sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
                     sycl::buffer<double> bufminTT(minTargetM.memptr(),minTargetM.n_rows);
                     sycl::buffer<double> bufdTT(diffR.memptr(),diffR.n_rows);
                     sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
                     sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
+            while (k < timeHorizon) {
+                cout << "." << flush;
+                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first0, true);
+
+
+
+                {
+                    // Create a SYCL buffer to store the space
+                    sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
+                    sycl::buffer<double> cdfBuffer0(firstnew0.memptr(),firstnew0.n_rows);
+                    sycl::buffer<double> buff0(first0.memptr(),first0.n_rows);
 
 
                     // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
@@ -3865,6 +3890,7 @@ void IMDP::finiteHorizonReachControllerSorted(bool IMDP_lower, size_t timeHorizo
                 }
                 
             }
+            }
             cout << endl;
             cout << "control policy for lower bound found, finding upper bound." << endl;
             
@@ -3892,27 +3918,28 @@ void IMDP::finiteHorizonReachControllerSorted(bool IMDP_lower, size_t timeHorizo
            
             
             cout << "Matrix Fixed" << endl;
-            while (k < timeHorizon) {
-                cout << "." << flush;
-                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second0, false);
-
+            {
                 mat diffT = tempTmax-tempTmin;
                 vec diffR = tempTTmax - tempTTmin;
                 vec diffA = tempATmax - tempATmin;
-                
-                
                 sycl::queue Q;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
-                    sycl::buffer<double> cdfBuffer0(secondnew0.memptr(),secondnew0.n_rows);
-                    sycl::buffer<double> bufs0(second0.memptr(),second0.n_rows);
                     sycl::buffer<double> bufminT(tempTmin.memptr(),tempTmin.n_rows*tempTmin.n_cols);
                     sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
                     sycl::buffer<double> bufminTT(tempTTmin.memptr(),tempTTmin.n_rows);
                     sycl::buffer<double> bufdTT(diffR.memptr(),diffR.n_rows);
                     sycl::buffer<double> bufminAT(tempATmin.memptr(),tempATmin.n_rows);
                     sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
+            while (k < timeHorizon) {
+                cout << "." << flush;
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second0, false);
+
+                
+                
+                {
+                    // Create a SYCL buffer to store the space
+                    sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
+                    sycl::buffer<double> cdfBuffer0(secondnew0.memptr(),secondnew0.n_rows);
+                    sycl::buffer<double> bufs0(second0.memptr(),second0.n_rows);
                     
                     // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                     Q.submit([&](sycl::handler& cgh) {
@@ -3978,6 +4005,7 @@ void IMDP::finiteHorizonReachControllerSorted(bool IMDP_lower, size_t timeHorizo
                 
                 k++;
             }
+            }
             cout << endl;
             cout << "Upper bound found." << endl;
             
@@ -3997,32 +4025,33 @@ void IMDP::finiteHorizonReachControllerSorted(bool IMDP_lower, size_t timeHorizo
             
             size_t k=0;
             cout << "first loop iterations: " << endl;
-            while (k < timeHorizon) {
-            cout << "." << endl; 
-                
-                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first0, false);
-
+            {
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffR = maxTargetM - minTargetM;
                 vec diffA = maxAvoidM - minAvoidM;
-                
-                TargetM = minTargetM;
-                AvoidM = minAvoidM;
-                TransitionM = minTransitionM;
-                //}
-
                 sycl::queue queue;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
-                    sycl::buffer<double> cdfBuffer0(firstnew0.memptr(),firstnew0.n_rows);
-                    sycl::buffer<double> buff0(first0.memptr(),first0.n_rows);
                     sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
                     sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
                     sycl::buffer<double> bufminTT(minTargetM.memptr(),minTargetM.n_rows);
                     sycl::buffer<double> bufdTT(diffR.memptr(),diffR.n_rows);
                     sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
                     sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
+            while (k < timeHorizon) {
+            cout << "." << endl; 
+                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first0, false);
+
+                
+                TargetM = minTargetM;
+                AvoidM = minAvoidM;
+                TransitionM = minTransitionM;
+                //}
+
+                {
+                    // Create a SYCL buffer to store the space
+                    sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
+                    sycl::buffer<double> cdfBuffer0(firstnew0.memptr(),firstnew0.n_rows);
+                    sycl::buffer<double> buff0(first0.memptr(),first0.n_rows);
                     sycl::buffer<double> bufTargetM(TargetM.memptr(), TargetM.n_rows);
                     sycl::buffer<double> bufAvoidM(AvoidM.memptr(), AvoidM.n_rows);
                     sycl::buffer<double> bufTransitionM(TransitionM.memptr(), TransitionM.n_rows * TransitionM.n_cols);
@@ -4112,6 +4141,7 @@ void IMDP::finiteHorizonReachControllerSorted(bool IMDP_lower, size_t timeHorizo
                     firstnew0.row(i).max(U_pos[i]);
                 }
             }
+            }
             cout << endl;
             cout << "control policy for lower bound found, finding upper bound." << endl;
             
@@ -4139,28 +4169,29 @@ void IMDP::finiteHorizonReachControllerSorted(bool IMDP_lower, size_t timeHorizo
             }
             
             cout << "Matrix Fixed" << endl;
-            while (k<timeHorizon) {
-                cout << "." << flush;
-                
-                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second0, true);
-
+            {
                 mat diffT = tempTmax-tempTmin;
                 vec diffR = tempTTmax - tempTTmin;
                 vec diffA = tempATmax - tempATmin;
-                
-                
                 sycl::queue Q;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
-                    sycl::buffer<double> cdfBuffer0(secondnew0.memptr(),secondnew0.n_rows);
-                    sycl::buffer<double> bufs0(second0.memptr(),second0.n_rows);
                     sycl::buffer<double> bufminT(tempTmin.memptr(),tempTmin.n_rows*tempTmin.n_cols);
                     sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
                     sycl::buffer<double> bufminTT(tempTTmin.memptr(),tempTTmin.n_rows);
                     sycl::buffer<double> bufdTT(diffR.memptr(),diffR.n_rows);
                     sycl::buffer<double> bufminAT(tempATmin.memptr(),tempATmin.n_rows);
                     sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
+            while (k<timeHorizon) {
+                cout << "." << flush;
+                
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second0, true);
+
+                
+                
+                {
+                    // Create a SYCL buffer to store the space
+                    sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
+                    sycl::buffer<double> cdfBuffer0(secondnew0.memptr(),secondnew0.n_rows);
+                    sycl::buffer<double> bufs0(second0.memptr(),second0.n_rows);
                     
                     // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                     Q.submit([&](sycl::handler& cgh) {
@@ -4230,6 +4261,7 @@ void IMDP::finiteHorizonReachControllerSorted(bool IMDP_lower, size_t timeHorizo
                 second0 = conv_to< colvec >::from(min(secondnew0,1));
                 k++;
                 
+            }
             }
             cout << endl;
             cout << "Upper bound found." << endl;
@@ -6343,23 +6375,24 @@ void IMDP::finiteHorizonSafeControllerSorted(bool IMDP_lower, size_t timeHorizon
 
             size_t k = 0;
             cout << "first loop iterations: " << endl;
+            {
+                mat diffT = maxTransitionM-minTransitionM;
+                vec diffA = maxAvoidM - minAvoidM;
+                sycl::queue queue;
+                    sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
+                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
+                    sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
+                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
             while (k < timeHorizon) {
                 cout << "." << flush;
                 std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first1, false);
 
-                mat diffT = maxTransitionM-minTransitionM;
-                vec diffA = maxAvoidM - minAvoidM;
                 
-                sycl::queue queue;
                 {
                     // Create a SYCL buffer to store the space
                     sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
                     sycl::buffer<double> cdfBuffer1(firstnew1.memptr(),firstnew1.n_rows);
                     sycl::buffer<double> buff1(first1.memptr(),first1.n_rows);
-                    sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
-                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
-                    sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
-                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
                     //sycl::buffer<double> bufS(s.memptr(),s.n_rows);
                     
                     // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
@@ -6409,6 +6442,7 @@ void IMDP::finiteHorizonSafeControllerSorted(bool IMDP_lower, size_t timeHorizon
                 k++;
                 first1 = check1;
             }
+            }
             cout << endl;
             cout << "control policy for lower bound found, finding upper bound." << endl;
             
@@ -6428,24 +6462,25 @@ void IMDP::finiteHorizonSafeControllerSorted(bool IMDP_lower, size_t timeHorizon
                 tempATmax = maxAvoidM;
             
             cout << "Matrix Fixed" << endl;
+            {
+                mat diffT = tempTmax-tempTmin;
+                vec diffA = tempATmax - tempATmin;
+                sycl::queue Q;
+                    sycl::buffer<double> bufminT(tempTmin.memptr(),tempTmin.n_rows*tempTmin.n_cols);
+                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
+                    sycl::buffer<double> bufminAT(tempATmin.memptr(),tempATmin.n_rows);
+                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
             while (k < timeHorizon) {
                 cout << "." << flush;
                 std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second1, true);
 
-                mat diffT = tempTmax-tempTmin;
-                vec diffA = tempATmax - tempATmin;
                 
                 
-                sycl::queue Q;
                 {
                     // Create a SYCL buffer to store the space
                     sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
                     sycl::buffer<double> cdfBuffer1(secondnew1.memptr(),secondnew1.n_rows);
                     sycl::buffer<double> bufs1(second1.memptr(),second1.n_rows);
-                    sycl::buffer<double> bufminT(tempTmin.memptr(),tempTmin.n_rows*tempTmin.n_cols);
-                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
-                    sycl::buffer<double> bufminAT(tempATmin.memptr(),tempATmin.n_rows);
-                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
                     
                     // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                     Q.submit([&](sycl::handler& cgh) {
@@ -6504,6 +6539,7 @@ void IMDP::finiteHorizonSafeControllerSorted(bool IMDP_lower, size_t timeHorizon
                 k++;
                 second1 = secondnew1;
             }
+            }
             cout << endl;
             cout << "Upper bound found." << endl;
             
@@ -6518,23 +6554,24 @@ void IMDP::finiteHorizonSafeControllerSorted(bool IMDP_lower, size_t timeHorizon
             
             size_t k = 0;
             cout << "first loop iterations: " << endl;
+            {
+                mat diffT = maxTransitionM-minTransitionM;
+                vec diffA = maxAvoidM - minAvoidM;
+                sycl::queue queue;
+                    sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
+                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
+                    sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
+                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
             while (k < timeHorizon) {
                 cout << "." << flush;
                 std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first1, true);
 
-                mat diffT = maxTransitionM-minTransitionM;
-                vec diffA = maxAvoidM - minAvoidM;
                 
-                sycl::queue queue;
                 {
                     // Create a SYCL buffer to store the space
                     sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
                     sycl::buffer<double> cdfBuffer1(firstnew1.memptr(),firstnew1.n_rows);
                     sycl::buffer<double> buff1(first1.memptr(),first1.n_rows);
-                    sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
-                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
-                    sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
-                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
                     
                     // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                     queue.submit([&](sycl::handler& cgh) {
@@ -6596,6 +6633,7 @@ void IMDP::finiteHorizonSafeControllerSorted(bool IMDP_lower, size_t timeHorizon
                 k++;
                 first1 = check1;
             }
+            }
             cout << endl;
             cout << "control policy for lower bound found, finding upper bound." << endl;
             
@@ -6615,24 +6653,25 @@ void IMDP::finiteHorizonSafeControllerSorted(bool IMDP_lower, size_t timeHorizon
                 tempATmax = maxAvoidM;
             
             cout << "Matrix Fixed" << endl;
+            {
+                mat diffT = tempTmax-tempTmin;
+                vec diffA = tempATmax - tempATmin;
+                sycl::queue Q;
+                    sycl::buffer<double> bufminT(tempTmin.memptr(),tempTmin.n_rows*tempTmin.n_cols);
+                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
+                    sycl::buffer<double> bufminAT(tempATmin.memptr(),tempATmin.n_rows);
+                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
             while (k < timeHorizon) {
                 cout << "." << flush;
                 std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second1, false);
 
-                mat diffT = tempTmax-tempTmin;
-                vec diffA = tempATmax - tempATmin;
                 
                 
-                sycl::queue Q;
                 {
                     // Create a SYCL buffer to store the space
                     sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
                     sycl::buffer<double> cdfBuffer1(secondnew1.memptr(),secondnew1.n_rows);
                     sycl::buffer<double> bufs1(second1.memptr(),second1.n_rows);
-                    sycl::buffer<double> bufminT(tempTmin.memptr(),tempTmin.n_rows*tempTmin.n_cols);
-                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
-                    sycl::buffer<double> bufminAT(tempATmin.memptr(),tempATmin.n_rows);
-                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
                     
                     // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                     Q.submit([&](sycl::handler& cgh) {
@@ -6691,6 +6730,7 @@ void IMDP::finiteHorizonSafeControllerSorted(bool IMDP_lower, size_t timeHorizon
                 second1 = secondnew1;
                 
             }
+            }
             cout << endl;
             cout << "Upper bound found." << endl;
             
@@ -6707,23 +6747,24 @@ void IMDP::finiteHorizonSafeControllerSorted(bool IMDP_lower, size_t timeHorizon
             
             size_t k = 0;
             cout << "first loop iterations: " << endl;
+            {
+                mat diffT = maxTransitionM-minTransitionM;
+                vec diffA = maxAvoidM - minAvoidM;
+                sycl::queue queue;
+                    sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
+                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
+                    sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
+                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
             while (k < timeHorizon) {
                 cout << "." << flush;
                 std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first1, false);
 
-                mat diffT = maxTransitionM-minTransitionM;
-                vec diffA = maxAvoidM - minAvoidM;
                 
-                sycl::queue queue;
                 {
                     // Create a SYCL buffer to store the space
                     sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
                     sycl::buffer<double> cdfBuffer1(firstnew1.memptr(),firstnew1.n_rows);
                     sycl::buffer<double> buff1(first1.memptr(),first1.n_rows);
-                    sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
-                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
-                    sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
-                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
                     
                     // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                     queue.submit([&](sycl::handler& cgh) {
@@ -6788,6 +6829,7 @@ void IMDP::finiteHorizonSafeControllerSorted(bool IMDP_lower, size_t timeHorizon
                 }
                 
             }
+            }
             cout << endl;
             cout << "control policy for lower bound found, finding upper bound." << endl;
             
@@ -6811,25 +6853,26 @@ void IMDP::finiteHorizonSafeControllerSorted(bool IMDP_lower, size_t timeHorizon
             
             
             cout << "Matrix Fixed" << endl;
+            {
+                mat diffT = tempTmax-tempTmin;
+                vec diffA = tempATmax - tempATmin;
+                sycl::queue Q;
+                    sycl::buffer<double> bufminT(tempTmin.memptr(),tempTmin.n_rows*tempTmin.n_cols);
+                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
+                    sycl::buffer<double> bufminAT(tempATmin.memptr(),tempATmin.n_rows);
+                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
             while (k <timeHorizon) {
                 cout << "." << flush;
                 
                 std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second1, true);
 
-                mat diffT = tempTmax-tempTmin;
-                vec diffA = tempATmax - tempATmin;
                 
                 
-                sycl::queue Q;
                 {
                     // Create a SYCL buffer to store the space
                     sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
                     sycl::buffer<double> cdfBuffer1(secondnew1.memptr(),secondnew1.n_rows);
                     sycl::buffer<double> bufs1(second1.memptr(),second1.n_rows);
-                    sycl::buffer<double> bufminT(tempTmin.memptr(),tempTmin.n_rows*tempTmin.n_cols);
-                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
-                    sycl::buffer<double> bufminAT(tempATmin.memptr(),tempATmin.n_rows);
-                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
                     
                     // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                     Q.submit([&](sycl::handler& cgh) {
@@ -6877,6 +6920,7 @@ void IMDP::finiteHorizonSafeControllerSorted(bool IMDP_lower, size_t timeHorizon
                 k++;
                 second1 = secondnew1;
             }
+            }
             cout << endl;
             cout << "Upper bound found." << endl;
             
@@ -6895,23 +6939,24 @@ void IMDP::finiteHorizonSafeControllerSorted(bool IMDP_lower, size_t timeHorizon
             
             size_t k = 0;
             cout << "first loop iterations: " << endl;
+            {
+                mat diffT = maxTransitionM-minTransitionM;
+                vec diffA = maxAvoidM - minAvoidM;
+                sycl::queue queue;
+                    sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
+                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
+                    sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
+                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
             while (k < timeHorizon) {
                 cout << "." << flush;
                 std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first1, true);
 
-                mat diffT = maxTransitionM-minTransitionM;
-                vec diffA = maxAvoidM - minAvoidM;
                 
-                sycl::queue queue;
                 {
                     // Create a SYCL buffer to store the space
                     sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
                     sycl::buffer<double> cdfBuffer1(firstnew1.memptr(),firstnew1.n_rows);
                     sycl::buffer<double> buff1(first1.memptr(),first1.n_rows);
-                    sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
-                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
-                    sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
-                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
                     //sycl::buffer<double> bufS(s.memptr(),s.n_rows);
                     
                     // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
@@ -6978,6 +7023,7 @@ void IMDP::finiteHorizonSafeControllerSorted(bool IMDP_lower, size_t timeHorizon
                 }
                 
             }
+            }
             cout << endl;
             cout << "control policy for lower bound found, finding upper bound." << endl;
             
@@ -6999,25 +7045,26 @@ void IMDP::finiteHorizonSafeControllerSorted(bool IMDP_lower, size_t timeHorizon
             }
             
             cout << "Matrix Fixed" << endl;
+            {
+                mat diffT = tempTmax-tempTmin;
+                vec diffA = tempATmax - tempATmin;
+                sycl::queue Q;
+                    sycl::buffer<double> bufminT(tempTmin.memptr(),tempTmin.n_rows*tempTmin.n_cols);
+                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
+                    sycl::buffer<double> bufminAT(tempATmin.memptr(),tempATmin.n_rows);
+                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
             while (k<timeHorizon) {
                 cout << "." << flush;
                 
                 std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second1, false);
 
-                mat diffT = tempTmax-tempTmin;
-                vec diffA = tempATmax - tempATmin;
                 
                 
-                sycl::queue Q;
                 {
                     // Create a SYCL buffer to store the space
                     sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
                     sycl::buffer<double> cdfBuffer1(secondnew1.memptr(),secondnew1.n_rows);
                     sycl::buffer<double> bufs1(second1.memptr(),second1.n_rows);
-                    sycl::buffer<double> bufminT(tempTmin.memptr(),tempTmin.n_rows*tempTmin.n_cols);
-                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
-                    sycl::buffer<double> bufminAT(tempATmin.memptr(),tempATmin.n_rows);
-                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
                     
                     // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                     Q.submit([&](sycl::handler& cgh) {
@@ -7067,6 +7114,7 @@ void IMDP::finiteHorizonSafeControllerSorted(bool IMDP_lower, size_t timeHorizon
                 k++;
                 second1 = secondnew1;
             }
+            }
             cout << endl;
             cout << "Upper bound found." << endl;
             
@@ -7086,23 +7134,24 @@ void IMDP::finiteHorizonSafeControllerSorted(bool IMDP_lower, size_t timeHorizon
             
             size_t k = 0;
             cout << "first loop iterations: " << endl;
+            {
+                mat diffT = maxTransitionM-minTransitionM;
+                vec diffA = maxAvoidM - minAvoidM;
+                sycl::queue queue;
+                    sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
+                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
+                    sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
+                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
             while (k<timeHorizon) {
                 cout << "." << flush;
                 std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first1, false);
 
-                mat diffT = maxTransitionM-minTransitionM;
-                vec diffA = maxAvoidM - minAvoidM;
                 
-                sycl::queue queue;
                 {
                     // Create a SYCL buffer to store the space
                     sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
                     sycl::buffer<double> cdfBuffer1(firstnew1.memptr(),firstnew1.n_rows);
                     sycl::buffer<double> buff1(first1.memptr(),first1.n_rows);
-                    sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
-                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
-                    sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
-                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
                     //sycl::buffer<double> bufS(s.memptr(),s.n_rows);
                     
                     // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
@@ -7161,6 +7210,7 @@ void IMDP::finiteHorizonSafeControllerSorted(bool IMDP_lower, size_t timeHorizon
                 first1 = check1;
                 
             }
+            }
             cout << endl;
             cout << "control policy for lower bound found, finding upper bound." << endl;
             
@@ -7168,23 +7218,24 @@ void IMDP::finiteHorizonSafeControllerSorted(bool IMDP_lower, size_t timeHorizon
             mat secondnew1(state_space_size*disturb_space_size, 1, fill::zeros);
             k=0;
             cout << "second loop iterations: " << endl;
+            {
+                mat diffT = maxTransitionM-minTransitionM;
+                vec diffA = maxAvoidM - minAvoidM;
+                sycl::queue queue;
+                    sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
+                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
+                    sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
+                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
             while (k < timeHorizon) {
                 cout << "." << flush;
                 std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second1, true);
 
-                mat diffT = maxTransitionM-minTransitionM;
-                vec diffA = maxAvoidM - minAvoidM;
                 
-                sycl::queue queue;
                 {
                     // Create a SYCL buffer to store the space
                     sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
                     sycl::buffer<double> cdfBuffer1(secondnew1.memptr(),secondnew1.n_rows);
                     sycl::buffer<double> buff1(second1.memptr(),second1.n_rows);
-                    sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
-                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
-                    sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
-                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
                     
                     // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                     queue.submit([&](sycl::handler& cgh) {
@@ -7244,6 +7295,7 @@ void IMDP::finiteHorizonSafeControllerSorted(bool IMDP_lower, size_t timeHorizon
                 second1 = check1;
                 
             }
+            }
             cout << endl;
             cout << "Upper bound found." << endl;
             
@@ -7258,23 +7310,24 @@ void IMDP::finiteHorizonSafeControllerSorted(bool IMDP_lower, size_t timeHorizon
             
             size_t k = 0;
             cout << "first loop iterations: " << endl;
+            {
+                mat diffT = maxTransitionM-minTransitionM;
+                vec diffA = maxAvoidM - minAvoidM;
+                sycl::queue queue;
+                    sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
+                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
+                    sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
+                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
             while (k<timeHorizon) {
                 cout << "." << flush;
                 std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first1, true);
 
-                mat diffT = maxTransitionM-minTransitionM;
-                vec diffA = maxAvoidM - minAvoidM;
                 
-                sycl::queue queue;
                 {
                     // Create a SYCL buffer to store the space
                     sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
                     sycl::buffer<double> cdfBuffer1(firstnew1.memptr(),firstnew1.n_rows);
                     sycl::buffer<double> buff1(first1.memptr(),first1.n_rows);
-                    sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
-                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
-                    sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
-                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
                     //sycl::buffer<double> bufS(s.memptr(),s.n_rows);
                     
                     // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
@@ -7335,6 +7388,7 @@ void IMDP::finiteHorizonSafeControllerSorted(bool IMDP_lower, size_t timeHorizon
                 k++;
                 first1 = check1;
             }
+            }
             cout << endl;
             cout << "control policy for lower bound found, finding upper bound." << endl;
             
@@ -7342,23 +7396,24 @@ void IMDP::finiteHorizonSafeControllerSorted(bool IMDP_lower, size_t timeHorizon
             mat secondnew1(state_space_size*disturb_space_size, 1, fill::zeros);
             k=0;
             cout << "second loop iterations: " << endl;
+            {
+                mat diffT = maxTransitionM-minTransitionM;
+                vec diffA = maxAvoidM - minAvoidM;
+                sycl::queue queue;
+                    sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
+                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
+                    sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
+                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
             while (k<timeHorizon) {
                 cout << "." << flush;
                 std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second1, false);
 
-                mat diffT = maxTransitionM-minTransitionM;
-                vec diffA = maxAvoidM - minAvoidM;
                 
-                sycl::queue queue;
                 {
                     // Create a SYCL buffer to store the space
                     sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
                     sycl::buffer<double> cdfBuffer1(secondnew1.memptr(),secondnew1.n_rows);
                     sycl::buffer<double> buff1(second1.memptr(),second1.n_rows);
-                    sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
-                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
-                    sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
-                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
                     
                     // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                     queue.submit([&](sycl::handler& cgh) {
@@ -7413,6 +7468,7 @@ void IMDP::finiteHorizonSafeControllerSorted(bool IMDP_lower, size_t timeHorizon
                 second1 = check1;
                 
             }
+            }
             cout << endl;
             cout << "Upper bound found." << endl;
             
@@ -7431,23 +7487,24 @@ void IMDP::finiteHorizonSafeControllerSorted(bool IMDP_lower, size_t timeHorizon
             
             size_t k = 0;
             cout << "first loop iterations: " << endl;
+            {
+                mat diffT = maxTransitionM-minTransitionM;
+                vec diffA = maxAvoidM - minAvoidM;
+                sycl::queue queue;
+                    sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
+                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
+                    sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
+                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
             while (k<timeHorizon) {
                 cout << "." << flush;
                 std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first1, false);
 
-                mat diffT = maxTransitionM-minTransitionM;
-                vec diffA = maxAvoidM - minAvoidM;
                 
-                sycl::queue queue;
                 {
                     // Create a SYCL buffer to store the space
                     sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
                     sycl::buffer<double> cdfBuffer1(firstnew1.memptr(),firstnew1.n_rows);
                     sycl::buffer<double> buff1(first1.memptr(),first1.n_rows);
-                    sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
-                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
-                    sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
-                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
                     //sycl::buffer<double> bufS(s.memptr(),s.n_rows);
                     
                     // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
@@ -7509,6 +7566,7 @@ void IMDP::finiteHorizonSafeControllerSorted(bool IMDP_lower, size_t timeHorizon
                 }
                 
             }
+            }
             cout << endl;
             cout << "control policy for lower bound found, finding upper bound." << endl;
             
@@ -7532,24 +7590,25 @@ void IMDP::finiteHorizonSafeControllerSorted(bool IMDP_lower, size_t timeHorizon
             }
            
             cout << "Matrix Fixed" << endl;
+            {
+                mat diffT = tempTmax-tempTmin;
+                vec diffA = tempATmax - tempATmin;
+                sycl::queue Q;
+                    sycl::buffer<double> bufminT(tempTmin.memptr(),tempTmin.n_rows*tempTmin.n_cols);
+                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
+                    sycl::buffer<double> bufminAT(tempATmin.memptr(),tempATmin.n_rows);
+                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
             while (k<timeHorizon) {
                 cout << "." << flush;
                 std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second1, true);
 
-                mat diffT = tempTmax-tempTmin;
-                vec diffA = tempATmax - tempATmin;
                 
                 
-                sycl::queue Q;
                 {
                     // Create a SYCL buffer to store the space
                     sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
                     sycl::buffer<double> cdfBuffer1(secondnew1.memptr(),secondnew1.n_rows);
                     sycl::buffer<double> bufs1(second1.memptr(),second1.n_rows);
-                    sycl::buffer<double> bufminT(tempTmin.memptr(),tempTmin.n_rows*tempTmin.n_cols);
-                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
-                    sycl::buffer<double> bufminAT(tempATmin.memptr(),tempATmin.n_rows);
-                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
                     
                     // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                     Q.submit([&](sycl::handler& cgh) {
@@ -7607,6 +7666,7 @@ void IMDP::finiteHorizonSafeControllerSorted(bool IMDP_lower, size_t timeHorizon
                 k++;
                 second1 = check1;
             }
+            }
             cout << endl;
             cout << "Upper bound found." << endl;
             
@@ -7626,23 +7686,24 @@ void IMDP::finiteHorizonSafeControllerSorted(bool IMDP_lower, size_t timeHorizon
             
             size_t k = 0;
             cout << "first loop iterations: " << endl;
+            {
+                mat diffT = maxTransitionM-minTransitionM;
+                vec diffA = maxAvoidM - minAvoidM;
+                sycl::queue queue;
+                    sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
+                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
+                    sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
+                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
             while (k<timeHorizon) {
                 cout << "." << flush;
                 std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first1, true);
 
-                mat diffT = maxTransitionM-minTransitionM;
-                vec diffA = maxAvoidM - minAvoidM;
                 
-                sycl::queue queue;
                 {
                     // Create a SYCL buffer to store the space
                     sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
                     sycl::buffer<double> cdfBuffer1(firstnew1.memptr(),firstnew1.n_rows);
                     sycl::buffer<double> buff1(first1.memptr(),first1.n_rows);
-                    sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
-                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
-                    sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
-                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
                     //sycl::buffer<double> bufS(s.memptr(),s.n_rows);
                     
                     // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
@@ -7717,6 +7778,7 @@ void IMDP::finiteHorizonSafeControllerSorted(bool IMDP_lower, size_t timeHorizon
                 }
                 
             }
+            }
             cout << endl;
             cout << "control policy for lower bound found, finding upper bound." << endl;
             
@@ -7740,24 +7802,25 @@ void IMDP::finiteHorizonSafeControllerSorted(bool IMDP_lower, size_t timeHorizon
             }
             
             cout << "Matrix Fixed" << endl;
+            {
+                mat diffT = tempTmax-tempTmin;
+                vec diffA = tempATmax - tempATmin;
+                sycl::queue Q;
+                    sycl::buffer<double> bufminT(tempTmin.memptr(),tempTmin.n_rows*tempTmin.n_cols);
+                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
+                    sycl::buffer<double> bufminAT(tempATmin.memptr(),tempATmin.n_rows);
+                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
             while (k<timeHorizon) {
                 cout << "." << flush;
                 std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second1, false);
 
-                mat diffT = tempTmax-tempTmin;
-                vec diffA = tempATmax - tempATmin;
                 
                 
-                sycl::queue Q;
                 {
                     // Create a SYCL buffer to store the space
                     sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
                     sycl::buffer<double> cdfBuffer1(secondnew1.memptr(),secondnew1.n_rows);
                     sycl::buffer<double> bufs1(second1.memptr(),second1.n_rows);
-                    sycl::buffer<double> bufminT(tempTmin.memptr(),tempTmin.n_rows*tempTmin.n_cols);
-                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
-                    sycl::buffer<double> bufminAT(tempATmin.memptr(),tempATmin.n_rows);
-                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
                     
                     // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                     Q.submit([&](sycl::handler& cgh) {
@@ -7809,6 +7872,7 @@ void IMDP::finiteHorizonSafeControllerSorted(bool IMDP_lower, size_t timeHorizon
                 k++;
                 second1 = check1;
             }
+            }
             cout << endl;
             cout << "Upper bound found." << endl;
             
@@ -7839,32 +7903,33 @@ void IMDP::finiteHorizonReachControllerSortedStoreMDP(bool IMDP_lower, size_t ti
             mat firstnew0(state_space_size, 1, fill::zeros);
             size_t k = 0;
             cout << "first loop iterations: " << endl;
-            while (k < timeHorizon) {
-                cout << "." << flush;
-
-                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first0, true);
-
+            {
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffR = maxTargetM - minTargetM;
                 vec diffA = maxAvoidM - minAvoidM;
-
-
-                TargetM = minTargetM;
-                AvoidM = minAvoidM;
-                TransitionM = minTransitionM;
-
                 sycl::queue queue;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
-                    sycl::buffer<double> cdfBuffer0(firstnew0.memptr(),firstnew0.n_rows);
-                    sycl::buffer<double> buff0(first0.memptr(),first0.n_rows);
                     sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
                     sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
                     sycl::buffer<double> bufminTT(minTargetM.memptr(),minTargetM.n_rows);
                     sycl::buffer<double> bufdTT(diffR.memptr(),diffR.n_rows);
                     sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
                     sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
+            while (k < timeHorizon) {
+                cout << "." << flush;
+
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first0, true);
+
+
+
+                TargetM = minTargetM;
+                AvoidM = minAvoidM;
+                TransitionM = minTransitionM;
+
+                {
+                    // Create a SYCL buffer to store the space
+                    sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
+                    sycl::buffer<double> cdfBuffer0(firstnew0.memptr(),firstnew0.n_rows);
+                    sycl::buffer<double> buff0(first0.memptr(),first0.n_rows);
                     sycl::buffer<double> bufTargetM(TargetM.memptr(), 0);
                     sycl::buffer<double> bufAvoidM(AvoidM.memptr(), 0);
                     sycl::buffer<double> bufTransitionM(TransitionM.memptr(), 0);
@@ -7958,6 +8023,7 @@ void IMDP::finiteHorizonReachControllerSortedStoreMDP(bool IMDP_lower, size_t ti
                 first0 = firstnew0;
 
             }
+            }
             cout << endl;
             cout << "control policy for lower bound found, finding upper bound." << endl;
 
@@ -7985,27 +8051,28 @@ void IMDP::finiteHorizonReachControllerSortedStoreMDP(bool IMDP_lower, size_t ti
 
 
             cout << "Matrix Fixed" << endl;
-            while (k < timeHorizon) {
-                cout << "." << flush;
-                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second0, false);
-
+            {
                 mat diffT = tempTmax-tempTmin;
                 vec diffR = tempTTmax - tempTTmin;
                 vec diffA = tempATmax - tempATmin;
-
-
                 sycl::queue Q;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
-                    sycl::buffer<double> cdfBuffer0(secondnew0.memptr(),secondnew0.n_rows);
-                    sycl::buffer<double> bufs0(second0.memptr(),second0.n_rows);
                     sycl::buffer<double> bufminT(tempTmin.memptr(),tempTmin.n_rows*tempTmin.n_cols);
                     sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
                     sycl::buffer<double> bufminTT(tempTTmin.memptr(),tempTTmin.n_rows);
                     sycl::buffer<double> bufdTT(diffR.memptr(),diffR.n_rows);
                     sycl::buffer<double> bufminAT(tempATmin.memptr(),tempATmin.n_rows);
                     sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
+            while (k < timeHorizon) {
+                cout << "." << flush;
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second0, false);
+
+
+
+                {
+                    // Create a SYCL buffer to store the space
+                    sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
+                    sycl::buffer<double> cdfBuffer0(secondnew0.memptr(),secondnew0.n_rows);
+                    sycl::buffer<double> bufs0(second0.memptr(),second0.n_rows);
 
                     // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                     Q.submit([&](sycl::handler& cgh) {
@@ -8069,6 +8136,7 @@ void IMDP::finiteHorizonReachControllerSortedStoreMDP(bool IMDP_lower, size_t ti
                 second0 = secondnew0;
 
             }
+            }
             cout << endl;
             cout << "Upper bound found." << endl;
 
@@ -8084,14 +8152,22 @@ void IMDP::finiteHorizonReachControllerSortedStoreMDP(bool IMDP_lower, size_t ti
 
             size_t k = 0;
             cout << "first loop iterations: " << endl;
+            {
+                mat diffT = maxTransitionM-minTransitionM;
+                vec diffR = maxTargetM - minTargetM;
+                vec diffA = maxAvoidM - minAvoidM;
+                sycl::queue queue;
+                    sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
+                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
+                    sycl::buffer<double> bufminTT(minTargetM.memptr(),minTargetM.n_rows);
+                    sycl::buffer<double> bufdTT(diffR.memptr(),diffR.n_rows);
+                    sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
+                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
             while (k < timeHorizon) {
             cout << "." << flush;
 
                 std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first0, false);
 
-                mat diffT = maxTransitionM-minTransitionM;
-                vec diffR = maxTargetM - minTargetM;
-                vec diffA = maxAvoidM - minAvoidM;
 
                 //if (storeMDP==true) {
                 TargetM = minTargetM;
@@ -8099,18 +8175,11 @@ void IMDP::finiteHorizonReachControllerSortedStoreMDP(bool IMDP_lower, size_t ti
                 TransitionM = minTransitionM;
                 //}
 
-                sycl::queue queue;
                 {
                     // Create a SYCL buffer to store the space
                     sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
                     sycl::buffer<double> cdfBuffer0(firstnew0.memptr(),firstnew0.n_rows);
                     sycl::buffer<double> buff0(first0.memptr(),first0.n_rows);
-                    sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
-                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
-                    sycl::buffer<double> bufminTT(minTargetM.memptr(),minTargetM.n_rows);
-                    sycl::buffer<double> bufdTT(diffR.memptr(),diffR.n_rows);
-                    sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
-                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
                     sycl::buffer<double> bufTargetM(TargetM.memptr(), 0);
                     sycl::buffer<double> bufAvoidM(AvoidM.memptr(), 0);
                     sycl::buffer<double> bufTransitionM(TransitionM.memptr(), 0);
@@ -8198,6 +8267,7 @@ void IMDP::finiteHorizonReachControllerSortedStoreMDP(bool IMDP_lower, size_t ti
                 k++;
                 first0 = firstnew0;
             }
+            }
             cout << endl;
             cout << "control policy for lower bound found, finding upper bound." << endl;
 
@@ -8224,28 +8294,29 @@ void IMDP::finiteHorizonReachControllerSortedStoreMDP(bool IMDP_lower, size_t ti
                 tempATmax = maxAvoidM;
 
             cout << "Matrix Fixed" << endl;
-            while (k < timeHorizon) {
-                cout << "." << flush;
-
-                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second0, true);
-
+            {
                 mat diffT = tempTmax-tempTmin;
                 vec diffR = tempTTmax - tempTTmin;
                 vec diffA = tempATmax - tempATmin;
-
-
                 sycl::queue Q;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
-                    sycl::buffer<double> cdfBuffer0(secondnew0.memptr(),secondnew0.n_rows);
-                    sycl::buffer<double> bufs0(second0.memptr(),second0.n_rows);
                     sycl::buffer<double> bufminT(tempTmin.memptr(),tempTmin.n_rows*tempTmin.n_cols);
                     sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
                     sycl::buffer<double> bufminTT(tempTTmin.memptr(),tempTTmin.n_rows);
                     sycl::buffer<double> bufdTT(diffR.memptr(),diffR.n_rows);
                     sycl::buffer<double> bufminAT(tempATmin.memptr(),tempATmin.n_rows);
                     sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
+            while (k < timeHorizon) {
+                cout << "." << flush;
+
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second0, true);
+
+
+
+                {
+                    // Create a SYCL buffer to store the space
+                    sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
+                    sycl::buffer<double> cdfBuffer0(secondnew0.memptr(),secondnew0.n_rows);
+                    sycl::buffer<double> bufs0(second0.memptr(),second0.n_rows);
 
                     // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                     Q.submit([&](sycl::handler& cgh) {
@@ -8313,6 +8384,7 @@ void IMDP::finiteHorizonReachControllerSortedStoreMDP(bool IMDP_lower, size_t ti
                 second0 = secondnew0;
 
             }
+            }
             cout << endl;
             cout << "Upper bound found." << endl;
 
@@ -8328,31 +8400,32 @@ void IMDP::finiteHorizonReachControllerSortedStoreMDP(bool IMDP_lower, size_t ti
 
             size_t k = 0;
             cout << "first loop iterations: " << endl;
-            while (k < timeHorizon) {
-                cout << "." << flush;
-
-                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first0, true);
-
+            {
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffR = maxTargetM - minTargetM;
                 vec diffA = maxAvoidM - minAvoidM;
-
-                TargetM = minTargetM;
-                AvoidM = minAvoidM;
-                TransitionM = minTransitionM;
-
                 sycl::queue queue;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
-                    sycl::buffer<double> cdfBuffer0(firstnew0.memptr(),firstnew0.n_rows);
-                    sycl::buffer<double> buff0(first0.memptr(),first0.n_rows);
                     sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
                     sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
                     sycl::buffer<double> bufminTT(minTargetM.memptr(),minTargetM.n_rows);
                     sycl::buffer<double> bufdTT(diffR.memptr(),diffR.n_rows);
                     sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
                     sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
+            while (k < timeHorizon) {
+                cout << "." << flush;
+
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first0, true);
+
+
+                TargetM = minTargetM;
+                AvoidM = minAvoidM;
+                TransitionM = minTransitionM;
+
+                {
+                    // Create a SYCL buffer to store the space
+                    sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
+                    sycl::buffer<double> cdfBuffer0(firstnew0.memptr(),firstnew0.n_rows);
+                    sycl::buffer<double> buff0(first0.memptr(),first0.n_rows);
                     sycl::buffer<double> bufTargetM(TargetM.memptr(), TargetM.n_rows);
                     sycl::buffer<double> bufAvoidM(AvoidM.memptr(), AvoidM.n_rows);
                     sycl::buffer<double> bufTransitionM(TransitionM.memptr(), TransitionM.n_rows * TransitionM.n_cols);
@@ -8437,6 +8510,7 @@ void IMDP::finiteHorizonReachControllerSortedStoreMDP(bool IMDP_lower, size_t ti
                 first0 = conv_to< colvec >::from(min(firstnew0,1));
                 k++;
             }
+            }
             cout << endl;
             cout << "control policy for lower bound found, finding upper bound." << endl;
 
@@ -8444,27 +8518,28 @@ void IMDP::finiteHorizonReachControllerSortedStoreMDP(bool IMDP_lower, size_t ti
             mat secondnew0(state_space_size*disturb_space_size, 1, fill::zeros);
             k = 0;
             cout << "second loop iterations: " << endl;
-            while (k < timeHorizon) {
-                cout << "." << flush;
-
-                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second0, false);
-
+            {
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffR = maxTargetM - minTargetM;
                 vec diffA = maxAvoidM - minAvoidM;
-
                 sycl::queue queue;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
-                    sycl::buffer<double> cdfBuffer0(secondnew0.memptr(),secondnew0.n_rows);
-                    sycl::buffer<double> buff0(second0.memptr(),second0.n_rows);
                     sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
                     sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
                     sycl::buffer<double> bufminTT(minTargetM.memptr(),minTargetM.n_rows);
                     sycl::buffer<double> bufdTT(diffR.memptr(),diffR.n_rows);
                     sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
                     sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
+            while (k < timeHorizon) {
+                cout << "." << flush;
+
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second0, false);
+
+
+                {
+                    // Create a SYCL buffer to store the space
+                    sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
+                    sycl::buffer<double> cdfBuffer0(secondnew0.memptr(),secondnew0.n_rows);
+                    sycl::buffer<double> buff0(second0.memptr(),second0.n_rows);
 
                     // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                     queue.submit([&](sycl::handler& cgh) {
@@ -8537,6 +8612,7 @@ void IMDP::finiteHorizonReachControllerSortedStoreMDP(bool IMDP_lower, size_t ti
 
                 k++;
             }
+            }
             cout << endl;
             cout << "Upper bound found." << endl;
 
@@ -8551,31 +8627,32 @@ void IMDP::finiteHorizonReachControllerSortedStoreMDP(bool IMDP_lower, size_t ti
 
             size_t k = 0;
             cout << "first loop iterations: " << endl;
-            while (k<timeHorizon) {
-                cout << "." << flush;
-
-                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first0, false);
-
+            {
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffR = maxTargetM - minTargetM;
                 vec diffA = maxAvoidM - minAvoidM;
-
-                TargetM = minTargetM;
-                AvoidM = minAvoidM;
-                TransitionM = minTransitionM;
-
                 sycl::queue queue;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
-                    sycl::buffer<double> cdfBuffer0(firstnew0.memptr(),firstnew0.n_rows);
-                    sycl::buffer<double> buff0(first0.memptr(),first0.n_rows);
                     sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
                     sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
                     sycl::buffer<double> bufminTT(minTargetM.memptr(),minTargetM.n_rows);
                     sycl::buffer<double> bufdTT(diffR.memptr(),diffR.n_rows);
                     sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
                     sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
+            while (k<timeHorizon) {
+                cout << "." << flush;
+
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first0, false);
+
+
+                TargetM = minTargetM;
+                AvoidM = minAvoidM;
+                TransitionM = minTransitionM;
+
+                {
+                    // Create a SYCL buffer to store the space
+                    sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
+                    sycl::buffer<double> cdfBuffer0(firstnew0.memptr(),firstnew0.n_rows);
+                    sycl::buffer<double> buff0(first0.memptr(),first0.n_rows);
                     sycl::buffer<double> bufTargetM(TargetM.memptr(), TargetM.n_rows);
                     sycl::buffer<double> bufAvoidM(AvoidM.memptr(), AvoidM.n_rows);
                     sycl::buffer<double> bufTransitionM(TransitionM.memptr(), TransitionM.n_rows * TransitionM.n_cols);
@@ -8651,6 +8728,7 @@ void IMDP::finiteHorizonReachControllerSortedStoreMDP(bool IMDP_lower, size_t ti
                 first0 = conv_to< colvec >::from(min(firstnew0,1));
                 k++;
             }
+            }
             cout << endl;
             cout << "control policy for lower bound found, finding upper bound." << endl;
 
@@ -8658,27 +8736,28 @@ void IMDP::finiteHorizonReachControllerSortedStoreMDP(bool IMDP_lower, size_t ti
             mat secondnew0(state_space_size*disturb_space_size, 1, fill::zeros);
             k=0;
             cout << "second loop iterations: " << endl;
-            while (k<timeHorizon) {
-                cout << "." << flush;
-
-                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second0, true);
-
+            {
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffR = maxTargetM - minTargetM;
                 vec diffA = maxAvoidM - minAvoidM;
-
                 sycl::queue queue;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
-                    sycl::buffer<double> cdfBuffer0(secondnew0.memptr(),secondnew0.n_rows);
-                    sycl::buffer<double> buff0(second0.memptr(),second0.n_rows);
                     sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
                     sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
                     sycl::buffer<double> bufminTT(minTargetM.memptr(),minTargetM.n_rows);
                     sycl::buffer<double> bufdTT(diffR.memptr(),diffR.n_rows);
                     sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
                     sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
+            while (k<timeHorizon) {
+                cout << "." << flush;
+
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second0, true);
+
+
+                {
+                    // Create a SYCL buffer to store the space
+                    sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
+                    sycl::buffer<double> cdfBuffer0(secondnew0.memptr(),secondnew0.n_rows);
+                    sycl::buffer<double> buff0(second0.memptr(),second0.n_rows);
 
                     // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                     queue.submit([&](sycl::handler& cgh) {
@@ -8748,6 +8827,7 @@ void IMDP::finiteHorizonReachControllerSortedStoreMDP(bool IMDP_lower, size_t ti
                 second0 = conv_to< colvec >::from(min(secondnew0,1));
                 k++;
             }
+            }
             cout << endl;
             cout << "Upper bound found." << endl;
 
@@ -8766,14 +8846,22 @@ void IMDP::finiteHorizonReachControllerSortedStoreMDP(bool IMDP_lower, size_t ti
 
             size_t k = 0;
             cout << "first loop iterations: " << endl;
+            {
+                mat diffT = maxTransitionM-minTransitionM;
+                vec diffR = maxTargetM - minTargetM;
+                vec diffA = maxAvoidM - minAvoidM;
+                sycl::queue queue;
+                    sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
+                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
+                    sycl::buffer<double> bufminTT(minTargetM.memptr(),minTargetM.n_rows);
+                    sycl::buffer<double> bufdTT(diffR.memptr(),diffR.n_rows);
+                    sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
+                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
             while (k < timeHorizon) {
             cout << "." << flush;
 
                 std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first0, true);
 
-                mat diffT = maxTransitionM-minTransitionM;
-                vec diffR = maxTargetM - minTargetM;
-                vec diffA = maxAvoidM - minAvoidM;
 
                 //if (storeMDP==true) {
                 TargetM = minTargetM;
@@ -8781,18 +8869,11 @@ void IMDP::finiteHorizonReachControllerSortedStoreMDP(bool IMDP_lower, size_t ti
                 TransitionM = minTransitionM;
                 //}
 
-                sycl::queue queue;
                 {
                     // Create a SYCL buffer to store the space
                     sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
                     sycl::buffer<double> cdfBuffer0(firstnew0.memptr(),firstnew0.n_rows);
                     sycl::buffer<double> buff0(first0.memptr(),first0.n_rows);
-                    sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
-                    sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
-                    sycl::buffer<double> bufminTT(minTargetM.memptr(),minTargetM.n_rows);
-                    sycl::buffer<double> bufdTT(diffR.memptr(),diffR.n_rows);
-                    sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
-                    sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
                     sycl::buffer<double> bufTargetM(TargetM.memptr(), TargetM.n_rows);
                     sycl::buffer<double> bufAvoidM(AvoidM.memptr(), AvoidM.n_rows);
                     sycl::buffer<double> bufTransitionM(TransitionM.memptr(), TransitionM.n_rows * TransitionM.n_cols);
@@ -8894,6 +8975,7 @@ void IMDP::finiteHorizonReachControllerSortedStoreMDP(bool IMDP_lower, size_t ti
                     firstnew0.row(i).max(U_pos[i]);
                 }
             }
+            }
             cout << endl;
             cout << "control policy for lower bound found, finding upper bound." << endl;
 
@@ -8922,29 +9004,30 @@ void IMDP::finiteHorizonReachControllerSortedStoreMDP(bool IMDP_lower, size_t ti
 
 
             cout << "Matrix Fixed" << endl;
-            while (k < timeHorizon) {
-                cout << "." << flush;
-
-                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second0, false);
-
-                //Get difference between max and min for incrementing values
+            {
                 mat diffT = tempTmax-tempTmin;
                 vec diffR = tempTTmax - tempTTmin;
                 vec diffA = tempATmax - tempATmin;
-
-
                 sycl::queue Q;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
-                    sycl::buffer<double> cdfBuffer0(secondnew0.memptr(),secondnew0.n_rows);
-                    sycl::buffer<double> bufs0(second0.memptr(),second0.n_rows);
                     sycl::buffer<double> bufminT(tempTmin.memptr(),tempTmin.n_rows*tempTmin.n_cols);
                     sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
                     sycl::buffer<double> bufminTT(tempTTmin.memptr(),tempTTmin.n_rows);
                     sycl::buffer<double> bufdTT(diffR.memptr(),diffR.n_rows);
                     sycl::buffer<double> bufminAT(tempATmin.memptr(),tempATmin.n_rows);
                     sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
+            while (k < timeHorizon) {
+                cout << "." << flush;
+
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second0, false);
+
+                //Get difference between max and min for incrementing values
+
+
+                {
+                    // Create a SYCL buffer to store the space
+                    sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
+                    sycl::buffer<double> cdfBuffer0(secondnew0.memptr(),secondnew0.n_rows);
+                    sycl::buffer<double> bufs0(second0.memptr(),second0.n_rows);
 
                     // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                     Q.submit([&](sycl::handler& cgh) {
@@ -9006,6 +9089,7 @@ void IMDP::finiteHorizonReachControllerSortedStoreMDP(bool IMDP_lower, size_t ti
                 k++;
                 second0 = secondnew0;
             }
+            }
             cout << endl;
             cout << "Upper bound found." << endl;
 
@@ -9024,31 +9108,32 @@ void IMDP::finiteHorizonReachControllerSortedStoreMDP(bool IMDP_lower, size_t ti
 
             size_t k = 0;
             cout << "first loop iterations: " << endl;
-            while (k < timeHorizon) {
-                cout << "." << flush;
-                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first0, false);
-                //Get difference between max and min for incrementing values
+            {
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffR = maxTargetM - minTargetM;
                 vec diffA = maxAvoidM - minAvoidM;
-
-                TargetM = minTargetM;
-                AvoidM = minAvoidM;
-                TransitionM = minTransitionM;
-                //}
-
                 sycl::queue queue;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
-                    sycl::buffer<double> cdfBuffer0(firstnew0.memptr(),firstnew0.n_rows);
-                    sycl::buffer<double> buff0(first0.memptr(),first0.n_rows);
                     sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
                     sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
                     sycl::buffer<double> bufminTT(minTargetM.memptr(),minTargetM.n_rows);
                     sycl::buffer<double> bufdTT(diffR.memptr(),diffR.n_rows);
                     sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
                     sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
+            while (k < timeHorizon) {
+                cout << "." << flush;
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first0, false);
+                //Get difference between max and min for incrementing values
+
+                TargetM = minTargetM;
+                AvoidM = minAvoidM;
+                TransitionM = minTransitionM;
+                //}
+
+                {
+                    // Create a SYCL buffer to store the space
+                    sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
+                    sycl::buffer<double> cdfBuffer0(firstnew0.memptr(),firstnew0.n_rows);
+                    sycl::buffer<double> buff0(first0.memptr(),first0.n_rows);
                     sycl::buffer<double> bufTargetM(TargetM.memptr(), TargetM.n_rows);
                     sycl::buffer<double> bufAvoidM(AvoidM.memptr(), AvoidM.n_rows);
                     sycl::buffer<double> bufTransitionM(TransitionM.memptr(), TransitionM.n_rows * TransitionM.n_cols);
@@ -9134,6 +9219,7 @@ void IMDP::finiteHorizonReachControllerSortedStoreMDP(bool IMDP_lower, size_t ti
                 }
 
             }
+            }
             cout << endl;
             cout << "control policy for lower bound found, finding upper bound." << endl;
 
@@ -9161,26 +9247,27 @@ void IMDP::finiteHorizonReachControllerSortedStoreMDP(bool IMDP_lower, size_t ti
 
 
             cout << "Matrix Fixed" << endl;
-            while (k<timeHorizon) {
-                cout << "." << flush;
-                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second0, true);
+            {
                 mat diffT = tempTmax-tempTmin;
                 vec diffR = tempTTmax - tempTTmin;
                 vec diffA = tempATmax - tempATmin;
-
-
                 sycl::queue Q;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
-                    sycl::buffer<double> cdfBuffer0(secondnew0.memptr(),secondnew0.n_rows);
-                    sycl::buffer<double> bufs0(second0.memptr(),second0.n_rows);
                     sycl::buffer<double> bufminT(tempTmin.memptr(),tempTmin.n_rows*tempTmin.n_cols);
                     sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
                     sycl::buffer<double> bufminTT(tempTTmin.memptr(),tempTTmin.n_rows);
                     sycl::buffer<double> bufdTT(diffR.memptr(),diffR.n_rows);
                     sycl::buffer<double> bufminAT(tempATmin.memptr(),tempATmin.n_rows);
                     sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
+            while (k<timeHorizon) {
+                cout << "." << flush;
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second0, true);
+
+
+                {
+                    // Create a SYCL buffer to store the space
+                    sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
+                    sycl::buffer<double> cdfBuffer0(secondnew0.memptr(),secondnew0.n_rows);
+                    sycl::buffer<double> bufs0(second0.memptr(),second0.n_rows);
 
                     // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                     Q.submit([&](sycl::handler& cgh) {
@@ -9249,6 +9336,7 @@ void IMDP::finiteHorizonReachControllerSortedStoreMDP(bool IMDP_lower, size_t ti
                 second0 = secondnew0;
 
             }
+            }
             cout << endl;
             cout << "Upper bound found." << endl;
 
@@ -9269,32 +9357,33 @@ void IMDP::finiteHorizonReachControllerSortedStoreMDP(bool IMDP_lower, size_t ti
 
             size_t k=0;
             cout << "first loop iterations: " << endl;
-            while (k < timeHorizon) {
-                cout << "." << flush;
-
-                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first0, true);
-
+            {
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffR = maxTargetM - minTargetM;
                 vec diffA = maxAvoidM - minAvoidM;
-
-                TargetM = minTargetM;
-                AvoidM = minAvoidM;
-                TransitionM = minTransitionM;
-                //}
-
                 sycl::queue queue;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
-                    sycl::buffer<double> cdfBuffer0(firstnew0.memptr(),firstnew0.n_rows);
-                    sycl::buffer<double> buff0(first0.memptr(),first0.n_rows);
                     sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
                     sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
                     sycl::buffer<double> bufminTT(minTargetM.memptr(),minTargetM.n_rows);
                     sycl::buffer<double> bufdTT(diffR.memptr(),diffR.n_rows);
                     sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
                     sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
+            while (k < timeHorizon) {
+                cout << "." << flush;
+
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first0, true);
+
+
+                TargetM = minTargetM;
+                AvoidM = minAvoidM;
+                TransitionM = minTransitionM;
+                //}
+
+                {
+                    // Create a SYCL buffer to store the space
+                    sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
+                    sycl::buffer<double> cdfBuffer0(firstnew0.memptr(),firstnew0.n_rows);
+                    sycl::buffer<double> buff0(first0.memptr(),first0.n_rows);
                     sycl::buffer<double> bufTargetM(TargetM.memptr(), TargetM.n_rows);
                     sycl::buffer<double> bufAvoidM(AvoidM.memptr(), AvoidM.n_rows);
                     sycl::buffer<double> bufTransitionM(TransitionM.memptr(), TransitionM.n_rows * TransitionM.n_cols);
@@ -9390,6 +9479,7 @@ void IMDP::finiteHorizonReachControllerSortedStoreMDP(bool IMDP_lower, size_t ti
                 }
 
             }
+            }
             cout << endl;
             cout << "control policy for lower bound found, finding upper bound." << endl;
 
@@ -9417,27 +9507,28 @@ void IMDP::finiteHorizonReachControllerSortedStoreMDP(bool IMDP_lower, size_t ti
 
 
             cout << "Matrix Fixed" << endl;
-            while (k < timeHorizon) {
-                cout << "." << flush;
-                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second0, false);
-
+            {
                 mat diffT = tempTmax-tempTmin;
                 vec diffR = tempTTmax - tempTTmin;
                 vec diffA = tempATmax - tempATmin;
-
-
                 sycl::queue Q;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
-                    sycl::buffer<double> cdfBuffer0(secondnew0.memptr(),secondnew0.n_rows);
-                    sycl::buffer<double> bufs0(second0.memptr(),second0.n_rows);
                     sycl::buffer<double> bufminT(tempTmin.memptr(),tempTmin.n_rows*tempTmin.n_cols);
                     sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
                     sycl::buffer<double> bufminTT(tempTTmin.memptr(),tempTTmin.n_rows);
                     sycl::buffer<double> bufdTT(diffR.memptr(),diffR.n_rows);
                     sycl::buffer<double> bufminAT(tempATmin.memptr(),tempATmin.n_rows);
                     sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
+            while (k < timeHorizon) {
+                cout << "." << flush;
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second0, false);
+
+
+
+                {
+                    // Create a SYCL buffer to store the space
+                    sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
+                    sycl::buffer<double> cdfBuffer0(secondnew0.memptr(),secondnew0.n_rows);
+                    sycl::buffer<double> bufs0(second0.memptr(),second0.n_rows);
 
                     // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                     Q.submit([&](sycl::handler& cgh) {
@@ -9503,6 +9594,7 @@ void IMDP::finiteHorizonReachControllerSortedStoreMDP(bool IMDP_lower, size_t ti
 
                 k++;
             }
+            }
             cout << endl;
             cout << "Upper bound found." << endl;
 
@@ -9522,32 +9614,33 @@ void IMDP::finiteHorizonReachControllerSortedStoreMDP(bool IMDP_lower, size_t ti
 
             size_t k=0;
             cout << "first loop iterations: " << endl;
-            while (k < timeHorizon) {
-            cout << "." << endl;
-
-                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first0, false);
-
+            {
                 mat diffT = maxTransitionM-minTransitionM;
                 vec diffR = maxTargetM - minTargetM;
                 vec diffA = maxAvoidM - minAvoidM;
-
-                TargetM = minTargetM;
-                AvoidM = minAvoidM;
-                TransitionM = minTransitionM;
-                //}
-
                 sycl::queue queue;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
-                    sycl::buffer<double> cdfBuffer0(firstnew0.memptr(),firstnew0.n_rows);
-                    sycl::buffer<double> buff0(first0.memptr(),first0.n_rows);
                     sycl::buffer<double> bufminT(minTransitionM.memptr(),minTransitionM.n_rows*minTransitionM.n_cols);
                     sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
                     sycl::buffer<double> bufminTT(minTargetM.memptr(),minTargetM.n_rows);
                     sycl::buffer<double> bufdTT(diffR.memptr(),diffR.n_rows);
                     sycl::buffer<double> bufminAT(minAvoidM.memptr(),minAvoidM.n_rows);
                     sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
+            while (k < timeHorizon) {
+            cout << "." << endl;
+
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(first0, false);
+
+
+                TargetM = minTargetM;
+                AvoidM = minAvoidM;
+                TransitionM = minTransitionM;
+                //}
+
+                {
+                    // Create a SYCL buffer to store the space
+                    sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
+                    sycl::buffer<double> cdfBuffer0(firstnew0.memptr(),firstnew0.n_rows);
+                    sycl::buffer<double> buff0(first0.memptr(),first0.n_rows);
                     sycl::buffer<double> bufTargetM(TargetM.memptr(), TargetM.n_rows);
                     sycl::buffer<double> bufAvoidM(AvoidM.memptr(), AvoidM.n_rows);
                     sycl::buffer<double> bufTransitionM(TransitionM.memptr(), TransitionM.n_rows * TransitionM.n_cols);
@@ -9637,6 +9730,7 @@ void IMDP::finiteHorizonReachControllerSortedStoreMDP(bool IMDP_lower, size_t ti
                     firstnew0.row(i).max(U_pos[i]);
                 }
             }
+            }
             cout << endl;
             cout << "control policy for lower bound found, finding upper bound." << endl;
 
@@ -9664,26 +9758,27 @@ void IMDP::finiteHorizonReachControllerSortedStoreMDP(bool IMDP_lower, size_t ti
             }
 
             cout << "Matrix Fixed" << endl;
-            while (k<timeHorizon) {
-                cout << "." << flush;
-                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second0, true);
+            {
                 mat diffT = tempTmax-tempTmin;
                 vec diffR = tempTTmax - tempTTmin;
                 vec diffA = tempATmax - tempATmin;
-
-
                 sycl::queue Q;
-                {
-                    // Create a SYCL buffer to store the space
-                    sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
-                    sycl::buffer<double> cdfBuffer0(secondnew0.memptr(),secondnew0.n_rows);
-                    sycl::buffer<double> bufs0(second0.memptr(),second0.n_rows);
                     sycl::buffer<double> bufminT(tempTmin.memptr(),tempTmin.n_rows*tempTmin.n_cols);
                     sycl::buffer<double> bufdT(diffT.memptr(),diffT.n_rows*diffT.n_cols);
                     sycl::buffer<double> bufminTT(tempTTmin.memptr(),tempTTmin.n_rows);
                     sycl::buffer<double> bufdTT(diffR.memptr(),diffR.n_rows);
                     sycl::buffer<double> bufminAT(tempATmin.memptr(),tempATmin.n_rows);
                     sycl::buffer<double> bufdAT(diffA.memptr(),diffA.n_rows);
+            while (k<timeHorizon) {
+                cout << "." << flush;
+                std::vector<int> sorted_indices = IMPaCT_IO::getSortedIndices(second0, true);
+
+
+                {
+                    // Create a SYCL buffer to store the space
+                    sycl::buffer<int> bufsort(sorted_indices.data(), sorted_indices.size());
+                    sycl::buffer<double> cdfBuffer0(secondnew0.memptr(),secondnew0.n_rows);
+                    sycl::buffer<double> bufs0(second0.memptr(),second0.n_rows);
 
                     // Submit a SYCL kernel to calculate the coordinates and store them in the space buffer
                     Q.submit([&](sycl::handler& cgh) {
@@ -9753,6 +9848,7 @@ void IMDP::finiteHorizonReachControllerSortedStoreMDP(bool IMDP_lower, size_t ti
                 second0 = conv_to< colvec >::from(min(secondnew0,1));
                 k++;
 
+            }
             }
             cout << endl;
             cout << "Upper bound found." << endl;
