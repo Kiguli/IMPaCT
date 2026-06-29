@@ -66,11 +66,47 @@ make 0.471 an OVER-optimistic, non-sound robust bound). To decide, compare the O
 min mass-in-domain for a BA cell: sparse closed form vs a brute-force max over sampled
 source states vs the dense saved matrix entry. (Nominal MC, above, cannot.)
 
-## Net so far
-- Sparse = rigorously exact robust abstraction (verified), MORE conservative on AS/BA.
-- Dense = tighter, sound vs nominal, robust-soundness depends on nlopt (unverified).
-- "Make sparse default" (ISSUE-0019) trades tightness for rigor; if the dense nlopt is
-  shown over-optimistic by the one-step brute-force check, it is a strict fix.
+## ROOT CAUSE (resolved 2026-06-29) — two causes, both understood
+**Sparse and dense DO agree for diagonal (decoupled) A; they should, and do.**
+
+1. **Grid convention (driver bug, fixed).** The dense IMDP class grids the state space
+   as `(ub-lb)/eta + 1` POINTS at `lb+k*eta` with cells CENTRED on each point
+   (`[p +/- eta/2]`, confirmed in `MDP::get_spaceU` and `initializeOptimizer`/
+   `costFunctionNormal`, which use `+/- eta/2`). `benchmarks/sparse_arch.cpp` first used
+   `abstraction.cpp`'s default `(ub-lb)/eta` corner-anchored cells. Aligning the sparse
+   grid (`xlb -= eta/2`, `xub += eta/2`, and expand target/avoid boxes by `eta/2`) makes
+   the cell counts match the dense EXACTLY (AS 2541, BA 1225, IC 592/1681, PD 571) and
+   moves the values much closer.
+
+2. **Coupled (non-diagonal) A (a real, DOCUMENTED property).** The sparse box transition
+   bound is `prod_d` of the per-dimension 1-D interval (`abstraction.h`: "EXACT when
+   dynamics are axis-decoupled (A diagonal), a SOUND over-approximation otherwise").
+   For coupled A the per-dimension worst-case source states are not jointly attainable,
+   so the sparse OVER-approximates the leaving mass (=> more conservative). The dense
+   `nlopt` optimises the JOINT mass over the source cell, so it is tighter (and matches
+   the true joint worst case). Confirmed by one-step brute force
+   (`benchmarks/crosstool/peers/onestep_ba.py`):
+   ```
+   cell [20,20,33,33] (interior): true=sparse=0.0006   (identical)
+   cell [21,21,36,36] (corner)  : true=0.2610  sparse=0.2664  (+0.0054)
+   cell [19,21,30,36] (edge)    : true=0.1058  sparse=0.1093  (+0.0035)
+   ```
+   The ~0.005/step over-approximation at boundary cells compounds over the horizon and
+   through VI (BA safety: sparse 0.348 vs dense 0.471). It is **SOUND** (never
+   under-estimates leakage / over-claims safety), just conservative. The pattern tracks
+   the off-diagonal magnitude: PD/PR (diagonal) exact; IC (coupling 0.1) ~; AS/BA
+   (larger coupling) largest gap.
+
+## Conclusion
+- Diagonal A: sparse == dense (memory win, no accuracy change). User's expectation holds.
+- Coupled A: sparse is a SOUND but more-conservative abstraction; the dense joint nlopt
+  is tighter. NOT a bug in either — a per-dim vs joint enclosure trade-off.
+
+## Fix to make them identical on coupled systems
+Give the sparse abstraction a TIGHT JOINT mean enclosure for coupled A (e.g. a
+`buildSparseReachGeneral` variant that takes a joint per-cell min/max box-mass, sampled
+or optimised like the dense path, instead of the per-dimension product). Then sparse ==
+dense for coupled A too, keeping the O(nnz) memory. Tracked under ISSUE-0019.
 
 ## Impact
 Gates ISSUE-0019 (make sparse the default). Until resolved, "switch to sparse" may

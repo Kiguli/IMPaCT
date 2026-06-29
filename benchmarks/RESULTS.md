@@ -64,6 +64,18 @@ Full cross-tool comparison vs PRISM / Storm / IntervalMDP.jl is in the top-level
 
 ## Sparse abstraction rerun (2026-06-29, `benchmarks/sparse_arch.cpp`)
 
+> UPDATE (grid-aligned + root cause, ISSUE-0020): the driver now aligns the sparse grid
+> to the dense point-grid convention (cells centred on lb+k*eta, (ub-lb)/eta+1 cells), so
+> the cell counts MATCH the dense exactly (AS 2541, BA 1225, IC 592/1681, PD 571) and the
+> values move much closer (AS 0.0003->0.0019, BA 0.107->0.348). Root cause of the
+> remaining gap, now understood and NOT a bug: sparse == dense for DIAGONAL A (PD, PR
+> exact; interior BA cells exact one-step by brute force). For COUPLED (non-diagonal) A
+> the sparse box bound is the product of per-dimension intervals = EXACT for diagonal A,
+> a SOUND over-approximation otherwise (per-dim worst cases not jointly attainable), while
+> the dense joint nlopt is tighter. One-step brute force (onestep_ba.py): BA corner cell
+> true 0.2610 vs sparse 0.2664 (+0.0054). Both sound; sparse slightly conservative on
+> coupled systems until a tight JOINT enclosure is added to the sparse path.
+
 Re-ran the AFFINE-in-state ARCH cases (mean range EXACT → no abstraction loss) through
 the v2 **sparse** abstraction (`src/abstraction.cpp`, O(nnz)) + sparse OVI solver
 (`src/solve.cpp`), instead of the dense SYCL `IMDP` class. Pure std C++, single thread.

@@ -200,6 +200,20 @@ int main(int argc, char** argv) {
                 "bench","cells","actions","nnz","sparse(MB)","dense(GB)","build_s","solve_s");
     for (auto& b : benches) {
         if (fast && std::string(b.name) == "PR_minimal") continue;
+        // Align to the DENSE convention so sparse == dense (then sparse is purely a
+        // memory win): the dense IMDP class grids the state space as (ub-lb)/eta + 1
+        // POINTS at lb+k*eta with cells CENTRED on each point ([point +/- eta/2]).
+        // abstraction.cpp instead grids into (ub-lb)/eta corner-anchored cells
+        // [lb+j*eta, lb+(j+1)*eta]. Shifting the grid by -eta/2 (and +eta/2 at the top)
+        // makes the sparse cells centre on the dense points (N+1 cells); expanding the
+        // target/avoid boxes by eta/2 makes the box-subset-region test equal the dense
+        // centre-in-region test.
+        for (int i = 0; i < b.g.dim_x; ++i) {
+            const double h = b.g.eta[i] / 2.0;
+            b.g.xlb[i] -= h; b.g.xub[i] += h;
+            b.g.tlo[i] -= h; b.g.thi[i] += h;
+            if (b.hasAvoid) { b.alo[i] -= h; b.ahi[i] += h; }
+        }
         auto t0 = std::chrono::steady_clock::now();
         abstraction::SparseReach R = abstraction::buildSparseReachGeneral(b.g, b.mean, prune);
         if (b.hasAvoid) markAvoid(R, b.g, b.alo, b.ahi);

@@ -45,7 +45,17 @@ SYCL path is retained as an option (GPU-parallel abstraction).
 - [ ] Make the example/recommended workflow default to the sparse path; keep the dense
   SYCL path as an explicit option.
 
-## Open risk
-Flipping the default changes computed values where the sparse and dense abstractions
-disagree (ISSUE-0020). Must confirm via Monte-Carlo which is correct first; if the
-dense nlopt path is the inaccurate one, the switch is also an accuracy/soundness fix.
+## Accuracy resolved (ISSUE-0020)
+The sparse and dense abstractions AGREE for diagonal (decoupled) A (PD, PR exact, and
+interior BA cells exact) — once the sparse grid is aligned to the dense point-grid
+convention (`benchmarks/sparse_arch.cpp` now does this). For COUPLED A the sparse box
+bound (product of per-dimension intervals) is a SOUND OVER-approximation (more
+conservative; AS/BA), where the dense joint `nlopt` is tighter. So flipping to sparse
+is SOUND everywhere and a memory/scalability win; on coupled systems it is slightly
+more conservative until a tight JOINT mean enclosure is added to the sparse path.
+
+## Open risk / remaining
+- Coupled-A conservatism: add a joint per-cell enclosure to `buildSparseReachGeneral`
+  so sparse == dense (tight) on coupled systems too (then "no accuracy loss" is literal).
+- Architectural: route the examples / IMDP-class default through the sparse path; keep
+  the dense SYCL path as an explicit (GPU) option.
