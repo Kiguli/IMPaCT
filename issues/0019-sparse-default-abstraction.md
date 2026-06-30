@@ -53,7 +53,11 @@ Realized in `benchmarks/sparse_arch.cpp`:
 - [x] Joint enclosure (fast + exact) implemented; exact matches dense on noise~grid (BA).
 - [x] Accuracy gate (ISSUE-0020) resolved: agree for diagonal A and noise~grid; coupled-A
   conservatism removed by exact mode; tiny-noise is a dense-nlopt strength.
-- [ ] Nonlinear ARCH cases (VP, AV_minimal, LM) via interval-arithmetic mean enclosures.
+- [x] Nonlinear ARCH cases wired through the sparse joint enclosure (point-sampling, K-per-dim):
+      VP (FAST 0.1985 → EXACT 0.2143, K-stable, ≈ dense 0.2297), LM (6-D, dense-INFEASIBLE,
+      builds+solves at 196 MB), AV_minimal (builds where dense OOMs). The point-sampling mean
+      range is a HEURISTIC for non-affine `f` (so is the dense nlopt) — certified
+      interval-arithmetic enclosure tracked in **ISSUE-0021**.
 - [ ] Wire the example/recommended workflow to default to the sparse path with a
   fast/exact/dense switch; keep dense SYCL (GPU + tiny-noise) as an explicit option.
 

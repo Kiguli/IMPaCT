@@ -152,6 +152,9 @@ static abstraction::SparseReach buildSparseReachJoint(const abstraction::GridSpe
     const int dx = g.dim_x, du = g.dim_u;
     const int K = (exactK >= 2) ? exactK : 2;          // points per dimension
     const bool tight = (exactK >= 2);
+    // Floor sigma to avoid 0/0 in the Gaussian CDF for deterministic dims (e.g. LM has
+    // sigma=0 in 4 of 6 dims): a ~delta kernel, still SOUND (window is just the mean cell).
+    std::vector<double> sig(dx); for (int i = 0; i < dx; ++i) sig[i] = std::max(g.sigma[i], 1e-9);
     std::vector<int> Nd(dx); std::vector<long long> stride(dx); long long N = 1;
     for (int i = 0; i < dx; ++i) { Nd[i] = std::max(1, (int)std::llround((g.xub[i]-g.xlb[i])/g.eta[i])); stride[i]=N; N*=Nd[i]; }
     const int TARGET = (int)N, SINK = (int)N + 1;
@@ -193,7 +196,7 @@ static abstraction::SparseReach buildSparseReachJoint(const abstraction::GridSpe
 
             // window of candidate dest cells (per-dim mean range +/- 6 sigma)
             std::vector<int> wlo(dx), whi(dx); bool any=true;
-            for (int i=0;i<dx;++i){ double W=6.0*g.sigma[i];
+            for (int i=0;i<dx;++i){ double W=6.0*sig[i];
                 wlo[i]=std::max(0,(int)std::floor((muLo[i]-W-g.xlb[i])/g.eta[i]));
                 whi[i]=std::min(Nd[i]-1,(int)std::floor((muHi[i]+W-g.xlb[i])/g.eta[i]));
                 if(wlo[i]>whi[i]) any=false; jt[i]=wlo[i]; }
@@ -204,12 +207,12 @@ static abstraction::SparseReach buildSparseReachJoint(const abstraction::GridSpe
                 double ph;
                 if (!tight) { ph=1.0;
                     for(int i=0;i<dx;++i){ double a=cellLoDim(i,jt[i]), b=a+g.eta[i];
-                        abstraction::Bound bd=abstraction::transitionInterval1D(muLo[i],muHi[i],g.sigma[i],a,b); ph*=bd.hi; }
+                        abstraction::Bound bd=abstraction::transitionInterval1D(muLo[i],muHi[i],sig[i],a,b); ph*=bd.hi; }
                 } else ph=0.0;
                 double pl=1e300;
                 for(long long c=0;c<nPts;++c){ double p=1.0;
                     for(int i=0;i<dx;++i){ double a=cellLoDim(i,jt[i]), b=a+g.eta[i];
-                        p*=abstraction::massInInterval(cornerMu[c][i],g.sigma[i],a,b); }
+                        p*=abstraction::massInInterval(cornerMu[c][i],sig[i],a,b); }
                     pl=std::min(pl,p); if(tight) ph=std::max(ph,p); }
                 if (ph>prune){ if(pl>ph) pl=ph;
                     if(isTargetMi(jt)) row.push_back({TARGET,pl,ph});
@@ -220,11 +223,11 @@ static abstraction::SparseReach buildSparseReachJoint(const abstraction::GridSpe
             // max (tight); min (gl) via sample min (corner-exact). sink = [1-gh, 1-gl].
             double gh;
             if (!tight) { gh=1.0;
-                for(int i=0;i<dx;++i){ abstraction::Bound gg=abstraction::transitionInterval1D(muLo[i],muHi[i],g.sigma[i],g.xlb[i],g.xub[i]); gh*=gg.hi; }
+                for(int i=0;i<dx;++i){ abstraction::Bound gg=abstraction::transitionInterval1D(muLo[i],muHi[i],sig[i],g.xlb[i],g.xub[i]); gh*=gg.hi; }
             } else gh=0.0;
             double gl=1e300;
             for(long long c=0;c<nPts;++c){ double p=1.0;
-                for(int i=0;i<dx;++i) p*=abstraction::massInInterval(cornerMu[c][i],g.sigma[i],g.xlb[i],g.xub[i]);
+                for(int i=0;i<dx;++i) p*=abstraction::massInInterval(cornerMu[c][i],sig[i],g.xlb[i],g.xub[i]);
                 gl=std::min(gl,p); if(tight) gh=std::max(gh,p); }
             row.push_back({SINK, std::max(0.0,1.0-gh), std::min(1.0,1.0-gl)});
             out.nnz += (long long)row.size();
@@ -238,15 +241,26 @@ static abstraction::SparseReach buildSparseReachJoint(const abstraction::GridSpe
 
 int main(int argc, char** argv) {
     const double eps = 1e-6, prune = 1e-7;
-    bool fast = false; int exactK = 0;   // exactK=0 -> fast corner-min + per-dim-max (default)
+    bool fast = false; int exactK = 0; std::string only;  // exactK=0 -> fast (default)
     for (int i = 1; i < argc; ++i) {
         std::string a = argv[i];
         if (a == "fast") fast = true;
         else if (a == "exact") exactK = 5;           // K=5-per-dim sub-grid -> tight joint min/max
         else if (a.rfind("exactK=", 0) == 0) exactK = std::max(2, atoi(a.c_str() + 7));
+        else if (a.rfind("only=", 0) == 0) only = a.substr(5);   // run one benchmark by name
     }
     std::printf("mode: %s\n", exactK ? "EXACT (tight joint, K-per-dim subgrid)" : "FAST (corner-min + per-dim-max)");
     std::vector<Bench> benches;
+
+    // ---- VP: 2D Van der Pol, NONLINEAR (point dynamics), infinite reach, no input ----
+    { abstraction::GridSpec g; g.dim_x=2; g.dim_u=0;
+      g.xlb={-5,-5}; g.xub={5,5}; g.eta={0.2,0.2};
+      g.ulb={}; g.uub={}; g.ueta={};
+      g.sigma={std::sqrt(0.04),std::sqrt(0.04)};
+      g.tlo={-1.2,-2.9}; g.thi={-0.9,-2.0};
+      PointMeanFn vp=[](const std::vector<double>& x, const std::vector<double>&, std::vector<double>& mu){
+        mu.assign(2,0.0); mu[0]=x[0]+0.1*x[1]; mu[1]=x[1]+(-x[0]+(1.0-x[0])*(1.0-x[0])*x[1])*0.1; };
+      benches.push_back({"VP", g, vp, INF_REACH, 0, false, {}, {}}); }
 
     // ---- AS: 3D anaesthesia, affine, finite reach H=10 ----
     { abstraction::GridSpec g; g.dim_x=3; g.dim_u=2;
@@ -319,9 +333,43 @@ int main(int argc, char** argv) {
       auto off=[](const std::vector<double>& u, std::vector<double>& o){ o={2*u[0]*std::cos(u[1]),2*u[0]*std::sin(u[1])}; };
       benches.push_back({"PR_minimal", g, affinePoint(A,off), INF_REACH, 0, true, {-1.5,-1.5}, {1.5,1.5}}); }
 
+    // ---- AV_minimal: 3D autonomous vehicle (kinematic bicycle), NONLINEAR, inf reach-avoid ----
+    { abstraction::GridSpec g; g.dim_x=3; g.dim_u=2;
+      g.xlb={-5,-5,-3.4}; g.xub={5,5,3.4}; g.eta={0.5,0.5,0.4};
+      g.ulb={-1,-0.4}; g.uub={4,0.4}; g.ueta={1,0.2};
+      g.sigma={std::sqrt(1.0/1.5),std::sqrt(1.0/1.5),std::sqrt(1.0/1.5)};
+      g.tlo={-5.75,-0.25,-3.45}; g.thi={0.25,5.75,3.45};
+      PointMeanFn av=[](const std::vector<double>& x, const std::vector<double>& u, std::vector<double>& mu){
+        const double Ts=0.1, phi=std::atan(std::tan(u[1])/2.0), c=std::cos(phi);
+        mu.assign(3,0.0);
+        mu[0]=x[0]+Ts*u[0]*std::cos(phi+x[2])/c;
+        mu[1]=x[1]+Ts*u[0]*std::sin(phi+x[2])/c;
+        mu[2]=x[2]+Ts*u[0]*std::tan(u[1]); };
+      benches.push_back({"AV_minimal", g, av, INF_REACH, 0, true, {-5.75,-0.75,-3.45}, {0.25,-0.25,3.45}}); }
+
+    // ---- LM: 6D lane-merging vehicle, NONLINEAR, finite reach H=200. sigma=0 in dims 0-3
+    //      (deterministic), 0.001 in 4-5. The dense path is INFEASIBLE here (~96 GB/matrix). ----
+    { abstraction::GridSpec g; g.dim_x=6; g.dim_u=2;
+      g.xlb={-0.5,-0.5,-10,-5,-3.14,-3.14}; g.xub={0.5,0.5,4,4,3.14,3.14}; g.eta={0.5,0.5,1,1,3.14,3.14};
+      g.ulb={0.5,0.5}; g.uub={3.5,3.5}; g.ueta={1.5,1.5};
+      g.sigma={0,0,0,0,0.001,0.001};
+      g.tlo={-0.5,-0.5,-10,-5,-3.14,-3.14}; g.thi={0.5,-0.5,-10,-5,3.14,3.14};
+      PointMeanFn lm=[](const std::vector<double>& x, const std::vector<double>& u, std::vector<double>& mu){
+        const double Ts=0.1,M=700,D=1.2,a=0.35,b=0.15,d=0.1,Afy=199,Izz=394,pi=3.14,Cg=22000;
+        const double su=u[0]+u[1], slip=2.0*(x[1]-b*x[0])/su, fy=Afy*std::sin(x[5]+pi/2)*a;
+        mu.assign(6,0.0);
+        mu[0]=x[0]+(Ts/Izz)*(fy+2*Cg*std::tan(slip)*b);
+        mu[1]=x[1]+(Ts/M)*(fy+2*Cg*std::tan(slip))-(Ts*su)/2*x[0];
+        mu[2]=x[2]+(Ts*su/2)*std::cos(x[4]);
+        mu[3]=x[3]+(Ts*su/2)*std::sin(x[4]);
+        mu[4]=x[4]+Ts*(su/(2*D)+x[0]);
+        mu[5]=x[5]-Ts*su/(2*d)*std::cos(x[5])-(Ts*su*(d+std::sqrt(D*D+(a+b)*(a+b))*std::sin(x[5])))/(2*D*d); };
+      benches.push_back({"LM", g, lm, FIN_REACH, 200, true, {-0.5,-0.5,-4,2.5,-3.14,-3.14}, {0.5,-0.5,4,4,3.14,3.14}}); }
+
     std::printf("%-11s %7s %7s %12s %11s %9s %8s %9s  interior[min,max,mean]\n",
                 "bench","cells","actions","nnz","sparse(MB)","dense(GB)","build_s","solve_s");
     for (auto& b : benches) {
+        if (!only.empty() && std::string(b.name) != only) continue;
         if (fast && std::string(b.name) == "PR_minimal") continue;
         // Align to the DENSE convention so sparse == dense (then sparse is purely a
         // memory win): the dense IMDP class grids the state space as (ub-lb)/eta + 1

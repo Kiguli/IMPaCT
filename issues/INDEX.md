@@ -26,3 +26,4 @@ See [`README.md`](README.md) for conventions and the literature-counterexample p
 | [0018](0018-optimistic-bound-is-robust-policy-bracket.md) | Optimistic value is a bracket of the robust controller, not the cooperative optimum | open | low | semantics, documentation, cross-tool |
 | [0019](0019-sparse-default-abstraction.md) | Make the sparse abstraction the default everywhere (design decision) | in-progress | medium | design-decision, scalability, abstraction |
 | [0020](0020-sparse-vs-dense-abstraction-discrepancy.md) | Sparse (closed-form) and dense (nlopt) abstractions disagree on AS/BA | open | medium | correctness, abstraction, soundness |
+| [0021](0021-nonlinear-mean-enclosure-not-certified.md) | Nonlinear mean enclosure (point-sampling / nlopt) is heuristic, not certified-sound | open | medium | soundness, abstraction, nonlinear, design-decision |

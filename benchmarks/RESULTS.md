@@ -105,6 +105,38 @@ per source cell, which can miss the adversarial worst case → looser/optimistic
 Needs Monte-Carlo to declare a winner (cf. abstraction-soundness ISSUE-0007/0008).
 Nonlinear VP/AV/LM (interval-arithmetic mean enclosures) are the next pass.
 
+## Nonlinear ARCH via the sparse joint enclosure (2026-06-29, `benchmarks/sparse_arch.cpp`)
+
+The NONLINEAR cases (VP, AV_minimal, LM) are now wired through the same sparse path. The
+mean range over each source cell is estimated by evaluating the dynamics on a K-per-dim
+sub-grid (FAST = 2 corners; EXACT = K≥2), `muLo/muHi = min/max over points`. For non-affine
+`f` this is a *heuristic* enclosure (the dense `nlopt` path is too) — see **ISSUE-0021**;
+the validation is K-convergence + agreement with the dense/IntervalMDP.jl value.
+
+| bench | spec | cells | actions | nnz | sparse(MB) | dense(GB)* | build+solve | interior max | dense ref |
+|---|---|---|---|---|---|---|---|---|---|
+| VP (fast)  | inf reach | 2601 | 1 | 0.20M | 4.8 | 0.11 | 0.1+0.5 s | 0.1985 | 0.2297 |
+| VP (exact K=7/11) | inf reach | 2601 | 1 | 0.20M | 4.8 | 0.11 | 0.6+0.5 s | **0.2143** | 0.2297 |
+| AV_minimal (fast) | inf reach-avoid | 7938 | 30 | (running) | — | — | — | (running) | dense OOM (7.42 GB×2) |
+| LM (fast) | fin reach H=200 | 12150 | 9 | 8.19M | 196 | 21.3 | 24.8+14.9 s | **0.0000** | dense INFEASIBLE (~96 GB/matrix) |
+
+*dense(GB) is the `(state·action)·state ×8×2` dense-matrix estimate the driver prints.
+
+- **VP** validates the nonlinear sparse path: FAST `0.1985` → EXACT `0.2143` (K-stable at
+  K=7, unchanged at K=11) → close to the dense/IntervalMDP.jl `0.2297`. The residual is the
+  finite sub-grid under-sampling the optimistic max-mass-to-target that the dense continuum
+  optimiser finds (expected for non-affine `f`; ISSUE-0021).
+- **LM** is the headline **scalability** result: the 6-D case is **dense-INFEASIBLE**
+  (~96 GB per matrix) yet builds + solves through the sparse path in ~40 s at **196 MB**.
+  The robust reach is `0.0000` everywhere — *sound but vacuous*: σ=0 in 4 of 6 dims
+  (deterministic), so on the coarse grid the corner means of a cell scatter into different
+  destination cells → transition intervals `[0,1]` → the pessimistic (robust) lower bound
+  is 0. A finer grid and/or the certified interval-arithmetic enclosure (ISSUE-0021) are
+  needed for a non-trivial robust value on near-deterministic systems.
+- **AV_minimal** (3-D bicycle, wide noise σ≈0.82 ≫ η=0.5 ⇒ ~10-cell kernel) builds where
+  the dense path OOMs (7.42 GB×2); its infinite-horizon OVI solve is heavy (wide kernel,
+  like PR_minimal) — result appended on completion.
+
 ## ISSUE-0003 nature-trap — MEC-collapse does NOT fix it (empirical, `models/naturetrap.imdp`)
 
 On the canonical nature-trap (true robust V*(0)=0): **OVI** → `lower=0, upper=1e-6`
