@@ -109,8 +109,11 @@ def prism(name, imdp, group, prop, label, init):
             emit("PRISM", name, group, prop, sense, "N/A" if bad=="unsupported" else "ERR", None if bad=="unsupported" else t, bad)
 
 def storm(name, imdp, group, prop, label, init):
-    # native storm (built in-container); reads the .drn sibling of the .imdp
+    # native storm (built in-container); reads the .drn sibling of the .imdp.
+    # models/*.drn are gitignored (regenerable) -> build it from the .imdp if missing.
     drn = ROOT + "/" + imdp[:-5] + ".drn"
+    if not os.path.exists(drn):
+        subprocess.run(["python3", ROOT + "/peers/imdp_to_drn.py", ROOT + "/" + imdp, drn], check=True)
     if prop not in ("reach", "safety"):
         for sense in ("pess", "opt"):
             emit("Storm", name, group, prop, sense, "N/A", None, "unsupported")
