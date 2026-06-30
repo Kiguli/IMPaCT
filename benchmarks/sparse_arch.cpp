@@ -24,6 +24,7 @@
 #include <cmath>
 #include <chrono>
 #include <cstdio>
+#include <cstdlib>
 #include <functional>
 #include <set>
 #include <string>
@@ -137,15 +138,20 @@ static PointMeanFn affinePoint(std::vector<std::vector<double>> A,
     };
 }
 
-// Build the sparse IMDP with a JOINT box-mass enclosure over each source cell:
-//   lo (min mass) = min over the 2^dim source-cell CORNERS  (the box mass is log-concave
-//                   in x, so its minimum over the cell is attained at a vertex -> EXACT),
-//   hi (max mass) = product of per-dimension maxima  (a sound upper bound).
-// This removes the per-dimension MIN over-approximation that made the sparse abstraction
-// more conservative than the dense joint nlopt on coupled (non-diagonal A) systems.
+// Build the sparse IMDP with a JOINT box-mass enclosure over each source cell.
+//   exactK == 0 (FAST, default): evaluate the dynamics at the 2^dim source-cell CORNERS;
+//     lo = min over corners (the box mass is log-concave in x, so its min over the cell
+//     is at a vertex -> EXACT joint min), hi = product of per-dimension maxima (sound
+//     upper bound). Removes the per-dim MIN over-approximation on coupled A; very fast.
+//   exactK == K >= 2 (EXACT/TIGHT): evaluate on a K-per-dimension sub-grid of the cell
+//     and take min/max over all K^dim points for BOTH lo and hi -> converges to the true
+//     joint min/max (the dense joint abstraction) as K grows. Slower (opt-in).
 static abstraction::SparseReach buildSparseReachJoint(const abstraction::GridSpec& g,
-                                                      const PointMeanFn& fmean, double prune) {
+                                                      const PointMeanFn& fmean, double prune,
+                                                      int exactK = 0) {
     const int dx = g.dim_x, du = g.dim_u;
+    const int K = (exactK >= 2) ? exactK : 2;          // points per dimension
+    const bool tight = (exactK >= 2);
     std::vector<int> Nd(dx); std::vector<long long> stride(dx); long long N = 1;
     for (int i = 0; i < dx; ++i) { Nd[i] = std::max(1, (int)std::llround((g.xub[i]-g.xlb[i])/g.eta[i])); stride[i]=N; N*=Nd[i]; }
     const int TARGET = (int)N, SINK = (int)N + 1;
@@ -165,8 +171,8 @@ static abstraction::SparseReach buildSparseReachJoint(const abstraction::GridSpe
     auto cellLoDim = [&](int i, int j){ return g.xlb[i] + j*g.eta[i]; };
     std::vector<int> mi(dx), jt(dx);
     std::vector<double> cl(dx), ch(dx), muLo(dx), muHi(dx);
-    const int nCorner = 1 << dx;
-    std::vector<std::vector<double>> cornerMu(nCorner, std::vector<double>(dx));
+    long long nPts = 1; for (int i = 0; i < dx; ++i) nPts *= K;   // K^dim sample points
+    std::vector<std::vector<double>> cornerMu((size_t)nPts, std::vector<double>(dx));
     std::vector<double> xc(dx), mu(dx);
 
     auto isTargetMi = [&](const std::vector<int>& m){ for(int i=0;i<dx;++i){ double lo=cellLoDim(i,m[i]),hi=lo+g.eta[i];
@@ -177,11 +183,13 @@ static abstraction::SparseReach buildSparseReachJoint(const abstraction::GridSpe
         if (isTargetMi(mi)) { out.model[lin].push_back({ {TARGET,1.0,1.0} }); out.nnz+=1; continue; }
         for (int i=0;i<dx;++i){ cl[i]=cellLoDim(i,mi[i]); ch[i]=cl[i]+g.eta[i]; }
         for (const auto& u : actions) {
-            // evaluate the dynamics at the 2^dim source-cell corners; cache the means
-            for (int c=0;c<nCorner;++c){ for(int i=0;i<dx;++i) xc[i]=((c>>i)&1)?ch[i]:cl[i];
+            // evaluate the dynamics at the K-per-dim source-cell sample points; cache means
+            for (long long c=0;c<nPts;++c){ long long q=c;
+                for(int i=0;i<dx;++i){ int idx=(int)(q%K); q/=K;
+                    xc[i]=(K==1)?0.5*(cl[i]+ch[i]):cl[i]+(double)idx/(K-1)*(ch[i]-cl[i]); }
                 fmean(xc,u,mu); cornerMu[c]=mu; }
             for (int i=0;i<dx;++i){ muLo[i]=1e300; muHi[i]=-1e300;
-                for(int c=0;c<nCorner;++c){ muLo[i]=std::min(muLo[i],cornerMu[c][i]); muHi[i]=std::max(muHi[i],cornerMu[c][i]); } }
+                for(long long c=0;c<nPts;++c){ muLo[i]=std::min(muLo[i],cornerMu[c][i]); muHi[i]=std::max(muHi[i],cornerMu[c][i]); } }
 
             // window of candidate dest cells (per-dim mean range +/- 6 sigma)
             std::vector<int> wlo(dx), whi(dx); bool any=true;
@@ -191,26 +199,33 @@ static abstraction::SparseReach buildSparseReachJoint(const abstraction::GridSpe
                 if(wlo[i]>whi[i]) any=false; jt[i]=wlo[i]; }
             solve::ActionDist row;
             if (any) while (true) {
-                // hi = product of per-dim maxima (sound); lo = min over corners (exact joint min)
-                double ph=1.0;
-                for(int i=0;i<dx;++i){ double a=cellLoDim(i,jt[i]), b=a+g.eta[i];
-                    abstraction::Bound bd=abstraction::transitionInterval1D(muLo[i],muHi[i],g.sigma[i],a,b); ph*=bd.hi; }
+                // lo = min over sample points (corner-exact min). hi = per-dim product
+                // (fast, sound) OR max over sample points (tight/exact).
+                double ph;
+                if (!tight) { ph=1.0;
+                    for(int i=0;i<dx;++i){ double a=cellLoDim(i,jt[i]), b=a+g.eta[i];
+                        abstraction::Bound bd=abstraction::transitionInterval1D(muLo[i],muHi[i],g.sigma[i],a,b); ph*=bd.hi; }
+                } else ph=0.0;
                 double pl=1e300;
-                for(int c=0;c<nCorner;++c){ double p=1.0;
+                for(long long c=0;c<nPts;++c){ double p=1.0;
                     for(int i=0;i<dx;++i){ double a=cellLoDim(i,jt[i]), b=a+g.eta[i];
                         p*=abstraction::massInInterval(cornerMu[c][i],g.sigma[i],a,b); }
-                    pl=std::min(pl,p); }
+                    pl=std::min(pl,p); if(tight) ph=std::max(ph,p); }
                 if (ph>prune){ if(pl>ph) pl=ph;
                     if(isTargetMi(jt)) row.push_back({TARGET,pl,ph});
                     else { long long lj=0; for(int i=0;i<dx;++i) lj+=(long long)jt[i]*stride[i]; row.push_back({(int)lj,pl,ph}); } }
                 int i=0; for(;i<dx;++i){ if(++jt[i]<=whi[i]) break; jt[i]=wlo[i]; } if(i==dx) break;
             }
-            // outside-grid (SINK): mass-in-grid hi via per-dim product (sound), lo via corner min (exact)
-            double gh=1.0;
-            for(int i=0;i<dx;++i){ abstraction::Bound gg=abstraction::transitionInterval1D(muLo[i],muHi[i],g.sigma[i],g.xlb[i],g.xub[i]); gh*=gg.hi; }
+            // outside-grid (SINK): mass-in-grid max (gh) via per-dim product (fast) or sample
+            // max (tight); min (gl) via sample min (corner-exact). sink = [1-gh, 1-gl].
+            double gh;
+            if (!tight) { gh=1.0;
+                for(int i=0;i<dx;++i){ abstraction::Bound gg=abstraction::transitionInterval1D(muLo[i],muHi[i],g.sigma[i],g.xlb[i],g.xub[i]); gh*=gg.hi; }
+            } else gh=0.0;
             double gl=1e300;
-            for(int c=0;c<nCorner;++c){ double p=1.0;
-                for(int i=0;i<dx;++i) p*=abstraction::massInInterval(cornerMu[c][i],g.sigma[i],g.xlb[i],g.xub[i]); gl=std::min(gl,p); }
+            for(long long c=0;c<nPts;++c){ double p=1.0;
+                for(int i=0;i<dx;++i) p*=abstraction::massInInterval(cornerMu[c][i],g.sigma[i],g.xlb[i],g.xub[i]);
+                gl=std::min(gl,p); if(tight) gh=std::max(gh,p); }
             row.push_back({SINK, std::max(0.0,1.0-gh), std::min(1.0,1.0-gl)});
             out.nnz += (long long)row.size();
             out.model[lin].push_back(std::move(row));
@@ -223,7 +238,14 @@ static abstraction::SparseReach buildSparseReachJoint(const abstraction::GridSpe
 
 int main(int argc, char** argv) {
     const double eps = 1e-6, prune = 1e-7;
-    const bool fast = (argc > 1 && std::string(argv[1]) == "fast");  // skip the slow PR_minimal
+    bool fast = false; int exactK = 0;   // exactK=0 -> fast corner-min + per-dim-max (default)
+    for (int i = 1; i < argc; ++i) {
+        std::string a = argv[i];
+        if (a == "fast") fast = true;
+        else if (a == "exact") exactK = 5;           // K=5-per-dim sub-grid -> tight joint min/max
+        else if (a.rfind("exactK=", 0) == 0) exactK = std::max(2, atoi(a.c_str() + 7));
+    }
+    std::printf("mode: %s\n", exactK ? "EXACT (tight joint, K-per-dim subgrid)" : "FAST (corner-min + per-dim-max)");
     std::vector<Bench> benches;
 
     // ---- AS: 3D anaesthesia, affine, finite reach H=10 ----
@@ -316,7 +338,7 @@ int main(int argc, char** argv) {
             if (b.hasAvoid) { b.alo[i] -= h; b.ahi[i] += h; }
         }
         auto t0 = std::chrono::steady_clock::now();
-        abstraction::SparseReach R = buildSparseReachJoint(b.g, b.mean, prune);
+        abstraction::SparseReach R = buildSparseReachJoint(b.g, b.mean, prune, exactK);
         if (b.hasAvoid) markAvoid(R, b.g, b.alo, b.ahi);
         auto t1 = std::chrono::steady_clock::now();
 

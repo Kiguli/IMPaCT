@@ -36,14 +36,26 @@ SYCL path is retained as an option (GPU-parallel abstraction).
   range is EXACT, so there is no abstraction loss (and possibly a soundness GAIN over
   the dense nlopt path — see ISSUE-0020).
 
+## Decision refinement (user, 2026-06-29): default to the FASTER path; expose BOTH.
+Realized in `benchmarks/sparse_arch.cpp`:
+- **FAST (default):** sparse joint enclosure with corner-min (exact joint min, log-concave)
+  + per-dimension max (sound). Very fast; sound; slightly conservative on coupled A.
+- **EXACT (`exact` / `exactK=N`):** K-per-dimension sub-grid min AND max over each source
+  cell -> the tight joint abstraction. Matches the dense for noise ~ grid (BA finite-safety
+  0.378 -> **0.468 ~ dense 0.471**), at higher cost (BA 8 s -> 224 s).
+- **dense SYCL nlopt** remains a backend, and is genuinely the best for the TINY-NOISE
+  regime (sigma << eta, e.g. AS: sigma 0.03, eta 1): there a fixed sub-grid under-samples
+  the sharp kernel, so the dense's CONTINUOUS optimiser is more accurate (AS sparse 0.0019
+  vs dense 0.0045 even in exact mode). So all three are useful; default = fastest = sparse.
+
 ## Status / plan
-- [x] Affine ARCH cases (AS, BA, IC_reach, IC_safe, PD_p1, PD_p3, PR_minimal) rerun via
-  the sparse path (`benchmarks/sparse_arch.cpp`).
-- [ ] **Gate:** resolve the AS/BA sparse-vs-dense value discrepancy (ISSUE-0020) by
-  Monte-Carlo before flipping the default, so we do not silently change results.
+- [x] Affine ARCH cases rerun via the sparse path; grid aligned to the dense convention.
+- [x] Joint enclosure (fast + exact) implemented; exact matches dense on noise~grid (BA).
+- [x] Accuracy gate (ISSUE-0020) resolved: agree for diagonal A and noise~grid; coupled-A
+  conservatism removed by exact mode; tiny-noise is a dense-nlopt strength.
 - [ ] Nonlinear ARCH cases (VP, AV_minimal, LM) via interval-arithmetic mean enclosures.
-- [ ] Make the example/recommended workflow default to the sparse path; keep the dense
-  SYCL path as an explicit option.
+- [ ] Wire the example/recommended workflow to default to the sparse path with a
+  fast/exact/dense switch; keep dense SYCL (GPU + tiny-noise) as an explicit option.
 
 ## Accuracy resolved (ISSUE-0020)
 The sparse and dense abstractions AGREE for diagonal (decoupled) A (PD, PR exact, and
