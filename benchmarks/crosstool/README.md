@@ -11,9 +11,14 @@ The peer tools are now installed and run side-by-side on these models; the measu
 numbers (in each `.ref.json` `measured` block and in the top-level
 [`TOOL_COMPARISONS.md`](../../TOOL_COMPARISONS.md)) match the analytic references
 exactly for reach/safety/point models. IntervalMDP.jl 0.6.0 and Storm 1.13.0 do **not**
-support robust ω-regular on interval MDPs (so buchi/persist/patrol are IMPaCT-only),
-and PRISM 4.8.1 has no interval-MDP support (point models only). The runners live in
-[`peers/`](peers/). The original reference-values mode (below) still stands:
+support robust ω-regular on interval MDPs (so buchi/persist/patrol are IMPaCT-only).
+**PRISM 4.8.1 DOES support interval MDPs** (auto-detects `Type: IMDP`, solves
+`Pmaxmin/Pmaxmax=?[F ...]`) — corrected 2026-06-30; it agrees with the other tools on
+the interval reference models, but (i) it rejects interval edges with a 0 lower bound
+(needs a strictly positive support graph) and (ii) it has no robust ω-regular either.
+The full 4-tool re-run + per-tool feature matrix are in `TOOL_COMPARISONS.md` §9–§10;
+the sweep driver is [`peers/sweep_compare.py`](peers/sweep_compare.py). The original
+reference-values mode (below) still stands:
 
 Each model carries a sibling `.ref.json` with **independently-computed**
 reference values plus the provenance of how each was obtained:

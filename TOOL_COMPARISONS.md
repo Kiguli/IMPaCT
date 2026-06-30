@@ -162,17 +162,21 @@ The small shared models give an exact four-way check (the in-repo
 |---|---|---|---|---|---|---|---|
 | chain_point (s0) | reach | — | 0.25 | 0.25 | 0.25 | 0.25 | 0.25 |
 | safety_point (s0) | safety | — | 0.72 | 0.72 | 0.72² | 0.72 | 0.72 |
-| choice_interval (s0) | reach | pess | 0.4 | 0.4 | 0.4 | n/a³ | 0.4 |
-| choice_interval (s0) | reach | opt | 0.5 | 0.5 | 0.5 | n/a³ | 0.5 |
-| fork_interval (s0) | reach | pess | 0.4 | 0.4 | 0.4 | n/a³ | 0.4 |
-| fork_interval (s0) | reach | opt | 0.6 | 0.6 | 0.6 | n/a³ | 0.6 |
+| choice_interval (s0) | reach | pess | 0.4 | 0.4 | 0.4 | 0.4³ | 0.4 |
+| choice_interval (s0) | reach | opt | 0.5 | 0.5 | 0.5 | 0.5³ | 0.5 |
+| fork_interval (s0) | reach | pess | 0.4 | 0.4 | 0.4 | 0.4³ | 0.4 |
+| fork_interval (s0) | reach | opt | 0.6 | 0.6 | 0.6 | 0.6³ | 0.6 |
 | buchi_reach (s2) | `GF acc` | — | 0.5 | n/a⁴ | **unsupported**⁵ | n/a⁴ | 0.5 |
 | persist_leak (s0) | `FG safe` | pess | 0.5 | n/a⁴ | **unsupported**⁵ | n/a⁴ | 0.5 |
 | patrol_cycle (s0) | `GF r0 ∧ GF r2` | — | 1.0 | n/a⁴ | **unsupported**⁵ | n/a⁴ | 1.0 |
 | buchi_routearound (s2) | `GF acc` | pess/opt | 0 / 1 | n/a⁴ | **unsupported**⁵ | n/a⁴ | 0 / 1 |
 
 ² Storm safety via `1 − Pmin[F "avoid"]` (= 1 − 0.28 = 0.72).
-³ PRISM has **no interval-MDP support**; only the point models are expressible in PRISM.
+³ **CORRECTED 2026-06-30: PRISM 4.8.1 DOES support interval MDPs** (`Pmaxmin/Pmaxmax=?[F ...]`,
+  auto-detects `Type: IMDP`) and reproduces these interval values exactly. The earlier
+  "no interval-MDP support" claim was wrong (see §9). Caveat: PRISM rejects interval edges
+  with a 0 lower bound, so the *abstracted* ARCH IMDPs need their `[0,hi]` edges floored to
+  `[1e-9,hi]` first; and PRISM has no robust ω-regular either (rows below stay PRISM-N/A).
 ⁴ IntervalMDP.jl 0.6.0 has reachability/safety/DFA-reachability but no Büchi /
   persistence / generalised-Büchi robust solver.
 ⁵ Storm 1.13.0 refuses robust ω-regular on interval models:
@@ -270,9 +274,12 @@ model.** The findings are filed as issues.
    `patrol` solvers match the analytic references exactly. This is a genuine
    differentiator, not a discrepancy.
 
-4. **PRISM has no interval-MDP support.** Only degenerate-interval (point) models are
-   expressible; interval models cannot be checked in PRISM at all. Confirmed: PRISM
-   reproduces the point models exactly and is inapplicable to the interval ones.
+4. **PRISM 4.8.1 DOES support interval MDPs (corrected 2026-06-30, §9).** It robustly
+   checks `Pmaxmin/Pmaxmax=?[F ...]` on IMDPs and agrees with the other three tools on
+   every interval reference model (and, after flooring `[0,hi]` edges, on the abstracted
+   ARCH IMDPs). It does **not** do robust ω-regular (LTL on intervals → "Computation not
+   implemented yet"), and rejects 0-lower-bound interval edges. The earlier claim that
+   PRISM has no interval support was incorrect.
 
 ---
 
@@ -325,8 +332,8 @@ a same-model, same-spec head-to-head on the *solver* (no abstraction in the loop
 | Tool | Interval-MDP example models shipped | In scope | Action |
 |---|---|---|---|
 | **IntervalMDP.jl** | `multiObj_robotIMDP` (207-state robot; PRISM-explicit + bmdp-tool + native `.nc`); plus tiny inline I/O-test IMDPs | ✅ yes | converted + solved (below) |
-| **PRISM** | none — PRISM has **no interval-MDP** model type; its example suite is all DTMC/MDP/CTMC/PTA | ❌ (pure) | skipped per scope |
-| **Storm** | interval models via `--uncertainty-resolution`; no interval *examples* bundled | ⚠️ not installed in the current container | ARCH Storm numbers are from §1–6; example re-run deferred |
+| **PRISM** | ships no interval *example* model, but **does support IMDPs** (corrected §9) and solves the converted robot model too | ✅ (solver) | added in §9 |
+| **Storm** | interval models via `--uncertainty-resolution`; no interval *examples* bundled — **now built from source in the container** (§9) | ✅ (solver) | re-run in §9 |
 
 The only concrete IMDP *example model* a peer ships is IntervalMDP.jl's
 `multiObj_robotIMDP`. (PRISM/Storm ship continuous-time / non-interval examples only; a
@@ -357,13 +364,157 @@ Notably IMPaCT's OVI returns the converged value AND a *certified* upper bound a
 eps 1e-6, where IntervalMDP.jl's residual stop does not.
 
 ### Feature coverage surfaced by the peer examples
-- `Pmaxmin / Pmaxmax` robust reachability: **both tools** ✓ (match).
+- `Pmaxmin / Pmaxmax` robust reachability: **all four tools** ✓ (match — §9).
 - IntervalMDP.jl extras (in its model zoo, not this example's spec): orthogonal & mixture
-  IMDPs, GPU (CUDA) VI, multi-objective Pareto — IMPaCT abstracts to *flat* IMDPs and does
-  single-objective robust synthesis (multi-objective Pareto is **not** an IMPaCT feature).
+  IMDPs and GPU (CUDA) VI — IMPaCT abstracts to *flat* IMDPs. (Note: IntervalMDP.jl does
+  **not** do multi-objective Pareto — the "multiObj" is only the model's name; corrected.)
 - IMPaCT-only on the same IMDP: robust **ω-regular** specs (Büchi / persistence / GenBüchi
-  / full LTL via `imdp_solve buchi|persist|patrol|ltl`) — Storm / IntervalMDP.jl do not
-  solve robust ω-regular on interval MDPs.
+  / full LTL via `imdp_solve buchi|persist|patrol|ltl`) — Storm / IntervalMDP.jl / PRISM
+  do not solve robust ω-regular on interval MDPs.
 
 Reproduce: `benchmarks/crosstool/peers/{tra_to_imdp.py, imdp_native_robot.jl,
-imdp_native_robot_tight.jl}` + `tools/imdp_solve`.
+imdp_native_robot_tight.jl}` + `tools/imdp_solve`. **A full corrected four-tool re-run
+(incl. PRISM and a freshly source-built Storm 1.13.0) is in §9; the per-tool feature
+matrix is §10.**
+
+---
+
+## 9. Full four-tool re-run on shared IMDPs (2026-06-30)
+
+Two things changed since §1–§8 and triggered this re-run:
+1. **PRISM 4.8.1 DOES support interval MDPs** (the earlier "no support" claim was wrong).
+   It auto-detects `Type: IMDP` and solves `Pmaxmin/Pmaxmax=?[F label]`. PRISM is therefore
+   a full fourth column here. Two PRISM caveats: it has **no robust ω-regular** (LTL on
+   intervals → *"Computation not implemented yet"*), and it **rejects interval edges whose
+   lower bound is 0** (*"Transition probability has lower bound of 0"*) — it needs a fixed,
+   strictly-positive support graph.
+2. **Storm is freshly built from source inside the container** (Storm 1.13.0, Debian-12,
+   LTO-off `make storm-cli`), so its numbers are reproduced natively rather than carried
+   over from §1–§6.
+
+Setup: every shared interval-MDP is solved by all four tools on the **same model**.
+IMPaCT reads the neutral `.imdp`; IntervalMDP.jl reads it via `intervalmdp_runner.jl`;
+Storm reads the `.drn` (`imdp_to_drn.py`); PRISM reads the explicit interval `.tra/.sta/.lab`
+(`imdp_to_prism_interval.py`). One driver runs the sweep: `peers/sweep_compare.py`
+(raw output: `benchmarks/crosstool/sweep_all.tsv`, `sweep_arch.tsv`).
+Sense: **pess** = robust = nature adversarial (`Pmaxmin` / `--uncertainty-resolution robust`);
+**opt** = cooperative (`Pmaxmax` / `cooperative`).
+
+`*` = the tool **cannot abstract** a continuous system; it was handed *IMPaCT's* exported
+IMDP (the abstraction is an IMPaCT-only phase, see the abstraction note below).
+`**` = PRISM additionally required the abstracted IMDP's `[0,hi]` edges floored to
+`[1e-9,hi]`, so its ARCH values are an ε-perturbation of the true robust value.
+
+### 9a. Peer / reference IMDP models (everyone reads the identical model)
+Robust (pess) / optimistic value at the initial state; ✅ = matches the analytic reference.
+
+| model | spec | IMPaCT | IntervalMDP.jl | PRISM | Storm | ref |
+|---|---|---|---|---|---|---|
+| chain_point | reach | 0.25 / 0.25 | 0.25 / 0.25 | 0.25 / 0.25 | 0.25 / 0.25 | 0.25 ✅ |
+| safety_point | safety | 0.72 / 0.72 | 0.72 / 0.72 | 0.72 / 0.72 | 0.72 / 0.72 | 0.72 ✅ |
+| choice_interval | reach | 0.40 / 0.50 | 0.40 / 0.50 | 0.40 / 0.50 | 0.40 / 0.50 | 0.40 / 0.50 ✅ |
+| fork_interval | reach | 0.40 / 0.60 | 0.40 / 0.60 | 0.40 / 0.60 | 0.40 / 0.60 | 0.40 / 0.60 ✅ |
+| multiObj_robotIMDP | reach | 0.8946630 / 1.0 | 0.8946630† / 1.0 | 0.8946624 / 1.0 | 0.8946630 / 1.0 | — ✅ (agree ~1e-6) |
+| buchi_reach | `GF acc` | 0.5 / 0.5 | **N/A** | **N/A** | **N/A** | 0.5 ✅ |
+| buchi_routearound | `GF acc` | 0 / 1 | **N/A** | **N/A** | **N/A** | 0 / 1 ✅ |
+| persist_leak | `FG safe` | 0.5 / 1.0 | **N/A** | **N/A** | **N/A** | 0.5 ✅ |
+| patrol_cycle | `GF r0 ∧ GF r2` | 1.0 / 1.0 | **N/A** | **N/A** | **N/A** | 1.0 ✅ |
+
+† IntervalMDP.jl's default threshold (1e-6) reports 0.8946618 (1.2e-6 low); at a tight
+threshold it converges to 0.8946630 = the others (see §8). **All four tools agree on every
+reachability/safety model; the four ω-regular models are IMPaCT-only** (Storm: *"LTL with
+intervals not implemented"*; PRISM: *"Computation not implemented yet"*; IntervalMDP.jl:
+DFA/co-safe only — no Büchi/persistence).
+
+### 9b. ARCH abstracted IMDPs — solve phase only (`*` = no abstraction; `**` = edge-floored)
+IMPaCT builds the IMDP from the continuous ARCH dynamics; the other three are given that
+IMDP and only *solve* it. Infinite-horizon robust reach/safety; value (solve time).
+
+| ARCH case | spec | IMPaCT | IntervalMDP.jl | PRISM *,** | Storm * |
+|---|---|---|---|---|---|
+| AS | reach | 0 (0.39 s) | 0 (0.45 s) | 0 (0.54 s) | 0 (0.05 s) |
+| BA | safety | ~0‡ | 1.9e-4 (4.9 s) | 0 (0.34 s) | 0 (0.65 s) |
+| IC_reach | reach | 0 (0.10 s) | 0 (0.42 s) | ~0 (0.20 s) | 0 (0.05 s) |
+| IC_safe | safety | 0 (0.15 s) | 0 (0.50 s) | 0 (0.06 s) | 0 (0.02 s) |
+| PD_p1 | reach | 1.0 (3.4 s) | 1.0 (1.4 s) | 1.0 (1.7 s) | 1.0 (2.8 s) |
+| PD_p3 | reach | 1.0 (3.6 s) | 1.0 (1.6 s) | 1.0 (2.3 s) | 1.0 (2.2 s) |
+| VP | reach | 0 (1.8 s) | 0 (0.55 s) | 0 (1.4 s) | 0 (0.04 s) |
+
+**All four tools agree on every ARCH robust value** (AS/IC/VP infinite-horizon robust
+reach = 0; PD = 1; BA robust safety = 0). The optimistic-reach values also agree to high
+precision where non-trivial (e.g. IC_reach opt ≈ 1.20e-26 in all four tools).
+
+Caveats (all genuine findings, not value disagreements):
+- ‡ **IMPaCT BA optimistic-safety did not converge in 180 s** (OVI on BA's large *safe*
+  end component — ISSUE-0010). Its *robust* (pess) BA-safety is ~0, matching the others
+  (verified separately at eps 1e-4: `lower=0`). IMPaCT used `eps=1e-4` on the large ARCH
+  IMDPs (the peers at their defaults); robust BA-safety at 1e-6 is the slow case.
+- **Optimistic safety is convention-dependent across tools.** On BA's `[0,hi]` leak edges,
+  IntervalMDP.jl's cooperative resolution zeroes the leaks and reports opt-safety ≈ 0.997,
+  whereas the PRISM/Storm `1−Pmin` encodings give 0. The **robust** (guarantee) value is
+  unambiguous and agrees; we therefore headline the robust column.
+- PRISM solves the ARCH IMDPs only after the `[0,hi]→[1e-9,hi]` floor (`**`); without it
+  PRISM aborts with *"lower bound of 0"*.
+
+### Abstraction phase — IMPaCT-only (the asterisks, quantified)
+PRISM/Storm/IntervalMDP.jl have **no** continuous-system abstraction: the IMDPs above had
+to be built by IMPaCT first. IMPaCT's sparse-abstraction build times (from
+`benchmarks/RESULTS.md`) are e.g. AS 0.11 s, BA 0.25 s, IC 0.01–0.02 s, PD 0.7–0.8 s,
+PR_minimal 28.5 s, plus the nonlinear VP/AV/LM. For the peer tools this column is simply
+**N/A** — they require a finite (I)MDP as input. This is IMPaCT's defining capability and
+the reason a like-for-like end-to-end comparison is not possible; §9b compares only the
+*shared* solve phase.
+
+---
+
+## 10. Feature matrix — capabilities NOT exercised by the comparison above
+
+The comparison only used robust reachability/safety (+ IMPaCT's ω-regular). Each tool has
+substantial capability beyond that. ✅ = supported, ❌ = not supported, **N/A** = not
+applicable to the tool's scope. Grounded in a per-tool source/doc audit (2026-06-30).
+
+| Capability | IMPaCT | IntervalMDP.jl 0.6 | PRISM 4.8.1 | Storm 1.13.0 |
+|---|---|---|---|---|
+| **Abstract continuous stochastic dynamics → IMDP** | ✅ nonlinear (NLopt dense + sparse) | ❌ | ❌ | ❌ |
+| Noise models for abstraction | Gaussian, multivariate/correlated, uniform, triangular, Laplace, custom PDF | N/A | N/A | N/A |
+| Interval / robust (I)MDP solving | ✅ | ✅ | ✅ (since v4.8, 2024) | ✅ |
+| Robust reachability / safety | ✅ | ✅ | ✅ | ✅ |
+| Robust finite/bounded-horizon | ✅ | ✅ | ✅ (`F<=k`) | ✅ (step-bounded) |
+| **Robust ω-regular on IMDPs** (Büchi/persistence/LTL) | ✅ **only tool** | ❌ (DFA/co-safe reach only) | ❌ "not implemented" | ❌ "LTL with intervals not implemented" |
+| Expected reward / cost | ❌ (probabilities only) | ✅ discounted reward, expected exit-time | ✅ (incl. interval reach-reward) | ✅ (reach/cumulative/instant) |
+| Long-run average / mean-payoff | ❌ | ❌ | ✅ (non-interval) | ✅ (non-interval; not on intervals) |
+| Multi-objective / Pareto | ❌ | ❌ | ✅ (non-interval) | ✅ (non-interval) |
+| Controller / strategy synthesis | ✅ (robust, → HDF5) | ✅ (stationary/time-varying) | ✅ (`-exportstrat`, incl. robust) | ✅ (`--exportscheduler`) |
+| GPU acceleration | ✅ SYCL/AdaptiveCpp (any vendor) | ✅ CUDA (dense+sparse) | ❌ | ❌ |
+| Exact / rational arithmetic | ❌ | ✅ Rational/BigInt (CPU) | ✅ `-exact` | ✅ rational (GMP/CLN) |
+| Other model classes | POMDP, PTA, TA | orthogonal-IMDP, mixture-IMDP, IMC | DTMC, CTMC, MDP, PTA, POMDP, POPTA, IDTMC | DTMC, CTMC, MDP, MA, POMDP; +parametric, DFT, GSPN |
+| Symbolic / BDD engine | ❌ (dense+sparse) | ❌ | ✅ MTBDD/hybrid | ✅ dd (CUDD/Sylvan), hybrid |
+| Full (non-robust) LTL / PCTL*/CSL | fragment (F/G/U/X/GF/FG/patrol) | ❌ | ✅ full | ✅ full (via Spot) |
+| Solver methods | II, VI, **OVI**, MEC-collapse, O-max | robust VI (O-max) | VI/GS/PI/II/topological/symbolic | VI/II/OVI/SVI/PI/LP/topological/symbolic |
+| Native input formats | C++ dynamics, `.imdp`, PRISM-subset, HDF5 | netCDF `.nc`, PRISM-explicit, bmdp-tool | PRISM lang, explicit, PEPA | PRISM, JANI, DRN, explicit, GSPN, DFT |
+
+**Features present in each tool but deliberately NOT compared above:**
+- **IMPaCT** — the continuous-system *abstraction* itself (the whole front end), nonlinear
+  dynamics, the 6 noise distributions (Gaussian/multivariate/uniform/triangular/Laplace/
+  custom), GPU/SYCL execution, POMDP, PTA/TA, PCTL/CTL/STL, and the II/VI/MEC solver
+  variants (only OVI was used in the sweep). No rewards, no multi-objective.
+- **IntervalMDP.jl** — orthogonally-decoupled and mixture IMDPs (its scalability feature),
+  GPU/CUDA value iteration, discounted-reward and expected-exit-time objectives, exact
+  Rational arithmetic, DFA-product (co-safe) specs, and Maximize/Minimize × Pessimistic/
+  Optimistic strategy modes. No abstraction, no ω-regular, no multi-objective.
+- **PRISM** — DTMC/CTMC/MDP/PTA/POMDP model checking, full PCTL*/LTL/CSL on non-interval
+  models, expected-reward/time/steady-state (incl. interval reachability-reward),
+  multi-objective & Pareto (non-interval), statistical model checking/simulation, exact
+  mode, MTBDD symbolic engine, strategy export. (Robust ω-regular on IMDPs: not yet.)
+- **Storm** — DTMC/CTMC/MDP/MA/POMDP, full LTL/ω-regular on *non-interval* models (Spot),
+  expected reward + long-run average, multi-objective/Pareto (non-interval), parametric
+  model checking (`storm-pars`), DFT/GSPN, sound VI family (II/OVI/SVI), LP/SMT backends
+  (Gurobi/GLPK/Z3/Soplex), symbolic dd engine, JANI. (Robust ω-regular / LRA on intervals:
+  explicitly "not implemented".)
+
+Bottom line: **for *solving* a given interval MDP, all four tools now agree** (robust
+reachability/safety). IMPaCT's irreplaceable role is everything *upstream* — abstracting a
+continuous nonlinear stochastic control system (with rich noise models) into that IMDP —
+plus robust **ω-regular** synthesis on the result, neither of which PRISM, Storm, or
+IntervalMDP.jl provides. Conversely PRISM and Storm bring rewards, multi-objective,
+non-interval full-LTL, and mature symbolic engines that IMPaCT does not have.
