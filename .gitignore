@@ -15,3 +15,6 @@ tools/imdp_solve
 tools/grid_heatmap
 tools/ta_zonegraph
 tools/pomdp_belieftree
+
+# compiled OVI regression check (build artifact)
+examples/ARCH-COMP/2025/PD/PD_ovi_check

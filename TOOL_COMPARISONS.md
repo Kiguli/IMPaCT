@@ -311,3 +311,59 @@ Storm and IntervalMDP.jl (BA, IC_safe finite-safety values match to 1e-6).
 * **Scalability** is bounded by the *dense* abstraction, not the solve: the big
   machine clears the historical 4 GB OOM (ISSUE-0006) for PR_minimal/AV_minimal but
   the 6-D LM case still needs the v2 sparse representation.
+
+---
+
+## 8. Peer-tool EXAMPLE models solved by IMPaCT (2026-06-29)
+
+Beyond the ARCH abstractions (where IMPaCT builds the IMDP), this section takes the
+**discrete IMDP example models shipped by the peer tools**, solves them with their own
+tool, converts them to IMPaCT's neutral `.imdp` format, and solves them with IMPaCT —
+a same-model, same-spec head-to-head on the *solver* (no abstraction in the loop).
+
+### Scope (per request: pure DTMC / MDP / CTMC ignored)
+| Tool | Interval-MDP example models shipped | In scope | Action |
+|---|---|---|---|
+| **IntervalMDP.jl** | `multiObj_robotIMDP` (207-state robot; PRISM-explicit + bmdp-tool + native `.nc`); plus tiny inline I/O-test IMDPs | ✅ yes | converted + solved (below) |
+| **PRISM** | none — PRISM has **no interval-MDP** model type; its example suite is all DTMC/MDP/CTMC/PTA | ❌ (pure) | skipped per scope |
+| **Storm** | interval models via `--uncertainty-resolution`; no interval *examples* bundled | ⚠️ not installed in the current container | ARCH Storm numbers are from §1–6; example re-run deferred |
+
+The only concrete IMDP *example model* a peer ships is IntervalMDP.jl's
+`multiObj_robotIMDP`. (PRISM/Storm ship continuous-time / non-interval examples only; a
+second pass could lift a CTMC into an IMDP to exercise an unsupported feature.)
+
+### multiObj_robotIMDP — robust reachability `Pmaxmin=?[F "reach"]`
+207 states, 828 (state,action) rows, 2784 interval transitions; init = state 0, target
+= state 206. Converted with `benchmarks/crosstool/peers/tra_to_imdp.py`; model stored at
+`benchmarks/crosstool/models/multiObj_robotIMDP.imdp`. Spec is **Pessimistic, Maximize**
+= IMPaCT `reach --bound pess` = `solve::maxReachPessimistic`.
+
+| solver | init value | iters | time | note |
+|---|---|---|---|---|
+| IntervalMDP.jl (`solve`, thr 1e-6 = default) | 0.8946617847 | 83 | 1.2 ms | **stops 1.2e-6 below the fixpoint** |
+| IntervalMDP.jl (thr 1e-9) | 0.8946629814 | 99 | — | |
+| IntervalMDP.jl (thr 1e-12) | **0.8946629826** | 128 | — | converged |
+| IMPaCT `imdp_solve` OVI (eps 1e-6) | **0.8946629826** | 129 | ~10 ms | certified [L, L+eps] |
+| IMPaCT `imdp_solve` OVI (eps 1e-9) | 0.8946629826 | 128 | — | |
+| IMPaCT `imdp_solve` interval-iter / MEC (eps 1e-9) | 0.8946629826 | 42177 | — | sound bracket [.8946629826, .8946629838] |
+| IMPaCT optimistic (`Pmaxmax`) | 0.9999979999 | 44 | — | cooperative nature |
+
+**Values agree to ~1e-10** once the convergence thresholds match (IMPaCT OVI 0.8946629826
+= IntervalMDP.jl-at-1e-12 0.8946629826; both IMPaCT methods agree). The apparent 1.2e-6
+"gap" at first run is purely IntervalMDP.jl's **default reachability threshold (1e-6)**
+terminating ~1.2e-6 short of the fixpoint on this slowly-mixing chain — a methodological
+note, NOT a value disagreement (cross-tool thresholds must be matched when comparing).
+Notably IMPaCT's OVI returns the converged value AND a *certified* upper bound already at
+eps 1e-6, where IntervalMDP.jl's residual stop does not.
+
+### Feature coverage surfaced by the peer examples
+- `Pmaxmin / Pmaxmax` robust reachability: **both tools** ✓ (match).
+- IntervalMDP.jl extras (in its model zoo, not this example's spec): orthogonal & mixture
+  IMDPs, GPU (CUDA) VI, multi-objective Pareto — IMPaCT abstracts to *flat* IMDPs and does
+  single-objective robust synthesis (multi-objective Pareto is **not** an IMPaCT feature).
+- IMPaCT-only on the same IMDP: robust **ω-regular** specs (Büchi / persistence / GenBüchi
+  / full LTL via `imdp_solve buchi|persist|patrol|ltl`) — Storm / IntervalMDP.jl do not
+  solve robust ω-regular on interval MDPs.
+
+Reproduce: `benchmarks/crosstool/peers/{tra_to_imdp.py, imdp_native_robot.jl,
+imdp_native_robot_tight.jl}` + `tools/imdp_solve`.
