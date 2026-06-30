@@ -1,5 +1,7 @@
 #include "IMDP.h"
 #include "IO_utils.h"
+#include "solve.h"          // shared CPU OVI solver (OptimisticVI dispatch)
+#include "omaximization.h"  // robust inner Bellman (controller extraction)
 #include <iostream>
 #include <vector>
 #include <functional>
@@ -154,10 +156,151 @@ void IMDP::exportIMDP(const string& filename){
          << chrono::duration<double>(end - start).count() << " s." << endl;
 }
 
+/// OptimisticVI dispatch (IterationMethod::OptimisticVI). Build the abstracted interval
+/// MDP from the in-memory min/max matrices (the same construction exportIMDP writes to
+/// text) and solve it through the shared CPU OVI solver (src/solve.cpp), which gives a
+/// SOUND two-sided [lower,upper] certificate and converges on nature-confinable end
+/// components where the SYCL interval iteration cannot (ISSUE-0003). The greedy controller
+/// is extracted per cell from the converged values via the same O-maximization the SYCL
+/// kernels use. Returns false (fall back to SYCL) when dim_w>0 (export is dim_w==0 only).
+bool IMDP::infiniteHorizonOVIDispatch(bool IMDP_lower, bool is_reach){
+    using namespace impact;
+    if (disturb_space_size != 0) {
+        cout << "  OptimisticVI dispatch supports dim_w==0 only; falling back to SYCL." << endl;
+        return false;
+    }
+    if (minTransitionM.is_empty()) {
+        cout << "  error: transition matrices not computed; call transitionMatrixBounds() first." << endl;
+        return false;
+    }
+    const bool has_target = !minTargetM.is_empty();
+    const bool has_avoid  = !minAvoidM.is_empty();
+    const size_t ss = state_space_size;
+    const size_t n_actions = (input_space_size == 0 ? 1 : input_space_size);
+
+    // --- build the interval model: cells 0..ss-1, then target / avoid / rest sinks ---
+    size_t N = ss; long long T_idx = -1, A_idx = -1;
+    if (has_target) { T_idx = (long long)N; N++; }
+    if (has_avoid)  { A_idx = (long long)N; N++; }
+    const long long R_idx = (long long)N; N++;        // value-0 rest sink (residual mass)
+
+    auto clamp01 = [](double v){ return v < 0.0 ? 0.0 : (v > 1.0 ? 1.0 : v); };
+    const double EPS = 1e-12;
+    solve::IMDPModel model(N);
+    for (size_t i = 0; i < ss; ++i) {
+        for (size_t k = 0; k < n_actions; ++k) {
+            const size_t row = k * ss + i;            // (state i, action k), dim_w == 0
+            solve::ActionDist a; double sumLo = 0.0, sumHi = 0.0;
+            for (size_t col = 0; col < ss; ++col) {
+                double hi = clamp01(maxTransitionM(row, col));
+                if (hi <= EPS) continue;
+                double lo = clamp01(minTransitionM(row, col)); if (lo > hi) lo = hi;
+                a.push_back({(int)col, lo, hi}); sumLo += lo; sumHi += hi;
+            }
+            if (has_target) { double hi = clamp01(maxTargetM(row));
+                if (hi > EPS) { double lo = clamp01(minTargetM(row)); if (lo > hi) lo = hi;
+                    a.push_back({(int)T_idx, lo, hi}); sumLo += lo; sumHi += hi; } }
+            if (has_avoid)  { double hi = clamp01(maxAvoidM(row));
+                if (hi > EPS) { double lo = clamp01(minAvoidM(row)); if (lo > hi) lo = hi;
+                    a.push_back({(int)A_idx, lo, hi}); sumLo += lo; sumHi += hi; } }
+            // Make the row a FEASIBLE interval distribution for O-maximization
+            // (sum_lo <= 1 <= sum_hi) without granting nature spurious freedom:
+            //  - sum_hi < 1: genuinely missing (leaving-domain) mass -> value-0 rest sink
+            //    with the EXACT residual interval [1-sum_hi, 1-sum_lo]. Sound: unreachable
+            //    mass cannot reach the target (pessimistic) and is value 0.
+            //  - sum_hi >= 1: the cells/target/avoid already carry all the mass (matches
+            //    exportIMDP, which the peer tools accept) -> add NOTHING, so nature can only
+            //    redistribute within the real successors.
+            if (sumHi < 1.0 - EPS) {
+                double rLo = 1.0 - sumHi, rHi = 1.0 - sumLo;
+                if (rHi > 1.0) rHi = 1.0; if (rLo < 0.0) rLo = 0.0;
+                a.push_back({(int)R_idx, rLo, rHi});
+            } else if (sumLo > 1.0 + EPS) {
+                for (auto& iv : a) iv.lo /= sumLo;        // over-constrained row -> renormalise lowers
+            }
+            if (a.empty()) a.push_back({(int)i, 1.0, 1.0});
+            model[i].push_back(std::move(a));
+        }
+    }
+    if (has_target) model[T_idx].push_back({ {(int)T_idx, 1.0, 1.0} });
+    if (has_avoid)  model[A_idx].push_back({ {(int)A_idx, 1.0, 1.0} });
+    model[R_idx].push_back({ {(int)R_idx, 1.0, 1.0} });
+
+    // --- solve via the shared OVI; build the per-cell value vector the controller optimizes ---
+    const double eps = epsilon;
+    std::vector<double> Vlo(N), Vup(N), Qval(N);   // Qval = value the controller acts on
+    omax::Sense natureSense;
+    bool ctrlMax;
+    if (is_reach) {
+        std::set<int> tgt; if (T_idx >= 0) tgt.insert((int)T_idx);
+        solve::IntervalResult r = IMDP_lower ? solve::maxReachPessimistic(model, tgt, eps)
+                                             : solve::maxReachOptimistic(model, tgt, eps);
+        Vlo = r.lower; Vup = r.upper; Qval = r.lower;            // reach value
+        natureSense = IMDP_lower ? omax::Sense::Min : omax::Sense::Max;
+        ctrlMax = true;                                          // controller maximizes reach
+    } else {
+        std::set<int> avo; if (A_idx >= 0) avo.insert((int)A_idx);
+        solve::IntervalResult r = IMDP_lower ? solve::maxSafetyPessimistic(model, avo, eps)
+                                             : solve::maxSafetyOptimistic(model, avo, eps);
+        Vlo = r.lower; Vup = r.upper;                            // safety bounds
+        for (size_t s = 0; s < N; ++s) Qval[s] = 1.0 - r.upper[s]; // reach-to-avoid value
+        natureSense = IMDP_lower ? omax::Sense::Max : omax::Sense::Min;
+        ctrlMax = false;                                        // controller minimizes reach-to-avoid
+    }
+
+    // --- greedy controller: argopt action per cell on the converged value (same O-max) ---
+    std::vector<arma::uword> U_pos(ss, 0);
+    std::vector<double> lo, hi, vv;
+    for (size_t i = 0; i < ss; ++i) {
+        double best = 0.0; bool any = false; arma::uword bestK = 0;
+        const solve::StateActions& acts = model[i];
+        for (size_t k = 0; k < acts.size(); ++k) {
+            const solve::ActionDist& d = acts[k];
+            lo.clear(); hi.clear(); vv.clear();
+            for (const solve::Interval& iv : d) { lo.push_back(iv.lo); hi.push_back(iv.hi); vv.push_back(Qval[iv.to]); }
+            double q = lo.empty() ? 0.0 : omax::optimize(lo, hi, vv, natureSense).value;
+            if (!any) { best = q; bestK = (arma::uword)k; any = true; }
+            else if (ctrlMax ? (q > best) : (q < best)) { best = q; bestK = (arma::uword)k; }
+        }
+        U_pos[i] = bestK;
+    }
+
+    // --- write the controller in the dense format: [state | (input) | lower | upper] ---
+    arma::vec lowerCol(ss), upperCol(ss);
+    for (size_t i = 0; i < ss; ++i) { lowerCol(i) = Vlo[i]; upperCol(i) = Vup[i]; }
+    if (input_space_size == 0) {
+        controller.set_size(ss, dim_x + 2);
+        controller.cols(0, dim_x - 1) = state_space;
+        controller.col(dim_x) = lowerCol;
+        controller.col(dim_x + 1) = upperCol;
+    } else {
+        controller.set_size(ss, dim_x + dim_u + 2);
+        controller.cols(0, dim_x - 1) = state_space;
+        for (size_t i = 0; i < ss; ++i)
+            controller.row(i).cols(dim_x, dim_x + dim_u - 1) = input_space.row(U_pos[i]);
+        controller.col(dim_x + dim_u) = lowerCol;
+        controller.col(dim_x + dim_u + 1) = upperCol;
+    }
+    double loMin = 1e18, loMax = -1e18, gapMax = 0.0;
+    for (size_t i = 0; i < ss; ++i) {
+        loMin = std::min(loMin, Vlo[i]); loMax = std::max(loMax, Vlo[i]);
+        gapMax = std::max(gapMax, Vup[i] - Vlo[i]);
+    }
+    cout << "  OptimisticVI (shared CPU solver) done: " << N << " states, " << n_actions
+         << " actions/cell; cell value lower in [" << loMin << ", " << loMax
+         << "], max certified gap " << gapMax << "." << endl;
+    return true;
+}
+
 /// Sorted Implementation of infinite horizon reachability
 void IMDP::infiniteHorizonReachControllerSorted(bool IMDP_lower){
     auto start = chrono::steady_clock::now();
     cout << "Finding control policy for infinite horizon reach controller using sorted approach... " << endl;
+    if (iterMethod == IterationMethod::OptimisticVI && infiniteHorizonOVIDispatch(IMDP_lower, /*is_reach=*/true)) {
+        cout << "Infinite horizon reach (OptimisticVI) completed in "
+             << chrono::duration<double>(chrono::steady_clock::now() - start).count() << " s." << endl;
+        return;
+    }
     
     if (input_space_size == 0 && disturb_space_size == 0){
         if (IMDP_lower){
@@ -4285,7 +4428,12 @@ void IMDP::finiteHorizonReachControllerSorted(bool IMDP_lower, size_t timeHorizo
 void IMDP::infiniteHorizonSafeControllerSorted(bool IMDP_lower){
     auto start = chrono::steady_clock::now();
     cout << "Finding control policy for infinite horizon safe controller using sorted approach... " << endl;
-    
+    if (iterMethod == IterationMethod::OptimisticVI && infiniteHorizonOVIDispatch(IMDP_lower, /*is_reach=*/false)) {
+        cout << "Infinite horizon safety (OptimisticVI) completed in "
+             << chrono::duration<double>(chrono::steady_clock::now() - start).count() << " s." << endl;
+        return;
+    }
+
     if (input_space_size == 0 && disturb_space_size == 0){
         if (IMDP_lower){
             vec first0(state_space_size, 1, fill::zeros);

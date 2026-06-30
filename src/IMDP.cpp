@@ -14,6 +14,12 @@
 #include <gsl/gsl_monte_vegas.h>
 #include <armadillo>
 #include <hdf5/serial/hdf5.h>
+// Shared pure-C++ sparse solver, compiled into this TU so the dense path's
+// IterationMethod::OptimisticVI dispatch (GPU_synthesis.cpp) links without per-example
+// Makefile changes. Included before the using-namespace directives below.
+#include "omaximization.cpp"
+#include "graph_utils.cpp"
+#include "solve.cpp"
 #include "custom.cpp"
 
 #include "GPU_synthesis.cpp"

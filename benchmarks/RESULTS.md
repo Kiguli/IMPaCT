@@ -117,7 +117,7 @@ the validation is K-convergence + agreement with the dense/IntervalMDP.jl value.
 |---|---|---|---|---|---|---|---|---|---|
 | VP (fast)  | inf reach | 2601 | 1 | 0.20M | 4.8 | 0.11 | 0.1+0.5 s | 0.1985 | 0.2297 |
 | VP (exact K=7/11) | inf reach | 2601 | 1 | 0.20M | 4.8 | 0.11 | 0.6+0.5 s | **0.2143** | 0.2297 |
-| AV_minimal (fast) | inf reach-avoid | 7938 | 30 | (running) | — | — | — | (running) | dense OOM (7.42 GB×2) |
+| AV_minimal (fast) | inf reach-avoid | 7938 | 30 | 324M | 7784 | 30.3 | 420+1161 s | **0.3398** | dense OOM (7.42 GB×2) |
 | LM (fast) | fin reach H=200 | 12150 | 9 | 8.19M | 196 | 21.3 | 24.8+14.9 s | **0.0000** | dense INFEASIBLE (~96 GB/matrix) |
 
 *dense(GB) is the `(state·action)·state ×8×2` dense-matrix estimate the driver prints.
@@ -133,9 +133,11 @@ the validation is K-convergence + agreement with the dense/IntervalMDP.jl value.
   destination cells → transition intervals `[0,1]` → the pessimistic (robust) lower bound
   is 0. A finer grid and/or the certified interval-arithmetic enclosure (ISSUE-0021) are
   needed for a non-trivial robust value on near-deterministic systems.
-- **AV_minimal** (3-D bicycle, wide noise σ≈0.82 ≫ η=0.5 ⇒ ~10-cell kernel) builds where
-  the dense path OOMs (7.42 GB×2); its infinite-horizon OVI solve is heavy (wide kernel,
-  like PR_minimal) — result appended on completion.
+- **AV_minimal** (3-D bicycle, wide noise σ≈0.82 ≫ η=0.5 ⇒ ~10-cell kernel) **builds where
+  the dense path OOMs** (would be 30 GB; sparse 7.78 GB at 324M nnz) and solves robustly to
+  interior reach `[0, 0.3398, mean 0.031]`. The solve is heavy (1161 s single-threaded OVI:
+  wide kernel ⇒ ~10³ successors/row, like PR_minimal); the modest reach reflects the large
+  noise relative to the grid (hard to robustly steer into the target).
 
 ## ISSUE-0003 nature-trap — MEC-collapse does NOT fix it (empirical, `models/naturetrap.imdp`)
 
@@ -147,9 +149,13 @@ iters. Support-graph MEC misses nature-confinable ECs (state 0's action has a po
 plain MEC preprocessing.
 
 Findings: robust values agree with the peers everywhere applicable; IMPaCT now offers
-two infinite-horizon solvers (`setIterationMethod`) — sound interval iteration
-(default; sped up ~7× by hoisting per-sweep loop-invariant work) and peer-style pure
-value iteration (VP 0.59 s ≤ peers; converges on PD_p3 where interval iteration cannot,
-ISSUE-0017/0003); robust ω-regular is IMPaCT-only (Storm/IntervalMDP.jl unsupported);
-the dense abstraction is the memory wall (ISSUE-0006), cleared by the big machine
-except for the 6-D LM case.
+THREE infinite-horizon solvers on BOTH the dense and sparse paths (`setIterationMethod`)
+— sound interval iteration (default on dense; sped up ~7× by hoisting per-sweep
+loop-invariant work), peer-style pure value iteration (VP 0.59 s ≤ peers; converges on
+PD_p3 where interval iteration cannot, ISSUE-0017/0003), and **OptimisticVI** (default on
+sparse; now also on the dense path via `infiniteHorizonOVIDispatch`, which solves the
+abstracted matrices through the shared CPU OVI solver — certified bracket + nature-trap
+convergence: PD_p3 dense-OVI = [0.9998, 1.0], gap 1e-5, 3.3 s, ISSUE-0003); robust
+ω-regular is IMPaCT-only (Storm/IntervalMDP.jl unsupported); the dense abstraction is the
+memory wall (ISSUE-0006), cleared by the big machine except for the 6-D LM case (which
+the sparse path now builds + solves).

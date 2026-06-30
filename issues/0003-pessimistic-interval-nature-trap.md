@@ -72,6 +72,17 @@ point MDPs / optimistic). A future option is the robust-EC interval iteration
 (ROADMAP / Phase 3). References: Hartmanns-Kaminski (CAV 2020); Haddad-Monmege
 (TCS 2018); Baier et al. (CAV 2017).
 
+## Also resolved on the DENSE (SYCL) path (2026-06-29)
+The dense `IMDP` infinite-horizon controllers now expose `IterationMethod::OptimisticVI`
+too (`IMDP::infiniteHorizonOVIDispatch`, GPU_synthesis.cpp): they build the in-memory
+interval model from the abstracted min/max matrices (the same construction `exportIMDP`
+writes) and solve it through this validated `solve::solveOVI`, then extract the greedy
+controller via the same O-maximization. So the dense path now also converges on
+nature-traps with a certified bracket — verified on PD_p3 (the dense interval iteration
+does NOT converge; OVI gives cell reach in **[0.9998, 1.0]**, max gap 1e-5, in 3.3 s —
+matching the peers' init value 1.0). The three methods are now available on BOTH paths
+(IntervalIteration / ValueIteration / OptimisticVI).
+
 ## Classification
 `our-bug` / known limitation. NOT a literature counterexample — the literature
 (Haddad-Monmege) handles this; our implementation took an optimistic-support

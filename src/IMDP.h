@@ -18,7 +18,13 @@ using namespace std;
 ///     of the iterates < epsilon). Far fewer sweeps and it converges even with end
 ///     components (the from-0 iterate -> least fixed point = robust value), but the
 ///     residual stopping is not a sound two-sided certificate.
-enum class IterationMethod { IntervalIteration, ValueIteration };
+///   - OptimisticVI: optimistic value iteration (Hartmanns & Kaminski, CAV 2020) —
+///     VI from below for the lower value + a VERIFIED inductive (pre-fixpoint) upper
+///     bound (F(U) <= U => V* <= U by Knaster-Tarski). Sound two-sided certificate that
+///     needs NO end-component handling, so it converges on nature-confinable ECs where
+///     IntervalIteration cannot (ISSUE-0003). On the dense path it is solved through the
+///     shared CPU solver (src/solve.cpp) over the abstracted interval matrices.
+enum class IterationMethod { IntervalIteration, ValueIteration, OptimisticVI };
 
 /* IMDP class with is a child of MDP class*/
 
@@ -48,6 +54,12 @@ protected:
     // Internal implementation helpers for controller synthesis
     void infiniteHorizonControllerImpl(bool IMDP_lower, bool is_reach);
     void finiteHorizonControllerImpl(bool IMDP_lower, size_t timeHorizon, bool is_reach);
+
+    // OptimisticVI dispatch: solve the abstracted interval matrices through the shared
+    // CPU OVI solver (src/solve.cpp) and write the certified [lower,upper] controller.
+    // is_reach selects reach (vs safety); IMDP_lower selects pessimistic (robust) nature.
+    // Returns true if it handled the solve (dim_w==0); false to fall back to the SYCL path.
+    bool infiniteHorizonOVIDispatch(bool IMDP_lower, bool is_reach);
 
     // Internal implementation helpers for transition abstractions
     void transitionMatrixImpl(mat& output, bool is_min);
