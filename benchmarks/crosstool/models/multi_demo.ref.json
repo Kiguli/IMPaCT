@@ -1,0 +1,14 @@
+{
+  "model": "multi_demo.imdp",
+  "description": "Multi-objective robust reachability (weighted-sum scalarisation). Etessami-Kwiatkowska-Vardi-Yannakakis TACAS 2007 (achievable set convex; the deterministic weighted-optima are its Pareto vertices); Forejt-Kwiatkowska-Norman-Parker-Qu TACAS 2011.",
+  "provenance": "Point MDP; from s0 action A -> (P(F t1),P(F t2))=(0.9,0.1), action B -> (0.2,0.8). Pareto frontier = convex hull of these two deterministic vertices.",
+  "checks": [
+    {"prop": "multi", "labels": "t1,t2", "state": 0, "pareto_vertices": [[0.9, 0.1], [0.2, 0.8]], "tol": 1e-4}
+  ],
+  "measured": {
+    "note": "Live 2026-07-01. IMPaCT's Pareto vertices == Storm's '2 Pareto optimal points'; corners == Storm single-objective Pmax[F t1]=0.9, Pmax[F t2]=0.8. For interval MDPs the reported point is what the weight-optimal policy guarantees robustly per objective (a sound achievable point; full robust-Pareto convexity across a single adversarial nature is a documented refinement).",
+    "impact": {"vertices": [[0.9, 0.1], [0.2, 0.8]]},
+    "storm":  {"pareto_points": 2, "Pmax_F_t1": 0.9, "Pmax_F_t2": 0.8},
+    "prism":  "multi(...) Pareto supported (non-interval)"
+  }
+}

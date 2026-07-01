@@ -102,6 +102,7 @@ int main(int argc, char** argv) {
     std::string bound = "pess";
     double eps = 1e-6;
     double discount = 1.0;   // reward prop: <1 => discounted (no target); ==1 => reachability reward
+    std::string weightsArg;  // multi prop: comma-separated weights, or empty => sweep (2 objectives)
     solve::Method method = solve::Method::OptimisticVI;
     bool methodSet = false;
     int stateArg = -1;  // -1 => use model init
@@ -117,6 +118,7 @@ int main(int argc, char** argv) {
         if      (a == "--bound")  bound = need("--bound");
         else if (a == "--eps")    eps = std::stod(need("--eps"));
         else if (a == "--discount") discount = std::stod(need("--discount"));
+        else if (a == "--weights") weightsArg = need("--weights");
         else if (a == "--state")  stateArg = std::stoi(need("--state"));
         else if (a == "--json")   jsonOut = true;
         else if (a == "--trace")  { jsonOut = true; traceOut = true; }
@@ -157,6 +159,30 @@ int main(int argc, char** argv) {
     const std::set<int>& states = noLabel ? empty : accSets.front();
     const int s = (stateArg >= 0) ? stateArg : p.init;
     if (s < 0 || s >= p.nStates) { std::cerr << "state out of range\n"; return 1; }
+
+    // Multi-objective robust reachability: LABEL = comma-separated target labels; --weights
+    // gives one point, otherwise sweep the weight simplex (2 objectives) to trace the Pareto
+    // frontier. Prints one `pareto` line per weight with the achievable objective vector.
+    if (prop == "multi") {
+        const bool pess = (bound != "opt");
+        std::vector<std::vector<double>> weightList;
+        if (!weightsArg.empty()) {
+            std::vector<double> w; for (const std::string& x : splitComma(weightsArg)) w.push_back(std::stod(x));
+            weightList.push_back(w);
+        } else if (accSets.size() == 2) {
+            for (double lam : {0.0, 0.25, 0.5, 0.75, 1.0}) weightList.push_back({lam, 1.0 - lam});
+        } else { std::cerr << "multi: give --weights w1,..,wk (sweep only for 2 objectives)\n"; return 1; }
+        std::cout.precision(10);
+        for (const auto& w : weightList) {
+            solve::MultiObjResult r = solve::multiReach(p.model, accSets, w, s, eps, pess);
+            std::cout << "pareto\tbound=" << (pess ? "pess" : "opt") << "\tstate=" << s << "\tweights=";
+            for (size_t i = 0; i < w.size(); ++i) std::cout << (i ? "," : "") << w[i];
+            std::cout << "\tobjectives=";
+            for (size_t i = 0; i < r.objective.size(); ++i) std::cout << (i ? "," : "") << r.objective[i];
+            std::cout << "\tweighted=" << r.weighted << "\n";
+        }
+        return 0;
+    }
 
     // Compute the property value vector for one sense ("pess"/"opt"). Throws on a
     // bad property name; lets both the text and JSON outputs share one dispatch.

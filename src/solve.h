@@ -107,6 +107,20 @@ namespace solve {
     IntervalResult maxLRAPessimistic(const IMDPModel& m, const std::vector<double>& reward, double eps);
     IntervalResult maxLRAOptimistic (const IMDPModel& m, const std::vector<double>& reward, double eps);
 
+    // ---- Multi-objective robust reachability (weighted-sum scalarisation) ---------------
+    // Etessami, Kwiatkowska, Vardi, Yannakakis, "Multi-Objective Model Checking of MDPs",
+    // TACAS 2007 (the achievable set is convex, so its Pareto frontier is traced by the
+    // weighted-sum optima over the weight simplex); Forejt, Kwiatkowska, Norman, Parker, Qu,
+    // TACAS 2011. For weight vector w and target sets T_i, this maximises (controller)
+    // w . (P(reach T_1), ..., P(reach T_k)) with nature adversarial (robust) or cooperative.
+    // The targets are absorbing, so the objectives are P(the first target hit is T_i). Returns
+    // the weighted optimum at `init` AND the per-objective P(reach T_i) under the weight-optimal
+    // policy — one achievable point on the (robust) Pareto frontier. Sweeping w traces it.
+    struct MultiObjResult { double weighted; std::vector<double> objective; int iterations; };
+    MultiObjResult multiReach(const IMDPModel& m, const std::vector<std::set<int>>& targets,
+                              const std::vector<double>& weights, int init, double eps,
+                              bool natureAdversarial);
+
 } // namespace solve
 } // namespace impact
 

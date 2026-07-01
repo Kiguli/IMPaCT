@@ -396,5 +396,64 @@ IntervalResult maxLRAOptimistic(const IMDPModel& m, const std::vector<double>& r
     return longRunAverage(m, reward, eps, /*natureAdversarial=*/false, /*controllerMax=*/true);
 }
 
+// ---- Multi-objective robust reachability (weighted-sum scalarisation) -------------------
+// A backup that ALSO returns the argmax action index (for policy extraction).
+static double backupArgmax(const StateActions& acts, const std::vector<double>& V,
+                           omax::Sense sense, int& bestAction) {
+    double best = 0.0; bool any = false; bestAction = -1;
+    std::vector<double> lo, hi, vv;
+    for (size_t k = 0; k < acts.size(); ++k) {
+        const ActionDist& a = acts[k];
+        lo.clear(); hi.clear(); vv.clear();
+        for (const Interval& iv : a) { lo.push_back(iv.lo); hi.push_back(iv.hi); vv.push_back(V[iv.to]); }
+        const double q = lo.empty() ? 0.0 : omax::optimize(lo, hi, vv, sense).value;
+        if (!any || q > best) { best = q; bestAction = (int)k; any = true; }
+    }
+    return any ? best : 0.0;
+}
+
+MultiObjResult multiReach(const IMDPModel& m, const std::vector<std::set<int>>& targets,
+                          const std::vector<double>& weights, int init, double eps,
+                          bool natureAdversarial) {
+    const int n = (int)m.size();
+    const omax::Sense nature = natureAdversarial ? omax::Sense::Min : omax::Sense::Max;
+    const int K = (int)targets.size();
+    // terminal (weighted) value + "is a target" flag (targets are absorbing)
+    std::vector<double> term(n, 0.0); std::vector<char> isTerm(n, 0);
+    for (int i = 0; i < K; ++i) for (int s : targets[i]) if (s >= 0 && s < n) { term[s] += weights[i]; isTerm[s] = 1; }
+
+    // scalarised VI (controller max w.V, nature `sense`), recording the policy
+    std::vector<double> V(n, 0.0), Vn(n); std::vector<int> policy(n, -1);
+    for (int s = 0; s < n; ++s) if (isTerm[s]) V[s] = term[s];
+    const int MAXIT = 2000000; int iters = 0;
+    for (; iters < MAXIT; ++iters) {
+        double change = 0.0;
+        for (int s = 0; s < n; ++s) {
+            if (isTerm[s]) { Vn[s] = term[s]; continue; }
+            int a; Vn[s] = backupArgmax(m[s], V, nature, a); policy[s] = a;
+            change = std::max(change, std::fabs(Vn[s] - V[s]));
+        }
+        V.swap(Vn);
+        if (change < eps) break;
+    }
+
+    // per-objective P(reach T_i) under the weight-optimal policy: fix each non-target state
+    // to its policy action (targets stay absorbing) and run robust reachability to T_i.
+    IMDPModel Mpi(n);
+    for (int s = 0; s < n; ++s) {
+        if (isTerm[s] || policy[s] < 0 || m[s].empty()) Mpi[s].push_back({ Interval{s, 1.0, 1.0} });
+        else Mpi[s].push_back(m[s][policy[s]]);
+    }
+    MultiObjResult r; r.weighted = V[init]; r.iterations = iters; r.objective.assign(K, 0.0);
+    for (int i = 0; i < K; ++i) {
+        // targets[i] absorbing value 1; the OTHER targets are absorbing value 0 (already self-loops
+        // in Mpi and not in targets[i]) -> robust reach of exactly T_i under the fixed policy.
+        IntervalResult ri = natureAdversarial ? maxReachPessimistic(Mpi, targets[i], eps)
+                                              : maxReachOptimistic(Mpi, targets[i], eps);
+        r.objective[i] = ri.lower[init];
+    }
+    return r;
+}
+
 } // namespace solve
 } // namespace impact

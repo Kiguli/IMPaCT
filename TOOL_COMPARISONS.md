@@ -134,7 +134,8 @@ This is the reason an end-to-end comparison is impossible and §1–§2 compare 
 | GPU acceleration | ✅ SYCL (any vendor) | ✅ CUDA | ❌ | ❌ |
 | Exact / rational arithmetic | ❌ | ✅ | ✅ `-exact` | ✅ |
 | Symbolic / BDD engine | ❌ | ❌ | ✅ MTBDD | ✅ dd (CUDD/Sylvan) |
-| Full (non-robust) LTL / PCTL* / CSL | fragment (F/G/U/X/GF/FG) | ❌ | ✅ | ✅ (Spot) |
+| Full (non-robust) LTL / PCTL* / CSL | fragment + arbitrary det.-Büchi LTL via Spot (§1b) | ❌ | ✅ | ✅ (Spot) |
+| **Robust LTL on IMDPs** (arbitrary, not just Büchi/persist) | ✅ det.-Büchi class, only tool | ❌ | ❌ | ❌ |
 | Other model classes | POMDP, PTA, TA | orthogonal-IMDP, mixture-IMDP, IMC | DTMC/CTMC/MDP/PTA/POMDP/IDTMC | DTMC/CTMC/MDP/MA/POMDP, parametric, DFT, GSPN |
 | Solver methods | II, VI, **OVI**, MEC, O-max | robust VI (O-max) | VI/GS/PI/II/topological/symbolic | VI/II/OVI/SVI/PI/LP/topological/symbolic |
 | Input formats | C++ dynamics, `.imdp`, PRISM-subset, HDF5 | netCDF, PRISM-explicit, bmdp-tool | PRISM lang, explicit, PEPA | PRISM, JANI, DRN, explicit, GSPN, DFT |

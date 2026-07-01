@@ -79,7 +79,19 @@ the k=1 case against the existing `maxReachPessimistic`.
 
 ---
 
-## 4. Full arbitrary LTL via LDBA — planned (needs Spot/Owl; ISSUE-0016)
+## 4. Full arbitrary LTL — ✅ DONE for the deterministic-Büchi class (2026-07-01)
+
+**What shipped.** `imdp_solve ltlx` (`src/ltl_spot.{h,cpp}`): LTL → deterministic
+(generalized) Büchi via Spot `ltl2tgba -D` → HOA parse → synchronous product with the IMDP
+→ robust ω-regular via the existing `omega::maxGenBuchi{Pessimistic,Optimistic}` (or product
+safety for `t`/all acceptance). **Validated**: point MDP `ltlx` == Storm `Pmax=?[φ]` for
+`F a`, `G F a`, `X X a`, `G(a→X a)` (the last three outside the built-in fragment); interval
+MDP robust 0.3 / opt 0.7 for `G F a` (Storm/PRISM cannot do LTL on intervals).
+**Remaining (ISSUE-0016):** nondeterministic automata (co-Büchi `F G`, Rabin/parity) need an
+LDBA (Owl) or a robust parity solver — currently rejected soundly and deferred to the `ltl`
+fragment solver (which covers persistence/`FG`). The papers below are the target for that.
+
+### Original plan (LDBA route, for the remaining nondeterministic classes)
 
 **Papers.** **Sickert, Esparza, Jaax, Křetínský, *Limit-Deterministic Büchi Automata for
 LTL*, CAV 2016** (LTL→LDBA correct for probabilistic/MDP model checking; already in

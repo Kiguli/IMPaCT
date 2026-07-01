@@ -1,0 +1,12 @@
+// Point version of multi_demo.imdp for Storm/PRISM multi-objective. Pareto vertices
+// (P(F t1), P(F t2)) = (0.9,0.1) via action A and (0.2,0.8) via action B.
+mdp
+module m
+  s : [0..2] init 0;
+  [A] s=0 -> 0.9:(s'=1) + 0.1:(s'=2);
+  [B] s=0 -> 0.2:(s'=1) + 0.8:(s'=2);
+  [] s=1 -> (s'=1);
+  [] s=2 -> (s'=2);
+endmodule
+label "t1" = (s=1);
+label "t2" = (s=2);

@@ -1,0 +1,10 @@
+# Multi-objective reachability trade-off (point MDP). From s0: action A reaches t1 w.p. 0.9
+# (t2 0.1); action B reaches t2 w.p. 0.8 (t1 0.2). Pareto vertices: A=(0.9,0.1), B=(0.2,0.8).
+states 3
+init 0
+label t1 1
+label t2 2
+tran 0 0 1:0.9:0.9 2:0.1:0.1
+tran 0 1 1:0.2:0.2 2:0.8:0.8
+tran 1 0 1:1:1
+tran 2 0 2:1:1
