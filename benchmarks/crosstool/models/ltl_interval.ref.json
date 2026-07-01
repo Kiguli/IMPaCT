@@ -1,0 +1,14 @@
+{
+  "model": "ltl_interval.imdp",
+  "description": "Interval MDP demonstrating ROBUST arbitrary-LTL synthesis, which Storm and PRISM cannot do ('LTL with intervals not implemented' / 'Computation not implemented yet') — an IMPaCT-only capability.",
+  "provenance": "s0 -> s1[0.3,0.7] (a-recurrent) / s2[0.3,0.7] (no a). G F a = reach the a-loop s1: robust (nature min) 0.3, optimistic (nature max) 0.7 (exact).",
+  "checks": [
+    {"prop": "ltlx", "formula": "G F a", "state": 0, "pess": 0.3, "opt": 0.7, "tol": 1e-4}
+  ],
+  "measured": {
+    "note": "Live 2026-07-01. Analytic only (no peer does robust LTL on intervals).",
+    "impact_ltlx": {"pess": 0.3, "opt": 0.7},
+    "storm": "unsupported (LTL with intervals not implemented)",
+    "prism": "unsupported (robust omega-regular not implemented)"
+  }
+}

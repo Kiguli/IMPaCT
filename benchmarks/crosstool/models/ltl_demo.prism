@@ -1,0 +1,10 @@
+// Point version of ltl_demo.imdp, for Storm's ordinary-MDP LTL oracle. P(G F a)=0.5.
+mdp
+module m
+  s : [0..3] init 0;
+  [] s=0 -> (s'=1);
+  [] s=1 -> 0.5:(s'=2) + 0.5:(s'=3);
+  [] s=2 -> (s'=2);
+  [] s=3 -> (s'=3);
+endmodule
+label "a" = (s=2);

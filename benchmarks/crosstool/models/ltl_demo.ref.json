@@ -1,0 +1,16 @@
+{
+  "model": "ltl_demo.imdp",
+  "description": "Point MDP validating arbitrary-LTL robust synthesis (imdp_solve ltlx): LTL -> deterministic (gen.)Buchi via Spot ltl2tgba, product, robust omega-regular via omega::maxGenBuchi. Refs: Sickert et al. CAV 2016; Hahn et al. TACAS 2020 (good-for-MDPs); Duret-Lutz et al. Spot 2.0.",
+  "provenance": "0->1->{2,3 each 0.5}; s2 labelled a and self-loops. P(F a)=P(G F a)=P(X X a)=0.5; P(G(a->X a))=1; P(a | X a)=0. Validated against Storm LTL on the point PRISM model.",
+  "checks": [
+    {"prop": "ltlx", "formula": "F a", "state": 0, "opt": 0.5, "tol": 1e-4},
+    {"prop": "ltlx", "formula": "G F a", "state": 0, "opt": 0.5, "tol": 1e-4},
+    {"prop": "ltlx", "formula": "X X a", "state": 0, "opt": 0.5, "tol": 1e-4},
+    {"prop": "ltlx", "formula": "G (a -> X a)", "state": 0, "opt": 1.0, "tol": 1e-4}
+  ],
+  "measured": {
+    "note": "Live 2026-07-01. IMPaCT ltlx == Storm Pmax=?[phi] on the point MDP for every formula. F/X/G(a->Xa) are OUTSIDE IMPaCT's hard-coded F/G/U/X/GF/FG/patrol fragment. Nondeterministic (co-Buchi, e.g. F G a) formulas are soundly rejected by ltlx -> use the `ltl` fragment (persistence); ISSUE-0016.",
+    "impact_ltlx": {"F a": 0.5, "G F a": 0.5, "X X a": 0.5, "G (a -> X a)": 1.0},
+    "storm":       {"F a": 0.5, "G F a": 0.5, "X X a": 0.5}
+  }
+}

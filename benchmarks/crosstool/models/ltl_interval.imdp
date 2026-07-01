@@ -1,0 +1,9 @@
+# Interval MDP for ROBUST arbitrary-LTL (IMPaCT-only; Storm/PRISM cannot do LTL on intervals).
+# s0 -> s1 [0.3,0.7] (a-recurrent) / s2 [0.3,0.7] (no a). For G F a = reach the a-loop s1:
+#   robust (nature minimises) = 0.3 ; optimistic (nature maximises) = 0.7.
+states 3
+init 0
+label a 1
+tran 0 0 1:0.3:0.7 2:0.3:0.7
+tran 1 0 1:1:1
+tran 2 0 2:1:1

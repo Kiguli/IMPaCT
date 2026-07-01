@@ -1,0 +1,9 @@
+# Point MDP for arbitrary-LTL validation. 0->1->{2,3 each 0.5}; s2 has label "a" and
+# self-loops (a holds forever); s3 self-loops (a never). So P(G F a)=P(F G a)=P(reach s2)=0.5.
+states 4
+init 0
+label a 2
+tran 0 0 1:1:1
+tran 1 0 2:0.5:0.5 3:0.5:0.5
+tran 2 0 2:1:1
+tran 3 0 3:1:1

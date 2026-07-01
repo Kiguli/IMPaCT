@@ -9,8 +9,10 @@
 //
 // Build (no SYCL/Armadillo needed — pure std C++):
 //   c++ -std=c++17 -O2 tools/imdp_solve.cpp \
-//       src/imdp_io.cpp src/solve.cpp src/omaximization.cpp src/graph_utils.cpp \
+//       src/imdp_io.cpp src/prism.cpp src/solve.cpp src/omaximization.cpp src/graph_utils.cpp \
+//       src/omega.cpp src/pctl.cpp src/ltlspec.cpp src/ltl_spot.cpp \
 //       -o tools/imdp_solve
+// `ltlx` (arbitrary LTL) shells out to Spot's ltl2tgba; set IMPACT_LTL2TGBA to its path.
 //
 // Usage:
 //   imdp_solve MODEL.imdp PROP LABEL [--bound pess|opt|both] [--eps E]
@@ -29,6 +31,7 @@
 #include "../src/omega.h"
 #include "../src/pctl.h"
 #include "../src/ltlspec.h"
+#include "../src/ltl_spot.h"
 #include "../src/omaximization.h"
 
 #include <iostream>
@@ -73,8 +76,10 @@ using namespace impact;
 static void usage() {
     std::cerr <<
       "usage: imdp_solve MODEL(.imdp|.prism) PROP LABEL "
-      "[--bound pess|opt|both] [--eps E] [--method ovi|mec] [--state S]\n"
-      "  PROP  : reach | safety | buchi | persist | patrol | next | until | ltl\n"
+      "[--bound pess|opt|both] [--eps E] [--method ovi|mec] [--state S] [--discount g]\n"
+      "  PROP  : reach | safety | buchi | persist | patrol | next | until | ltl | ltlx\n"
+      "          | reward | lra   (reward: LABEL=target, or --discount g; lra/ltlx: LABEL=formula/-)\n"
+      "  ltlx  : arbitrary LTL via Spot (deterministic (gen.)Buchi); ltl = built-in fragment\n"
       "  LABEL : a label name; for patrol/until, comma-separated labels;\n"
       "          for ltl, an LTL formula (e.g. \"F goal\", \"G F r\", \"a U b\")\n"
       "  buchi = G F label   persist = F G label   next = X label   until = a,b (a U b)\n";
@@ -137,7 +142,7 @@ int main(int argc, char** argv) {
 
     // For `ltl` the LABEL arg is an LTL formula (not a label name); `lra` (and discounted
     // reward) take no target label; every other property resolves label name(s) to states.
-    const bool isLtl = (prop == "ltl");
+    const bool isLtl = (prop == "ltl" || prop == "ltlx");   // LABEL is an LTL formula
     const bool noLabel = isLtl || prop == "lra";
     std::vector<std::set<int>> accSets;
     if (!noLabel) {
@@ -194,6 +199,11 @@ int main(int argc, char** argv) {
         }
         if (prop == "ltl")
             return ltlspec::synthesize(p.model, p.labels, label, pess, eps);
+        if (prop == "ltlx") {   // arbitrary LTL via Spot ltl2tgba (deterministic (gen.)Buchi)
+            const char* cmd = std::getenv("IMPACT_LTL2TGBA");
+            return ltlspot::synthesizeLTL(p.model, p.labels, p.init, label, pess, eps,
+                                          cmd ? cmd : "ltl2tgba");
+        }
         throw std::runtime_error("unknown property '" + prop + "'");
     };
 
