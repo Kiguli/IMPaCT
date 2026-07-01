@@ -26,6 +26,7 @@ tables: [`TOOL_COMPARISONS.md`](TOOL_COMPARISONS.md).
 | **Arbitrary LTL** (deterministic-Büchi class) | ✅ (robust interval IMPaCT-only) | Spot; Sickert et al. CAV2016; Hahn et al. TACAS2020 | Storm |
 | **Multi-objective / Pareto** (reachability) | ✅ | Etessami et al. TACAS2007; Forejt et al. TACAS2011 | Storm |
 | **CTMC** model class + **CSL** time-bounded reachability | ✅ | uniformisation + Fox-Glynn (BHHK TSE2003; FG CACM1988) | Storm, analytic |
+| **Robust interval-CTMC** CSL (uncertain rates) | ✅ (IMPaCT-only) | interval uniformisation + O-max (Katoen et al. CAV2007; Badings et al. CAV2022) | analytic |
 | POMDP (finite-horizon), PTA, TA | ✅ | belief MDP; zone/digital-clocks | — |
 | Controller/strategy synthesis; GPU (SYCL) | ✅ | — | — |
 

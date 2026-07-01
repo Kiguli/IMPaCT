@@ -1,0 +1,7 @@
+# Interval (uncertain-rate) CTMC — a capability NO peer tool has (Storm/PRISM: point rates
+# only). s0 --rate [0.5,1.5]--> s1 (absorbing goal). Robust P(F<=1 goal): worst-case rate 0.5
+# => 1-e^{-0.5}=0.393469 ; best-case rate 1.5 => 1-e^{-1.5}=0.776870.
+states 2
+init 0
+label goal 1
+tran 0 0 1:0.5:1.5

@@ -217,7 +217,7 @@ int main(int argc, char** argv) {
         }
         if (prop == "csl") {    // CTMC time-bounded reachability P(F<=--time LABEL); model = rates
             ctmc::Uniformized u = ctmc::uniformize(p.model);
-            std::vector<double> v = ctmc::timeBoundedReach(u, states, cslTime, eps);
+            std::vector<double> v = ctmc::timeBoundedReach(u, states, cslTime, eps, /*robust=*/pess);
             solve::IntervalResult r; r.iterations = 0; r.lower = v; r.upper = v; return r;
         }
         if (prop == "buchi")

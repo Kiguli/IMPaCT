@@ -30,12 +30,17 @@ namespace ctmc {
 
     struct Uniformized { solve::IMDPModel dtmc; double lambda; };
 
-    // Treat each state's single action as outgoing RATES and uniformise to a DTMC.
+    // Treat each state's single action as outgoing RATES and uniformise to a DTMC. Rates may
+    // be INTERVALS `to:rlo:rhi` (an interval / uncertain-rate CTMC); the uniformised chain is
+    // then an interval DTMC. Point rates (rlo==rhi) give an ordinary DTMC.
     Uniformized uniformize(const solve::IMDPModel& rateModel);
 
-    // CSL time-bounded reachability P(F<=t goal), per state (goal absorbing).
+    // CSL time-bounded reachability P(F<=t goal), per state (goal absorbing). For an interval
+    // CTMC, `robust` picks the adversarial (worst-case, min-reach) resolution of the rate
+    // intervals per uniformisation step; !robust picks the cooperative (best-case) one — the
+    // sound lower/upper CSL bounds of Katoen-Klink-Leucker-Wolf (three-valued CSL, CAV 2007).
     std::vector<double> timeBoundedReach(const Uniformized& u, const std::set<int>& goal,
-                                         double t, double eps);
+                                         double t, double eps, bool robust);
 
 } // namespace ctmc
 } // namespace impact

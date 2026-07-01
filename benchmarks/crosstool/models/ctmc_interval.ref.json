@@ -1,0 +1,13 @@
+{
+  "model": "ctmc_interval.imdp",
+  "description": "INTERVAL (uncertain-rate) CTMC — an IMPaCT-only capability (Storm/PRISM support point rates only). Robust three-valued CSL by uniformising the rate intervals and resolving them adversarially/cooperatively per step via O-maximization. Papers (verified): Katoen, Klink, Leucker, Wolf, 'Three-Valued Abstraction for CTMCs', CAV 2007 (DOI 10.1007/978-3-540-73368-3_37); Badings, Jansen, Junges, Stoelinga, Volk, 'Sampling-Based Verification of CTMCs with Uncertain Rates', CAV 2022 (arXiv:2205.08300).",
+  "provenance": "s0 --rate [0.5,1.5]--> s1 (absorbing goal). Robust P(F<=1 goal): worst-case rate 0.5 => 1-e^{-0.5}=0.3934693 ; best-case rate 1.5 => 1-e^{-1.5}=0.7768698.",
+  "checks": [
+    {"prop": "csl", "label": "goal", "time": 1.0, "state": 0, "pess": 0.3934693, "opt": 0.7768698, "tol": 1e-6}
+  ],
+  "measured": {
+    "note": "Live 2026-07-01. Analytic only — no peer tool does robust/interval CTMC.",
+    "impact": {"pess": 0.3934693403, "opt": 0.7768698399},
+    "storm": "unsupported (point rates only)", "prism": "unsupported (point rates only)"
+  }
+}
