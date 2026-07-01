@@ -58,23 +58,29 @@ threshold it reaches 0.894663 = the others.
 
 ---
 
-### 1b. Expected reward (new in IMPaCT — robust dynamic programming, Iyengar 2005)
+### 1b. New IMPaCT capabilities (four §10 upgrades, each literature-grounded + validated)
 
-`reward_chain` — a 3-state interval reward MDP (state rewards r(s0)=1, r(s1)=2). IMPaCT's
-robust expected reward reuses the O-maximization backup; validated against the analytic
-value and each peer on its native reward objective.
+All reuse the O-maximization robust backup; each was validated against the analytic value
+AND a peer tool on its native query. Papers are verified (DOIs/arXiv ids); details +
+roadmap in [`ROADMAP_UPGRADES.md`](ROADMAP_UPGRADES.md).
 
-| objective | IMPaCT | PRISM | Storm | IntervalMDP.jl | ref |
+| upgrade | model | IMPaCT (pess / opt) | oracle | ref | paper |
 |---|---|---|---|---|---|
-| reachability reward `R=?[F target]` `pess/opt` | **3 / 5** | 3 / 5 (`Rmaxmin/Rmaxmax`) | N/A / 5 ¹ | N/A ² | 3 / 5 ✅ |
-| discounted reward (γ=0.9) `pess/opt` | **2.8 / 4.2727** | N/A ² | N/A ² | 2.8 / 4.2727 | 2.8 / 4.2727 ✅ |
+| **Reachability reward** | reward_chain | **3 / 5** | PRISM `Rmaxmin/Rmaxmax` 3 / 5 | 3 / 5 ✅ | Iyengar 2005 |
+| **Discounted reward** (γ=0.9) | reward_chain | **2.8 / 4.2727** | IntervalMDP.jl 2.8 / 4.2727 | ✅ | Iyengar 2005 |
+| **Long-run average** | lra_cycle (point) | **2 / 2** | Storm `R{"r"}max=?[LRA]` 2 | 2 ✅ | Ashok et al. CAV 2017 |
+| **Long-run average** (interval) | lra_interval | **0 / 4** | analytic (no peer does interval LRA) | 0 / 4 ✅ | Chatterjee et al. IJCAI 2024 |
+| **Arbitrary LTL** (det-Büchi) | ltl_demo (point) | `F a`/`GF a`/`XX a`/`G(a→Xa)` = 0.5/0.5/0.5/1 | Storm `Pmax=?[φ]` (all match) | ✅ | Sickert et al. CAV 2016 |
+| **Arbitrary LTL** (interval) | ltl_interval | `GF a` **0.3 / 0.7** | analytic (no peer does interval LTL) | ✅ | Hahn et al. TACAS 2020 |
+| **Multi-objective** (Pareto) | multi_demo (point) | vertices **(0.9,0.1),(0.2,0.8)** | Storm `multi(...)` 2 Pareto pts | ✅ | Etessami et al. TACAS 2007 |
 
-IMPaCT matches PRISM on reachability reward (both senses) and IntervalMDP.jl on discounted
-reward (both senses), i.e. the exact Iyengar / Nilim-El Ghaoui robust-DP values.
-¹ Storm's interval reward ignores `--uncertainty-resolution` and returns only the
-nature-max value (= opt); `Rmin` on interval reward is unsupported. ² PRISM/Storm do only
-reachability reward on intervals; IntervalMDP.jl only discounted (γ<1) — no tool does both,
-IMPaCT does. (`imdp_solve MODEL reward LABEL [--discount g]`.)
+Highlights: IMPaCT is the **only** tool that does reward + discounted (PRISM/Storm reach-only
+on intervals; IntervalMDP.jl discounted-only), and the only tool doing **robust interval**
+long-run-average and **robust interval LTL** at all (Storm/PRISM: "not implemented" on
+intervals). Storm's interval reward ignores `--uncertainty-resolution` (returns only the
+nature-max value). CLIs: `imdp_solve MODEL {reward|lra|ltlx|multi} LABEL [--discount g |
+--weights w1,w2]`. Nondeterministic-automaton LTL (co-Büchi `FG`, Rabin) stays ISSUE-0016
+(the built-in `ltl` fragment covers persistence).
 
 ## 2. ARCH-COMP 2025 benchmarks (IMPaCT abstracts; `*`peers solve the exported IMDP)
 
@@ -129,7 +135,7 @@ This is the reason an end-to-end comparison is impossible and §1–§2 compare 
 | **Robust ω-regular on IMDPs** (Büchi/persistence/LTL) | ✅ **only tool** | ❌ (DFA/co-safe only) | ❌ | ❌ |
 | Expected reward / cost | ✅ reachability + discounted (robust, §1b) | ✅ discounted, exit-time | ✅ (+interval reach-reward) | ✅ |
 | Long-run average / mean-payoff | ✅ robust interval (§1b) | ❌ | ✅ (non-interval) | ✅ (non-interval) |
-| Multi-objective / Pareto | ❌ | ❌ | ✅ (non-interval) | ✅ (non-interval) |
+| Multi-objective / Pareto | ✅ robust reachability (§1b) | ❌ | ✅ (non-interval) | ✅ (non-interval) |
 | Controller / strategy synthesis | ✅ | ✅ | ✅ | ✅ |
 | GPU acceleration | ✅ SYCL (any vendor) | ✅ CUDA | ❌ | ❌ |
 | Exact / rational arithmetic | ❌ | ✅ | ✅ `-exact` | ✅ |
@@ -142,9 +148,10 @@ This is the reason an end-to-end comparison is impossible and §1–§2 compare 
 
 **Present in a tool but not exercised above:**
 - **IMPaCT** — the abstraction front end + 6 noise models, GPU/SYCL, POMDP/PTA/TA,
-  PCTL/CTL/STL, and the II/VI/MEC solvers (only OVI was measured). **Robust expected
-  reward now added** (reachability + discounted, §1b). Remaining gaps: multi-objective and
-  long-run average — see the upgrade roadmap [`ROADMAP_UPGRADES.md`](ROADMAP_UPGRADES.md).
+  PCTL/CTL/STL, and the II/VI/MEC solvers (only OVI was measured). **Four §10 gaps now
+  closed** (§1b): robust expected reward (reachability + discounted), long-run average,
+  arbitrary det-Büchi LTL, and multi-objective Pareto — see [`ROADMAP_UPGRADES.md`](ROADMAP_UPGRADES.md).
+  Remaining: nondeterministic-LDBA LTL (ISSUE-0016) and reward-based multi-objective.
 - **IntervalMDP.jl** — orthogonal & mixture IMDPs (its scalability feature), CUDA VI,
   discounted-reward / expected-exit-time, exact Rational arithmetic, DFA-product specs.
 - **PRISM** — DTMC/CTMC/MDP/PTA/POMDP, full PCTL*/LTL/CSL (non-interval), rewards +

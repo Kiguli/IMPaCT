@@ -1,13 +1,14 @@
 ---
 id: ISSUE-0016
 title: Full arbitrary-LTL -> LDBA front-end (Spot/Owl) — needs external toolchain, transfer to big machine
-status: open
+status: partially-resolved
 severity: medium
-labels: enhancement, omega-regular, ltl, needs-big-machine, external-dependency
+labels: enhancement, omega-regular, ltl, external-dependency
 created: 2026-06-26
-updated: 2026-06-26
+updated: 2026-07-01
 related:
   - src/ltlspec.cpp
+  - src/ltl_spot.cpp
   - src/omega.cpp
   - SickertEsparzaJaaxKretinsky2016
   - Hahn2020GoodForMDP
@@ -43,5 +44,17 @@ the current environment. Transfer to the machine that will host the AdaptiveCpp 
    dispatcher; on co-safe formulas, the ω route must agree with the LTLf→DFA product.
 
 ## References (verified, already in References.bib)
-Sickert-Esparza-Jaax-Křetínský (CAV 2016, LDBA); Hahn et al. (TACAS 2020,
+## PARTIALLY RESOLVED (2026-07-01): `imdp_solve ltlx` via Spot `ltl2tgba -D`
+The DETERMINISTIC-Büchi class of LTL is now handled end-to-end (`src/ltl_spot.cpp`):
+φ → deterministic (generalized) Büchi via Spot `ltl2tgba -D` → HOA parse → IMDP×automaton
+product → robust ω-regular via `omega::maxGenBuchi{Pessimistic,Optimistic}` (or product
+safety for `t`/all acceptance). Validated: point-MDP `ltlx` == Storm `Pmax=?[φ]` for
+`F a`/`G F a`/`X X a`/`G(a→X a)`; interval-MDP `G F a` robust 0.3 / opt 0.7 (no peer does
+LTL on intervals). Spot is invoked via `IMPACT_LTL2TGBA` (the native binary is in the
+source-built Storm tree). **Remaining gap:** NONdeterministic automata (co-Büchi `F G`,
+Rabin/parity) are soundly REJECTED — they need a true LDBA (Owl `ltl2ldba`) or a robust
+parity solver. The built-in `ltl` fragment already covers `FG`/persistence, so the union of
+`ltl` + `ltlx` is a large usable class. Full LDBA remains the open part of this issue.
+
+Refs: Sickert-Esparza-Jaax-Křetínský (CAV 2016, LDBA); Hahn et al. (TACAS 2020,
 good-for-MDP); Křetínský et al. (Owl). Spot/Owl tool URLs are not BibTeX refs.
