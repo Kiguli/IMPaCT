@@ -1,0 +1,8 @@
+// Point DTMC (same as ss_dtmc.imdp) for the PRISM/Storm steady-state oracle. S=?[g]=3/7.
+dtmc
+module m
+  s : [0..1] init 0;
+  [] s=0 -> 0.7:(s'=0) + 0.3:(s'=1);
+  [] s=1 -> 0.4:(s'=0) + 0.6:(s'=1);
+endmodule
+label "g" = (s=1);

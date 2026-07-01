@@ -1,0 +1,13 @@
+{
+  "model": "ss_dtmc.imdp",
+  "description": "Steady-state (S operator) via long-run average of the indicator reward. The steady-state probability of a set G equals the long-run average of 1_G (Baier & Katoen, Principles of Model Checking, Ch. 10; Puterman 1994), so IMPaCT computes it by reusing maxLRA with an indicator reward — and unlike PRISM's S (DTMC/CTMC only) it works robustly on interval MDPs.",
+  "provenance": "DTMC P(0->1)=0.3, P(1->0)=0.4 => stationary pi=(4/7,3/7); S(g={1}) = 3/7 = 0.4285714.",
+  "checks": [
+    {"prop": "ss", "label": "g", "state": 0, "pess": 0.4285714, "opt": 0.4285714, "tol": 1e-4}
+  ],
+  "measured": {
+    "note": "Live 2026-07-01. IMPaCT ss == Storm S=?[g]. PRISM S is DTMC/CTMC only; IMPaCT also does robust steady-state on interval MDPs.",
+    "impact": {"pess": 0.4285698, "opt": 0.4285698},
+    "storm":  {"value": 0.4285714286}
+  }
+}

@@ -206,6 +206,12 @@ int main(int argc, char** argv) {
         if (prop == "lra")      // robust long-run average (mean-payoff) reward
             return pess ? solve::maxLRAPessimistic(p.model, p.reward, eps)
                         : solve::maxLRAOptimistic(p.model, p.reward, eps);
+        if (prop == "ss") {     // steady-state prob of LABEL = long-run average of its indicator
+            std::vector<double> ind(p.nStates, 0.0);
+            for (int st : states) if (st >= 0 && st < p.nStates) ind[st] = 1.0;
+            return pess ? solve::maxLRAPessimistic(p.model, ind, eps)
+                        : solve::maxLRAOptimistic(p.model, ind, eps);
+        }
         if (prop == "buchi")
             return pess ? omega::maxBuchiPessimistic(p.model, states, eps)
                         : omega::maxBuchiOptimistic(p.model, states, eps);
