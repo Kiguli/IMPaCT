@@ -58,6 +58,24 @@ threshold it reaches 0.894663 = the others.
 
 ---
 
+### 1b. Expected reward (new in IMPaCT — robust dynamic programming, Iyengar 2005)
+
+`reward_chain` — a 3-state interval reward MDP (state rewards r(s0)=1, r(s1)=2). IMPaCT's
+robust expected reward reuses the O-maximization backup; validated against the analytic
+value and each peer on its native reward objective.
+
+| objective | IMPaCT | PRISM | Storm | IntervalMDP.jl | ref |
+|---|---|---|---|---|---|
+| reachability reward `R=?[F target]` `pess/opt` | **3 / 5** | 3 / 5 (`Rmaxmin/Rmaxmax`) | N/A / 5 ¹ | N/A ² | 3 / 5 ✅ |
+| discounted reward (γ=0.9) `pess/opt` | **2.8 / 4.2727** | N/A ² | N/A ² | 2.8 / 4.2727 | 2.8 / 4.2727 ✅ |
+
+IMPaCT matches PRISM on reachability reward (both senses) and IntervalMDP.jl on discounted
+reward (both senses), i.e. the exact Iyengar / Nilim-El Ghaoui robust-DP values.
+¹ Storm's interval reward ignores `--uncertainty-resolution` and returns only the
+nature-max value (= opt); `Rmin` on interval reward is unsupported. ² PRISM/Storm do only
+reachability reward on intervals; IntervalMDP.jl only discounted (γ<1) — no tool does both,
+IMPaCT does. (`imdp_solve MODEL reward LABEL [--discount g]`.)
+
 ## 2. ARCH-COMP 2025 benchmarks (IMPaCT abstracts; `*`peers solve the exported IMDP)
 
 Infinite-horizon robust reach/safety on the abstracted IMDP — the one query all four tools
@@ -109,7 +127,7 @@ This is the reason an end-to-end comparison is impossible and §1–§2 compare 
 | Robust reachability / safety | ✅ | ✅ | ✅ | ✅ |
 | Robust bounded / finite-horizon | ✅ | ✅ | ✅ `F<=k` | ✅ step-bounded |
 | **Robust ω-regular on IMDPs** (Büchi/persistence/LTL) | ✅ **only tool** | ❌ (DFA/co-safe only) | ❌ | ❌ |
-| Expected reward / cost | ❌ | ✅ discounted, exit-time | ✅ (+interval reach-reward) | ✅ |
+| Expected reward / cost | ✅ reachability + discounted (robust, §1b) | ✅ discounted, exit-time | ✅ (+interval reach-reward) | ✅ |
 | Long-run average / mean-payoff | ❌ | ❌ | ✅ (non-interval) | ✅ (non-interval) |
 | Multi-objective / Pareto | ❌ | ❌ | ✅ (non-interval) | ✅ (non-interval) |
 | Controller / strategy synthesis | ✅ | ✅ | ✅ | ✅ |
@@ -123,8 +141,9 @@ This is the reason an end-to-end comparison is impossible and §1–§2 compare 
 
 **Present in a tool but not exercised above:**
 - **IMPaCT** — the abstraction front end + 6 noise models, GPU/SYCL, POMDP/PTA/TA,
-  PCTL/CTL/STL, and the II/VI/MEC solvers (only OVI was measured). *No rewards, no
-  multi-objective, no LRA* (upgrade targets — see the roadmap being built).
+  PCTL/CTL/STL, and the II/VI/MEC solvers (only OVI was measured). **Robust expected
+  reward now added** (reachability + discounted, §1b). Remaining gaps: multi-objective and
+  long-run average — see the upgrade roadmap [`ROADMAP_UPGRADES.md`](ROADMAP_UPGRADES.md).
 - **IntervalMDP.jl** — orthogonal & mixture IMDPs (its scalability feature), CUDA VI,
   discounted-reward / expected-exit-time, exact Rational arithmetic, DFA-product specs.
 - **PRISM** — DTMC/CTMC/MDP/PTA/POMDP, full PCTL*/LTL/CSL (non-interval), rewards +
