@@ -32,6 +32,7 @@
 #include "../src/pctl.h"
 #include "../src/ltlspec.h"
 #include "../src/ltl_spot.h"
+#include "../src/ctmc.h"
 #include "../src/omaximization.h"
 
 #include <iostream>
@@ -103,6 +104,7 @@ int main(int argc, char** argv) {
     double eps = 1e-6;
     double discount = 1.0;   // reward prop: <1 => discounted (no target); ==1 => reachability reward
     std::string weightsArg;  // multi prop: comma-separated weights, or empty => sweep (2 objectives)
+    double cslTime = 1.0;    // csl prop: the time bound t in P(F<=t goal)
     solve::Method method = solve::Method::OptimisticVI;
     bool methodSet = false;
     int stateArg = -1;  // -1 => use model init
@@ -119,6 +121,7 @@ int main(int argc, char** argv) {
         else if (a == "--eps")    eps = std::stod(need("--eps"));
         else if (a == "--discount") discount = std::stod(need("--discount"));
         else if (a == "--weights") weightsArg = need("--weights");
+        else if (a == "--time")   cslTime = std::stod(need("--time"));
         else if (a == "--state")  stateArg = std::stoi(need("--state"));
         else if (a == "--json")   jsonOut = true;
         else if (a == "--trace")  { jsonOut = true; traceOut = true; }
@@ -211,6 +214,11 @@ int main(int argc, char** argv) {
             for (int st : states) if (st >= 0 && st < p.nStates) ind[st] = 1.0;
             return pess ? solve::maxLRAPessimistic(p.model, ind, eps)
                         : solve::maxLRAOptimistic(p.model, ind, eps);
+        }
+        if (prop == "csl") {    // CTMC time-bounded reachability P(F<=--time LABEL); model = rates
+            ctmc::Uniformized u = ctmc::uniformize(p.model);
+            std::vector<double> v = ctmc::timeBoundedReach(u, states, cslTime, eps);
+            solve::IntervalResult r; r.iterations = 0; r.lower = v; r.upper = v; return r;
         }
         if (prop == "buchi")
             return pess ? omega::maxBuchiPessimistic(p.model, states, eps)

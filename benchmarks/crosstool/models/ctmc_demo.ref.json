@@ -1,0 +1,14 @@
+{
+  "model": "ctmc_demo.imdp",
+  "description": "Continuous-time Markov chain (CTMC) for CSL time-bounded reachability P(F<=t goal), by uniformisation + Fox-Glynn Poisson truncation. A new MODEL CLASS for IMPaCT. Papers (verified): Baier, Haverkort, Hermanns, Katoen, 'Model-Checking Algorithms for CTMCs', IEEE TSE 29(6) 2003 (DOI 10.1109/TSE.2003.1205180); Fox & Glynn, 'Computing Poisson Probabilities', CACM 31(4) 1988 (DOI 10.1145/42404.42409). Interval-CTMC (uncertain rates) extension: Katoen-Klink-Leucker-Wolf, CAV 2007.",
+  "provenance": "s0 --rate 1--> s1 (absorbing goal). P(F<=t goal) = 1 - e^{-t}: 0.6321206 (t=1), 0.8646647 (t=2), 0.3934693 (t=0.5).",
+  "checks": [
+    {"prop": "csl", "label": "goal", "time": 1.0, "state": 0, "value": 0.6321206, "tol": 1e-6},
+    {"prop": "csl", "label": "goal", "time": 2.0, "state": 0, "value": 0.8646647, "tol": 1e-6}
+  ],
+  "measured": {
+    "note": "Live 2026-07-01. IMPaCT CSL == Storm CSL (storm --prism ctmc_demo.sm -pc --prop 'P=?[F<=t \"goal\"]') == analytic, to 10 digits.",
+    "impact": {"t1": 0.6321205588, "t2": 0.8646647168, "t0.5": 0.3934693403},
+    "storm":  {"t1": 0.6321205588, "t2": 0.8646647168, "t0.5": 0.3934693403}
+  }
+}

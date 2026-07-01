@@ -1,0 +1,7 @@
+// CTMC version of ctmc_demo.imdp for the Storm/PRISM CSL oracle. P(F<=t goal)=1-e^{-t}.
+ctmc
+module m
+  s : [0..1] init 0;
+  [] s=0 -> 1 : (s'=1);
+endmodule
+label "goal" = (s=1);

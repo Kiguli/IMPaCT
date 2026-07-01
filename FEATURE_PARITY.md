@@ -25,6 +25,7 @@ tables: [`TOOL_COMPARISONS.md`](TOOL_COMPARISONS.md).
 | **Steady-state (S operator)** | ✅ (robust interval IMPaCT-only) | = LRA of indicator (Baier-Katoen Ch.10) | Storm |
 | **Arbitrary LTL** (deterministic-Büchi class) | ✅ (robust interval IMPaCT-only) | Spot; Sickert et al. CAV2016; Hahn et al. TACAS2020 | Storm |
 | **Multi-objective / Pareto** (reachability) | ✅ | Etessami et al. TACAS2007; Forejt et al. TACAS2011 | Storm |
+| **CTMC** model class + **CSL** time-bounded reachability | ✅ | uniformisation + Fox-Glynn (BHHK TSE2003; FG CACM1988) | Storm, analytic |
 | POMDP (finite-horizon), PTA, TA | ✅ | belief MDP; zone/digital-clocks | — |
 | Controller/strategy synthesis; GPU (SYCL) | ✅ | — | — |
 
@@ -32,7 +33,7 @@ tables: [`TOOL_COMPARISONS.md`](TOOL_COMPARISONS.md).
 
 | Feature | Peer(s) | Status | Planned approach + paper (to verify) | Robust/interval angle |
 |---|---|---|---|---|
-| **CTMC + CSL** (time-bounded until, transient) | PRISM, Storm | ⬜ | uniformisation + Fox-Glynn (Baier-Haverkort-Hermanns-Katoen, IEEE TSE 2003) | robust **interval-CTMC** (uncertain rates) |
+| **CTMC + CSL** time-bounded reachability `P(F<=t g)` | PRISM, Storm | ✅ | uniformisation + Fox-Glynn (Baier-Haverkort-Hermanns-Katoen TSE 2003 DOI 10.1109/TSE.2003.1205180; Fox-Glynn CACM 1988) — `src/ctmc.cpp`, `imdp_solve csl --time t`; validated == Storm == 1-e^{-t} | interval-CTMC (Katoen et al. CAV 2007) planned |
 | **Nondeterministic-LDBA full LTL** (co-Büchi FG, Rabin) | Storm, PRISM | 🔶 (ISSUE-0016) | LTL→LDBA (Owl `ltl2ldba`), controller-resolved GFM product → existing robust Büchi | robust LTL on IMDPs (all of LTL) |
 | **Exact / rational arithmetic** | PRISM, Storm, IntervalMDP.jl | ⬜ | templatise omax/VI on the numeric type; rational Gaussian elimination (Haddad-Monmege) | exact robust value, rational interval endpoints |
 | **Symbolic / BDD (MTBDD) engine** | PRISM, Storm | ⬜ | MTBDD reachability (de Alfaro-Kwiatkowska-Norman-Parker-Segala TACAS2000) | symbolic robust IMDP |

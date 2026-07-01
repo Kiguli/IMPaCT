@@ -1,0 +1,6 @@
+# CTMC (rates) for CSL time-bounded reachability. s0 --rate 1--> s1(goal, absorbing).
+# P(F<=t goal) = 1 - e^{-t}: t=1 -> 0.6321206, t=2 -> 0.8646647. A `tran` entry to:r:r is a RATE.
+states 2
+init 0
+label goal 1
+tran 0 0 1:1:1
