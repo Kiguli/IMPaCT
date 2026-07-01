@@ -1,0 +1,9 @@
+# Parametric MDP: P(F target) = p. Region p in [0.3,0.7] => value in [0.3,0.7].
+# Parameter Lifting -> interval MDP, robust reach [pess,opt] = [0.3,0.7].
+param p 0.3 0.7
+states 3
+init 0
+label target 1
+tran 0 0 1:p 2:1-p
+tran 1 0 1:1
+tran 2 0 2:1

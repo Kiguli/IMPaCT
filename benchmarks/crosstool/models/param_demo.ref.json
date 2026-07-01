@@ -1,0 +1,13 @@
+{
+  "model": "param_demo.pimdp",
+  "description": "Parametric REGION verification via Parameter Lifting: a parametric Markov model + parameter region lifts to an INTERVAL MDP whose robust [pess,opt] reachability bounds the parametric value over the region — the reduction of storm-pars-style region checking to robust interval-MDP model checking, which IMPaCT already solves. Paper: Quatmann, Dehnert, Jansen, Junges, Katoen, 'Parameter Synthesis for Markov Models: Faster Than Ever', ATVA 2016 (DOI 10.1007/978-3-319-46520-3_4).",
+  "provenance": "P(F target) = p; region p in [0.3,0.7] => value range [0.3,0.7]. Lifting is exact here (p occurs once per row).",
+  "checks": [
+    {"prop": "reach", "label": "target", "state": 0, "pess": 0.3, "opt": 0.7, "tol": 1e-6}
+  ],
+  "measured": {
+    "note": "Live 2026-07-01. IMPaCT lifted region bounds [0.3,0.7] == Storm corner instantiations (p=0.3 -> 0.3, p=0.7 -> 0.7) == analytic. (storm-pars not built; corners confirm the endpoints; lifting handles the whole region in one interval-MDP solve.)",
+    "impact": {"pess": 0.3, "opt": 0.7},
+    "storm_corners": {"p=0.3": 0.3, "p=0.7": 0.7}
+  }
+}

@@ -38,7 +38,8 @@ tables: [`TOOL_COMPARISONS.md`](TOOL_COMPARISONS.md).
 | **Nondeterministic-LDBA full LTL** (co-Büchi FG, Rabin) | Storm, PRISM | 🔶 (ISSUE-0016) | LTL→LDBA (Owl `ltl2ldba`), controller-resolved GFM product → existing robust Büchi | robust LTL on IMDPs (all of LTL) |
 | **Exact / rational arithmetic** | PRISM, Storm, IntervalMDP.jl | ⬜ | templatise omax/VI on the numeric type; rational Gaussian elimination (Haddad-Monmege) | exact robust value, rational interval endpoints |
 | **Symbolic / BDD (MTBDD) engine** | PRISM, Storm | ⬜ | MTBDD reachability (de Alfaro-Kwiatkowska-Norman-Parker-Segala TACAS2000) | symbolic robust IMDP |
-| **Parametric model checking** | Storm (storm-pars) | 🔬 | solution functions / region check (Daws ICTAC2004; Junges et al.) | note: parametric ≈ interval/robust |
+| **Parametric REGION verification** | Storm (storm-pars) | ✅ | Parameter Lifting → interval-MDP reachability (Quatmann-Dehnert-Jansen-Junges-Katoen ATVA2016, DOI 10.1007/978-3-319-46520-3_4) — `peers/param_lift.py` + existing solve; region [0.3,0.7]→[0.3,0.7] == Storm corners | parametric ≡ interval/robust (native) |
+| Parametric **solution functions** | Storm | ⬜ | state elimination + multivariate rational-function arithmetic (Daws ICTAC2004) — needs a rational-function type | — |
 | **Markov automata (MA)** | Storm | 🔬 | CT + nondeterminism (Guck et al.; Eisentraut-Hermanns-Zhang) | robust MA |
 | **Full PCTL* nesting / conditional prob** | PRISM, Storm | ⬜ | nested P-operators as state predicates over pctl.cpp | robust nested |
 | **Statistical MC / simulation** (SPRT, CI) | PRISM, Storm | ⬜ | discrete-event simulator + hypothesis tests | — |
