@@ -105,6 +105,7 @@ int main(int argc, char** argv) {
     double discount = 1.0;   // reward prop: <1 => discounted (no target); ==1 => reachability reward
     std::string weightsArg;  // multi prop: comma-separated weights, or empty => sweep (2 objectives)
     double cslTime = 1.0;    // csl prop: the time bound t in P(F<=t goal)
+    int horizon = 0;         // reach/until: step bound k (P[F<=k] / a U<=k b); 0 => unbounded
     solve::Method method = solve::Method::OptimisticVI;
     bool methodSet = false;
     int stateArg = -1;  // -1 => use model init
@@ -122,6 +123,7 @@ int main(int argc, char** argv) {
         else if (a == "--discount") discount = std::stod(need("--discount"));
         else if (a == "--weights") weightsArg = need("--weights");
         else if (a == "--time")   cslTime = std::stod(need("--time"));
+        else if (a == "--horizon") horizon = std::stoi(need("--horizon"));
         else if (a == "--state")  stateArg = std::stoi(need("--state"));
         else if (a == "--json")   jsonOut = true;
         else if (a == "--trace")  { jsonOut = true; traceOut = true; }
@@ -191,11 +193,17 @@ int main(int argc, char** argv) {
     // bad property name; lets both the text and JSON outputs share one dispatch.
     auto compute = [&](const std::string& which) -> solve::IntervalResult {
         const bool pess = (which == "pess");
-        if (prop == "reach")
+        if (prop == "reach") {
+            if (horizon > 0) {   // step-bounded P[F<=k label] = true U<=k label (finite-horizon, exact)
+                std::set<int> all; for (int i = 0; i < p.nStates; ++i) all.insert(i);
+                return pess ? pctl::boundedUntilPessimistic(p.model, all, states, horizon, eps)
+                            : pctl::boundedUntilOptimistic(p.model, all, states, horizon, eps);
+            }
             return pess ? (methodSet ? solve::maxReachPessimistic(p.model, states, eps, method)
                                      : solve::maxReachPessimistic(p.model, states, eps))
                         : (methodSet ? solve::maxReachOptimistic(p.model, states, eps, method)
                                      : solve::maxReachOptimistic(p.model, states, eps));
+        }
         if (prop == "safety")
             return pess ? solve::maxSafetyPessimistic(p.model, states, eps)
                         : solve::maxSafetyOptimistic(p.model, states, eps);
@@ -234,6 +242,9 @@ int main(int argc, char** argv) {
                         : pctl::nextOptimistic(p.model, states, eps);
         if (prop == "until") {
             if (accSets.size() < 2) throw std::runtime_error("until needs two labels: a,b (a U b)");
+            if (horizon > 0)   // a U<=k b (step-bounded)
+                return pess ? pctl::boundedUntilPessimistic(p.model, accSets[0], accSets[1], horizon, eps)
+                            : pctl::boundedUntilOptimistic(p.model, accSets[0], accSets[1], horizon, eps);
             return pess ? pctl::untilPessimistic(p.model, accSets[0], accSets[1], eps)
                         : pctl::untilOptimistic(p.model, accSets[0], accSets[1], eps);
         }

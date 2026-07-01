@@ -1,0 +1,7 @@
+# Step-bounded reachability P[F<=k goal]. s0 -> goal w.p. 0.5, self 0.5 => P[F<=k goal]=1-0.5^k.
+# k=1:0.5, k=2:0.75, k=3:0.875; unbounded F goal = 1.
+states 2
+init 0
+label goal 1
+tran 0 0 1:0.5:0.5 0:0.5:0.5
+tran 1 0 1:1:1

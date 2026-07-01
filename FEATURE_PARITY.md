@@ -41,7 +41,9 @@ tables: [`TOOL_COMPARISONS.md`](TOOL_COMPARISONS.md).
 | **Parametric REGION verification** | Storm (storm-pars) | ✅ | Parameter Lifting → interval-MDP reachability (Quatmann-Dehnert-Jansen-Junges-Katoen ATVA2016, DOI 10.1007/978-3-319-46520-3_4) — `peers/param_lift.py` + existing solve; region [0.3,0.7]→[0.3,0.7] == Storm corners | parametric ≡ interval/robust (native) |
 | Parametric **solution functions** | Storm | ⬜ | state elimination + multivariate rational-function arithmetic (Daws ICTAC2004) — needs a rational-function type | — |
 | **Markov automata (MA)** | Storm | 🔬 | CT + nondeterminism (Guck et al.; Eisentraut-Hermanns-Zhang) | robust MA |
-| **Full PCTL* nesting / conditional prob** | PRISM, Storm | ⬜ | nested P-operators as state predicates over pctl.cpp | robust nested |
+| Step-bounded reachability `P[F<=k]` / `a U<=k b` | PRISM, Storm | ✅ | finite-horizon exact DP (`pctl::boundedUntil`, exposed via `reach/until --horizon k`) == Storm | robust bounded |
+| Expected time / steps to reach | PRISM, Storm | ✅ | = expected reward with unit state rewards (`reward` with all-1 reward) | robust |
+| **Full PCTL\* nesting / conditional prob** | PRISM, Storm | ⬜ | nested P-operators as state predicates over pctl.cpp (satStates already returns the sub-formula state set) | robust nested |
 | **Statistical MC / simulation** (SPRT, CI) | PRISM, Storm | ⬜ | discrete-event simulator + hypothesis tests | — |
 | **Orthogonal / mixture IMDPs** | IntervalMDP.jl | ⬜ | factored per-dimension O-max (Mathiesen-Haesaert-Laurenti arXiv:2411.11803) | scalability of robust abstraction |
 | **DFT / GSPN front-ends** | Storm | ⬜ | Galileo/PNPRO → MA/MDP translation | robust DFT |

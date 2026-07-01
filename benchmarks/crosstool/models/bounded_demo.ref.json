@@ -1,0 +1,14 @@
+{
+  "model": "bounded_demo.imdp",
+  "description": "Step-bounded (PCTL) reachability P[F<=k goal] = true U<=k goal, finite-horizon exact DP (pctl::boundedUntil, now exposed via imdp_solve reach --horizon k). Hansson-Jonsson (FAC 1994) PCTL; Baier-Katoen Ch.10.",
+  "provenance": "s0 -> goal w.p. 0.5, self 0.5 => P[F<=k goal] = 1-0.5^k: 0.5,0.75,0.875 for k=1,2,3.",
+  "checks": [
+    {"prop": "reach", "label": "goal", "horizon": 1, "state": 0, "opt": 0.5, "tol": 1e-9},
+    {"prop": "reach", "label": "goal", "horizon": 3, "state": 0, "opt": 0.875, "tol": 1e-9}
+  ],
+  "measured": {
+    "note": "Live 2026-07-01. IMPaCT P[F<=k goal] == Storm Pmax=?[F<=k \"goal\"] == analytic, for k=1,2,3. Works robustly on interval MDPs too.",
+    "impact": {"k1": 0.5, "k2": 0.75, "k3": 0.875},
+    "storm":  {"k1": 0.5, "k2": 0.75, "k3": 0.875}
+  }
+}
