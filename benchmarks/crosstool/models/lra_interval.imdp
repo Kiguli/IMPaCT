@@ -1,0 +1,11 @@
+# Interval MEC {0,1} where nature controls the long-run average via the interval.
+# r(0)=4, r(1)=0. From each state: stay w.p. [0.5,1], switch w.p. [0,0.5].
+#   robust (pess, nature minimises reward): nature drives the play into state 1 and keeps
+#     it there (p(stay 1)=1) -> gain 0.
+#   optimistic (nature maximises): nature keeps the play in state 0 (p(stay 0)=1) -> gain 4.
+states 2
+init 0
+reward 0 4
+reward 1 0
+tran 0 0 0:0.5:1 1:0:0.5
+tran 1 0 1:0.5:1 0:0:0.5

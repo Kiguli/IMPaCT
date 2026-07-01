@@ -1,0 +1,14 @@
+{
+  "model": "lra_interval.imdp",
+  "description": "Interval MEC where nature controls the long-run average. Demonstrates ROBUST interval-MDP long-run average reward, which Storm and PRISM cannot compute ('LRA with intervals not implemented') — an IMPaCT-only capability. Robust semantics: Chatterjee-Goharshady-Karrabi-Novotny-Zikelic, IJCAI 2024 (arXiv:2312.13912).",
+  "provenance": "Exact. MEC {0,1}, r(0)=4,r(1)=0, stay [0.5,1] / switch [0,0.5]. Robust (nature minimises): nature drives+traps the play in state 1 => gain 0. Optimistic (nature maximises): nature keeps the play in state 0 => gain 4.",
+  "checks": [
+    {"prop": "lra", "state": 0, "pess": 0.0, "opt": 4.0, "tol": 1e-4}
+  ],
+  "measured": {
+    "note": "Live runs 2026-07-01. Storm/PRISM cannot do interval LRA, so this is validated against the analytic value only.",
+    "impact": {"pess": 0.0, "opt": 4.0},
+    "storm":  "unsupported (LRA with intervals not implemented)",
+    "prism":  "unsupported (no robust/interval LRA)"
+  }
+}

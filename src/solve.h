@@ -91,6 +91,22 @@ namespace solve {
     IntervalResult maxReachRewardOptimistic (const IMDPModel& m, const std::set<int>& targets,
                                              const std::vector<double>& reward, double eps);
 
+    // ---- Robust LONG-RUN AVERAGE (mean-payoff) reward on interval MDPs ------------------
+    // Two-phase value iteration (Ashok, Chatterjee, Daca, Kretinsky, Meggendorfer,
+    // "Value Iteration for Long-Run Average Reward in MDPs", CAV 2017): (1) the robust
+    // average reward (gain) of each maximal end component is computed by relative value
+    // iteration with Puterman's (1994) aperiodicity transform, the interval ambiguity set
+    // resolved by O-maximization (Iyengar 2005); (2) a max-reachability "cash-out" VI funnels
+    // each state to the best robustly-reachable MEC gain. For robust/interval MDPs
+    // specifically see Chatterjee, Goharshady, Karrabi, Novotny, Zikelic, "Solving Long-run
+    // Average Reward Robust MDPs via Stochastic Games", IJCAI 2024 (arXiv:2312.13912) — that
+    // work uses policy iteration / games; here we use the VI route.
+    // `natureAdversarial` = robust (worst-case gain); controllerMax = LRAmax vs LRAmin.
+    IntervalResult longRunAverage(const IMDPModel& m, const std::vector<double>& reward,
+                                  double eps, bool natureAdversarial, bool controllerMax);
+    IntervalResult maxLRAPessimistic(const IMDPModel& m, const std::vector<double>& reward, double eps);
+    IntervalResult maxLRAOptimistic (const IMDPModel& m, const std::vector<double>& reward, double eps);
+
 } // namespace solve
 } // namespace impact
 

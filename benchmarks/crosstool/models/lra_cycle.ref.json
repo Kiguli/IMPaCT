@@ -1,0 +1,14 @@
+{
+  "model": "lra_cycle.imdp",
+  "description": "Point 2-cycle for long-run average (mean-payoff) reward. Validates IMPaCT's robust LRA (Ashok-Chatterjee-Daca-Kretinsky-Meggendorfer CAV 2017 two-phase VI; Puterman 1994 relative value iteration; robust inner = O-maximization).",
+  "provenance": "Exact: 0->1->0 deterministic cycle, rewards r(0)=1,r(1)=3 => mean-payoff (1+3)/2 = 2 (both senses; no intervals).",
+  "checks": [
+    {"prop": "lra", "state": 0, "pess": 2.0, "opt": 2.0, "tol": 1e-4}
+  ],
+  "measured": {
+    "note": "Live runs 2026-07-01.",
+    "impact": {"pess": 2.0, "opt": 2.0},
+    "storm":  {"value": 2.0, "query": "R{\"r\"}max=? [LRA] on the point PRISM model (ordinary MDP)"},
+    "prism":  "n/a (PRISM steady-state reward S is DTMC/CTMC only, not MDP)"
+  }
+}

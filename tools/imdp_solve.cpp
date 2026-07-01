@@ -135,11 +135,12 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    // For `ltl` the LABEL arg is an LTL formula (not a label name); every other
-    // property resolves comma-separated label name(s) to state set(s).
+    // For `ltl` the LABEL arg is an LTL formula (not a label name); `lra` (and discounted
+    // reward) take no target label; every other property resolves label name(s) to states.
     const bool isLtl = (prop == "ltl");
+    const bool noLabel = isLtl || prop == "lra";
     std::vector<std::set<int>> accSets;
-    if (!isLtl) {
+    if (!noLabel) {
         for (const std::string& nm : splitComma(label)) {
             auto it = p.labels.find(nm);
             if (it == p.labels.end()) { std::cerr << "no such label '" << nm << "' in model\n"; return 1; }
@@ -148,7 +149,7 @@ int main(int argc, char** argv) {
         if (accSets.empty()) { std::cerr << "no label given\n"; return 1; }
     }
     const std::set<int> empty;
-    const std::set<int>& states = isLtl ? empty : accSets.front();
+    const std::set<int>& states = noLabel ? empty : accSets.front();
     const int s = (stateArg >= 0) ? stateArg : p.init;
     if (s < 0 || s >= p.nStates) { std::cerr << "state out of range\n"; return 1; }
 
@@ -171,6 +172,9 @@ int main(int argc, char** argv) {
             return pess ? solve::maxReachRewardPessimistic(p.model, states, p.reward, eps)
                         : solve::maxReachRewardOptimistic(p.model, states, p.reward, eps);
         }
+        if (prop == "lra")      // robust long-run average (mean-payoff) reward
+            return pess ? solve::maxLRAPessimistic(p.model, p.reward, eps)
+                        : solve::maxLRAOptimistic(p.model, p.reward, eps);
         if (prop == "buchi")
             return pess ? omega::maxBuchiPessimistic(p.model, states, eps)
                         : omega::maxBuchiOptimistic(p.model, states, eps);

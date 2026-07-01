@@ -6,6 +6,7 @@
 #include <cmath>
 #include <vector>
 #include <set>
+#include <unordered_map>
 
 namespace impact {
 namespace solve {
@@ -290,6 +291,109 @@ IntervalResult maxReachRewardPessimistic(const IMDPModel& m, const std::set<int>
 IntervalResult maxReachRewardOptimistic(const IMDPModel& m, const std::set<int>& targets,
                                         const std::vector<double>& reward, double eps) {
     return expReachReward(m, targets, reward, eps, /*natureAdversarial=*/false, /*controllerMax=*/true);
+}
+
+// ---- Robust long-run average reward (mean-payoff); see solve.h for the references -------
+
+// Phase 1: robust average reward (gain) of one MEC, using only its staying actions (support
+// inside the MEC). Relative value iteration with Puterman's aperiodicity transform
+// L_tau h = (1-tau) h + tau (r + opt_a opt_p sum_{s' in M} p(s') h(s')). At the fixpoint
+// (L_tau h)(s) - h(s) = tau * g, so g = (L_tau h - h)/tau; the self-loop weight (1-tau) makes
+// the iteration aperiodic so the relative values converge (Puterman 1994, section 8.5).
+static double mecGain(const IMDPModel& m, const std::vector<int>& mec,
+                      const std::vector<double>& reward, omax::Sense nature,
+                      bool controllerMax, double eps) {
+    const int k = (int)mec.size();
+    std::unordered_map<int,int> idx;
+    for (int i = 0; i < k; ++i) idx[mec[i]] = i;
+    std::vector<std::vector<ActionDist>> loc(k);          // staying actions, local indices
+    for (int i = 0; i < k; ++i)
+        for (const ActionDist& act : m[mec[i]]) {
+            bool stays = true;
+            for (const Interval& iv : act) if (iv.hi > 0.0 && !idx.count(iv.to)) { stays = false; break; }
+            if (!stays) continue;
+            ActionDist la;
+            for (const Interval& iv : act) { auto it = idx.find(iv.to); if (it != idx.end()) la.push_back({it->second, iv.lo, iv.hi}); }
+            if (!la.empty()) loc[i].push_back(std::move(la));
+        }
+    std::vector<double> h(k, 0.0), Lh(k), Ltau(k), lo, hi, vv;
+    const double tau = 0.5;
+    const int MAXIT = 2000000;
+    double g = 0.0, gPrev = 1e300;
+    for (int it = 0; it < MAXIT; ++it) {
+        for (int i = 0; i < k; ++i) {
+            double best = 0.0; bool any = false;
+            for (const ActionDist& a : loc[i]) {
+                lo.clear(); hi.clear(); vv.clear();
+                for (const Interval& iv : a) { lo.push_back(iv.lo); hi.push_back(iv.hi); vv.push_back(h[iv.to]); }
+                const double q = lo.empty() ? 0.0 : omax::optimize(lo, hi, vv, nature).value;
+                if (!any) { best = q; any = true; } else best = controllerMax ? std::max(best,q) : std::min(best,q);
+            }
+            Lh[i] = reward[mec[i]] + best;
+        }
+        for (int i = 0; i < k; ++i) Ltau[i] = (1.0 - tau) * h[i] + tau * Lh[i];
+        g = (Ltau[0] - h[0]) / tau;                       // per-step gain (ref state = local 0)
+        const double ref = Ltau[0];
+        for (int i = 0; i < k; ++i) h[i] = Ltau[i] - ref; // relative values, h[0]=0
+        if (std::fabs(g - gPrev) < eps) break;
+        gPrev = g;
+    }
+    return g;
+}
+
+IntervalResult longRunAverage(const IMDPModel& m, const std::vector<double>& reward,
+                              double eps, bool natureAdversarial, bool controllerMax) {
+    const int n = (int)m.size();
+    const omax::Sense nature = natureAdversarial ? omax::Sense::Min : omax::Sense::Max;
+    std::vector<double> rew = reward; rew.resize(n, 0.0);
+
+    // support graph -> MECs
+    graph::MDPGraph g(n);
+    for (int s = 0; s < n; ++s)
+        for (const ActionDist& act : m[s]) {
+            std::vector<int> succ;
+            for (const Interval& iv : act) if (iv.hi > 0.0) succ.push_back(iv.to);
+            if (!succ.empty()) g[s].push_back(std::move(succ));
+        }
+    const std::vector<std::vector<int>> mecList = graph::mecs(g);
+
+    // phase 1: gain per MEC
+    std::vector<double> gainOf(n, 0.0);
+    std::vector<char> inMec(n, 0);
+    double minGain = 1e300, maxGain = -1e300;
+    for (const auto& M : mecList) {
+        const double gain = mecGain(m, M, rew, nature, controllerMax, eps);
+        for (int s : M) { gainOf[s] = gain; inMec[s] = 1; }
+        minGain = std::min(minGain, gain); maxGain = std::max(maxGain, gain);
+    }
+    if (mecList.empty()) { minGain = maxGain = 0.0; }
+
+    // phase 2: "cash-out" max-reachability VI to the best robustly-reachable MEC gain.
+    //   V(s) = max( inMec ? gain(M) : -inf ,  opt_a opt_p sum p V )
+    std::vector<double> V(n), Vn(n);
+    for (int s = 0; s < n; ++s) V[s] = inMec[s] ? gainOf[s] : minGain;   // finite seed (no -inf)
+    const int MAXIT = 2000000;
+    int iters = 0;
+    for (; iters < MAXIT; ++iters) {
+        double change = 0.0;
+        for (int s = 0; s < n; ++s) {
+            double v = backup(m[s], V, nature, controllerMax);
+            if (inMec[s]) v = std::max(v, gainOf[s]);          // cash-out option
+            if (v > maxGain) v = maxGain;                      // clamp to the best gain (sound)
+            Vn[s] = v;
+            change = std::max(change, std::fabs(Vn[s] - V[s]));
+        }
+        V.swap(Vn);
+        if (change < eps) break;
+    }
+    IntervalResult r; r.iterations = iters; r.lower = V; r.upper = V;
+    return r;
+}
+IntervalResult maxLRAPessimistic(const IMDPModel& m, const std::vector<double>& reward, double eps) {
+    return longRunAverage(m, reward, eps, /*natureAdversarial=*/true, /*controllerMax=*/true);
+}
+IntervalResult maxLRAOptimistic(const IMDPModel& m, const std::vector<double>& reward, double eps) {
+    return longRunAverage(m, reward, eps, /*natureAdversarial=*/false, /*controllerMax=*/true);
 }
 
 } // namespace solve
