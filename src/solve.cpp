@@ -228,5 +228,69 @@ IntervalResult maxSafetyOptimistic(const IMDPModel& m, const std::set<int>& avoi
     return safetyFromMinReach(m, avoid, eps, omax::Sense::Min);
 }
 
+// ---- Robust expected reward (robust dynamic programming; Iyengar 2005) -------------
+// One VI on the reward Bellman operator T V (s) = reward[s] + gamma * opt_a opt_p sum p V,
+// with the interval ambiguity set resolved in closed form by O-maximization. For the
+// reachability objective gamma=1 and the target set is absorbing (T V(target)=0). For the
+// discounted objective gamma in (0,1) and there is no target. Rewards are assumed >= 0 so
+// the from-0 iterate is monotone non-decreasing; if it fails to converge (target not
+// reached a.s., gamma==1) the value diverges and we report HUGE_VAL (= PRISM/Storm "inf").
+static IntervalResult rewardVI(const IMDPModel& m, const std::set<int>& targets,
+                               const std::vector<double>& reward, double gamma, double eps,
+                               omax::Sense nature, bool controllerMax) {
+    const int n = (int)m.size();
+    std::vector<double> V(n, 0.0), Vn(n);
+    const int MAXIT = 2000000;
+    // Finite cap: states that never robustly reach the target diverge (Puterman SSP:
+    // only proper policies give a finite value). We clamp each iterate at CAP so the
+    // improper states pin there (monotone, non-decreasing for reward>=0) instead of
+    // overflowing to +inf — a FINITE cap keeps omax's 0*CAP = 0 (no 0*inf = NaN), while
+    // proper states converge well below CAP. Values >= CAP*0.9 are reported as +inf.
+    const double CAP = 1e18;
+    int iters = 0;
+    while (iters < MAXIT) {
+        ++iters;
+        double change = 0.0;
+        for (int s = 0; s < n; ++s) {
+            if (targets.count(s)) { Vn[s] = 0.0; continue; }   // absorbing target (reach reward)
+            const double r = (s < (int)reward.size()) ? reward[s] : 0.0;
+            double v = r + gamma * backup(m[s], V, nature, controllerMax);
+            if (v > CAP) v = CAP;
+            Vn[s] = v;
+            change = std::max(change, std::fabs(Vn[s] - V[s]));
+        }
+        V.swap(Vn);
+        if (change < eps) break;
+    }
+    IntervalResult r;
+    r.iterations = iters;
+    r.lower.resize(n); r.upper.resize(n);
+    for (int s = 0; s < n; ++s) {
+        const double v = (V[s] >= CAP * 0.9) ? HUGE_VAL : V[s];   // pinned at cap => +inf
+        r.lower[s] = v; r.upper[s] = v;
+    }
+    return r;
+}
+
+IntervalResult expReachReward(const IMDPModel& m, const std::set<int>& targets,
+                              const std::vector<double>& reward, double eps,
+                              bool natureAdversarial, bool controllerMax) {
+    return rewardVI(m, targets, reward, /*gamma=*/1.0, eps,
+                    natureAdversarial ? omax::Sense::Min : omax::Sense::Max, controllerMax);
+}
+IntervalResult expDiscountedReward(const IMDPModel& m, const std::vector<double>& reward,
+                                   double gamma, double eps, bool natureAdversarial, bool controllerMax) {
+    return rewardVI(m, /*targets=*/{}, reward, gamma, eps,
+                    natureAdversarial ? omax::Sense::Min : omax::Sense::Max, controllerMax);
+}
+IntervalResult maxReachRewardPessimistic(const IMDPModel& m, const std::set<int>& targets,
+                                         const std::vector<double>& reward, double eps) {
+    return expReachReward(m, targets, reward, eps, /*natureAdversarial=*/true, /*controllerMax=*/true);
+}
+IntervalResult maxReachRewardOptimistic(const IMDPModel& m, const std::set<int>& targets,
+                                        const std::vector<double>& reward, double eps) {
+    return expReachReward(m, targets, reward, eps, /*natureAdversarial=*/false, /*controllerMax=*/true);
+}
+
 } // namespace solve
 } // namespace impact

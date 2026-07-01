@@ -12,6 +12,7 @@ def main():
     init = 0
     labels = {}                      # name -> set(states)
     actions = {}                     # state -> list of list[(to,lo,hi)]
+    rewards = {}                     # state -> reward (optional)
     with open(src) as f:
         for raw in f:
             line = raw.replace('\r', '').strip()
@@ -25,6 +26,8 @@ def main():
                 init = int(tok[1])
             elif kw == 'label':
                 labels.setdefault(tok[1], set()).update(int(x) for x in tok[2:])
+            elif kw == 'reward':
+                rewards[int(tok[1])] = float(tok[2])
             elif kw == 'tran':
                 s = int(tok[1])
                 dist = []
@@ -46,18 +49,24 @@ def main():
         acts = actions.get(s)
         nchoices += len(acts) if acts else 1   # actionless -> 1 self-loop choice
 
+    has_rew = len(rewards) > 0
+    def srew(s):    # state-reward tag "[r] " for the state line, action-reward "[0]"
+        return ('[%.12g] ' % rewards.get(s, 0.0)) if has_rew else ''
+    arew = ' [0]' if has_rew else ''
     with open(out, 'w') as g:
-        g.write('@type: MDP\n@value_type: double-interval\n@parameters\n\n@reward_models\n\n')
+        g.write('@type: MDP\n@value_type: double-interval\n@parameters\n\n@reward_models\n%s\n'
+                % ('r ' if has_rew else ''))
         g.write('@nr_states\n%d\n@nr_choices\n%d\n@model\n' % (nstates, nchoices))
         for s in range(nstates):
             lab = (' ' + ' '.join(statelabels[s])) if statelabels[s] else ''
-            g.write('state %d%s\n' % (s, lab))
+            g.write('state %d %s%s\n' % (s, srew(s), lab.strip()) if has_rew
+                    else 'state %d%s\n' % (s, lab))
             acts = actions.get(s)
             if not acts:
-                g.write('\taction 0\n\t\t%d : [1, 1]\n' % s)
+                g.write('\taction 0%s\n\t\t%d : [1, 1]\n' % (arew, s))
                 continue
             for a, dist in enumerate(acts):
-                g.write('\taction %d\n' % a)
+                g.write('\taction %d%s\n' % (a, arew))
                 for to, lo, hi in dist:
                     g.write('\t\t%d : [%.12g, %.12g]\n' % (to, lo, hi))
 

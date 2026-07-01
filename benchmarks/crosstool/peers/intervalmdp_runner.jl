@@ -20,6 +20,7 @@ function parse_imdp(path::String)
     nstates = 0
     init = 0
     labels = Dict{String, Vector{Int}}()
+    rewards = Dict{Int, Float64}()
     # actions[s] = vector of action distributions; each dist = Vector{Tuple{to,lo,hi}}
     actions = Dict{Int, Vector{Vector{Tuple{Int,Float64,Float64}}}}()
     for raw in eachline(path)
@@ -36,6 +37,8 @@ function parse_imdp(path::String)
             sset = [parse(Int, t) for t in tok[3:end]]
             labels[name] = get(labels, name, Int[])
             append!(labels[name], sset)
+        elseif kw == "reward"
+            rewards[parse(Int, tok[2])] = parse(Float64, tok[3])
         elseif kw == "tran"
             s = parse(Int, tok[2])
             dist = Tuple{Int,Float64,Float64}[]
@@ -48,7 +51,9 @@ function parse_imdp(path::String)
             push!(actions[s], dist)
         end
     end
-    return nstates, init, labels, actions
+    rvec = zeros(Float64, nstates)
+    for (s, r) in rewards; rvec[s+1] = r; end
+    return nstates, init, labels, actions, rvec
 end
 
 function build_mdp(nstates, init, actions)
@@ -89,24 +94,28 @@ function main()
     eps = 1e-6
     state = -1
     dumpdir = ""
+    discount = 0.9
     i = 3
     while i <= length(ARGS)
         a = ARGS[i]
         if a == "--label"; label = ARGS[i+1]; i += 2
         elseif a == "--horizon"; horizon = parse(Int, ARGS[i+1]); i += 2
         elseif a == "--eps"; eps = parse(Float64, ARGS[i+1]); i += 2
+        elseif a == "--discount"; discount = parse(Float64, ARGS[i+1]); i += 2
         elseif a == "--state"; state = parse(Int, ARGS[i+1]); i += 2
         elseif a == "--dumpdir"; dumpdir = ARGS[i+1]; i += 2
         else; i += 1; end
     end
 
-    nstates, init, labels, actions = parse_imdp(path)
+    nstates, init, labels, actions, rvec = parse_imdp(path)
     s = state >= 0 ? state : init
     mdp = build_mdp(nstates, init, actions)
     tgt = [x+1 for x in get(labels, label, Int[])]
 
     for (sat, name) in ((Pessimistic, "pess"), (Optimistic, "opt"))
-        if prop == "reach"
+        if prop == "reward"
+            pr = InfiniteTimeReward(rvec, discount, eps)   # discounted expected reward
+        elseif prop == "reach"
             pr = horizon > 0 ? FiniteTimeReachability(tgt, horizon) : InfiniteTimeReachability(tgt, eps)
         else
             pr = horizon > 0 ? FiniteTimeSafety(tgt, horizon) : InfiniteTimeSafety(tgt, eps)

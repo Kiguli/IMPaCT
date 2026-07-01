@@ -58,6 +58,39 @@ namespace solve {
     IntervalResult maxSafetyPessimistic(const IMDPModel& m, const std::set<int>& avoid, double eps);
     IntervalResult maxSafetyOptimistic (const IMDPModel& m, const std::set<int>& avoid, double eps);
 
+    // ---- Robust expected reward on interval MDPs (robust dynamic programming;
+    // Iyengar, "Robust Dynamic Programming", Math. OR 2005; Nilim & El Ghaoui,
+    // Oper. Res. 2005; the interval ambiguity set is resolved in closed form by the
+    // same O-maximization). Two objectives:
+    //
+    //  * REACHABILITY reward: expected total state reward accumulated until the target
+    //    set is first reached (target absorbing, reward stops). Robust Bellman:
+    //      V(s) = reward[s] + max_a  opt_{p in [lo,hi]} sum_s' p(s') V(s'),   V(target)=0
+    //    The controller MAXIMIZES; nature resolves the intervals adversarially
+    //    (pessimistic, opt = Sense::Min on the continuation) or cooperatively (optimistic,
+    //    Sense::Max). If the target is not reached almost surely and rewards are positive
+    //    the value is +infinity (reported as HUGE_VAL, matching PRISM/Storm "Infinity").
+    //
+    //  * DISCOUNTED reward (gamma in (0,1)): V(s) = reward[s] + gamma * max_a opt_p sum p V,
+    //    a contraction, so it always converges (no target needed). Used by IntervalMDP.jl.
+    //
+    // `reward` is a per-state vector (size == model size). `natureAdversarial` = true is
+    // the robust/pessimistic resolution (nature worst-case for the controller); false is
+    // cooperative/optimistic. controllerMax selects Max/Min over actions (max/min reward).
+    // Returns lower==upper (single VI value); a divergent (+inf) value is HUGE_VAL.
+    IntervalResult expReachReward(const IMDPModel& m, const std::set<int>& targets,
+                                  const std::vector<double>& reward, double eps,
+                                  bool natureAdversarial, bool controllerMax);
+    IntervalResult expDiscountedReward(const IMDPModel& m, const std::vector<double>& reward,
+                                       double gamma, double eps, bool natureAdversarial, bool controllerMax);
+
+    // Convenience wrappers: MAX expected reward, robust (nature adversarial = Sense::Min)
+    // or optimistic (nature cooperative = Sense::Max).
+    IntervalResult maxReachRewardPessimistic(const IMDPModel& m, const std::set<int>& targets,
+                                             const std::vector<double>& reward, double eps);
+    IntervalResult maxReachRewardOptimistic (const IMDPModel& m, const std::set<int>& targets,
+                                             const std::vector<double>& reward, double eps);
+
 } // namespace solve
 } // namespace impact
 

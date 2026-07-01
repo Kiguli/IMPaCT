@@ -1,0 +1,23 @@
+{
+  "model": "reward_chain.imdp",
+  "description": "Expected-reward interval MDP validating IMPaCT's robust expected reward (Iyengar 'Robust Dynamic Programming', Math OR 2005; Nilim & El Ghaoui, Oper Res 2005; interval reward resolved by O-maximization, Givan-Leach-Dean AIJ 2000).",
+  "provenance": "Exact by hand. s0 --(1,1)--> s1 ; s1 --> s2[0.5,1.0] (target) or s1[0.0,0.5] ; rewards r(s0)=1, r(s1)=2. REACHABILITY reward (gamma=1): pess=Rmaxmin (nature leaves s1 asap, p(s1)=0) => V1=2, V0=3 ; opt=Rmaxmax (nature stays, p(s1)=0.5) => V1=2/(1-0.5)=4, V0=5. DISCOUNTED reward (gamma=0.9): pess => V1=2, V0=1+0.9*2=2.8 ; opt => V1=2/(1-0.45)=3.6364, V0=1+0.9*3.6364=4.2727.",
+  "checks": [
+    {"prop": "reward", "label": "target", "state": 0, "pess": 3.0, "opt": 5.0, "tol": 1e-4},
+    {"prop": "reward_discounted_0.9", "state": 0, "pess": 2.8, "opt": 4.272727, "tol": 1e-4}
+  ],
+  "measured": {
+    "note": "Live runs 2026-07-01. IMPaCT matches PRISM (reachability reward) and IntervalMDP.jl (discounted reward) and the analytic/Iyengar values.",
+    "reachability_gamma1": {
+      "impact":      {"pess": 3.0, "opt": 4.999999},
+      "prism":       {"pess": 3.000000002, "opt": 4.999996},
+      "storm":       {"note": "interval reward ignores --uncertainty-resolution; returns only the nature-max value 4.999996 (= opt); Rmin unsupported"},
+      "intervalmdp": {"note": "n/a — InfiniteTimeReward requires discount<1"}
+    },
+    "discounted_gamma0.9": {
+      "impact":      {"pess": 2.8, "opt": 4.272726893},
+      "intervalmdp": {"pess": 2.8, "opt": 4.272726893272438},
+      "prism_storm": {"note": "compared via reachability reward above"}
+    }
+  }
+}

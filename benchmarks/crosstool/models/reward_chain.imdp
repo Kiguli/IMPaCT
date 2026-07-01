@@ -1,0 +1,14 @@
+# Expected-reward interval MDP (validates solve::expReachReward, Iyengar robust DP).
+# s0 --(point)--> s1 ;  s1 --> s2[0.5,1.0] (target) OR stays s1[0.0,0.5] ; s2 absorbing.
+# state rewards r(s0)=1, r(s1)=2, r(target)=0. Reachability reward = expected total reward
+# accumulated until reaching s2.
+#   pess (Rmaxmin, nature adversarial -> leave s1 ASAP, p(s1)=0): V1=2, V0=1+2 = 3
+#   opt  (Rmaxmax, nature cooperative -> stay in s1, p(s1)=0.5): V1=2/(1-0.5)=4, V0=1+4 = 5
+states 3
+init 0
+label target 2
+reward 0 1
+reward 1 2
+tran 0 0 1:1:1
+tran 1 0 2:0.5:1.0 1:0.0:0.5
+tran 2 0 2:1:1

@@ -96,6 +96,7 @@ int main(int argc, char** argv) {
 
     std::string bound = "pess";
     double eps = 1e-6;
+    double discount = 1.0;   // reward prop: <1 => discounted (no target); ==1 => reachability reward
     solve::Method method = solve::Method::OptimisticVI;
     bool methodSet = false;
     int stateArg = -1;  // -1 => use model init
@@ -110,6 +111,7 @@ int main(int argc, char** argv) {
         };
         if      (a == "--bound")  bound = need("--bound");
         else if (a == "--eps")    eps = std::stod(need("--eps"));
+        else if (a == "--discount") discount = std::stod(need("--discount"));
         else if (a == "--state")  stateArg = std::stoi(need("--state"));
         else if (a == "--json")   jsonOut = true;
         else if (a == "--trace")  { jsonOut = true; traceOut = true; }
@@ -162,6 +164,13 @@ int main(int argc, char** argv) {
         if (prop == "safety")
             return pess ? solve::maxSafetyPessimistic(p.model, states, eps)
                         : solve::maxSafetyOptimistic(p.model, states, eps);
+        if (prop == "reward") { // expected reward: discounted (--discount<1) or reach-reward to LABEL
+            if (discount < 1.0)
+                return solve::expDiscountedReward(p.model, p.reward, discount, eps,
+                                                  /*natureAdversarial=*/pess, /*controllerMax=*/true);
+            return pess ? solve::maxReachRewardPessimistic(p.model, states, p.reward, eps)
+                        : solve::maxReachRewardOptimistic(p.model, states, p.reward, eps);
+        }
         if (prop == "buchi")
             return pess ? omega::maxBuchiPessimistic(p.model, states, eps)
                         : omega::maxBuchiOptimistic(p.model, states, eps);

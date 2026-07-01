@@ -40,12 +40,18 @@ Problem parse(const std::string& text) {
         if (t[0] == "states") {
             p.nStates = std::stoi(t.at(1));
             p.model.assign(p.nStates, {});
+            p.reward.assign(p.nStates, 0.0);
             haveStates = true;
         } else if (t[0] == "init") {
             p.init = std::stoi(t.at(1));
         } else if (t[0] == "label") {
             if (t.size() < 2) throw std::runtime_error("imdp_io: label needs a name");
             for (size_t i = 2; i < t.size(); ++i) p.labels[t[1]].insert(std::stoi(t[i]));
+        } else if (t[0] == "reward") {
+            if (!haveStates) throw std::runtime_error("imdp_io: 'reward' before 'states'");
+            int s = std::stoi(t.at(1));
+            if (s < 0 || s >= p.nStates) throw std::runtime_error("imdp_io: reward state out of range");
+            p.reward[s] = std::stod(t.at(2));
         } else if (t[0] == "tran") {
             if (!haveStates) throw std::runtime_error("imdp_io: 'tran' before 'states'");
             int s = std::stoi(t.at(1));
@@ -91,6 +97,8 @@ std::string write(const Problem& p) {
         for (int s : kv.second) o << " " << s;
         o << "\n";
     }
+    for (int s = 0; s < (int)p.reward.size(); ++s)
+        if (p.reward[s] != 0.0) o << "reward " << s << " " << p.reward[s] << "\n";
     for (int s = 0; s < p.nStates; ++s)
         for (const solve::ActionDist& act : p.model[s]) {
             o << "tran " << s << " 0";

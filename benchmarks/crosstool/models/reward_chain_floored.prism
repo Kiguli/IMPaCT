@@ -1,0 +1,17 @@
+// Same interval MDP as reward_chain.imdp, in the PRISM language (interval probs + rewards).
+// Robust expected reachability reward Rmaxmin=?[F "target"] should be 3; Rmaxmax=?[F "target"] = 5.
+mdp
+
+module m
+  s : [0..2] init 0;
+  [a] s=0 -> [1,1]:(s'=1);
+  [b] s=1 -> [0.5,1.0]:(s'=2) + [1e-9,0.5]:(s'=1);
+  [c] s=2 -> [1,1]:(s'=2);
+endmodule
+
+rewards "r"
+  s=0 : 1;
+  s=1 : 2;
+endrewards
+
+label "target" = (s=2);
