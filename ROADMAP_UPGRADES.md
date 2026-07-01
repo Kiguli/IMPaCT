@@ -36,26 +36,25 @@ the nature-max value — documented.)
 
 ---
 
-## 2. Long-run average / mean-payoff reward — NEXT (flagship)
+## 2. Long-run average / mean-payoff reward — ✅ DONE (2026-07-01)
 
-**Papers.** Puterman 1994 Ch. 8–9 (average-reward optimality / gain-bias equation
-`g + h = max_a{ r_a + P_a h }`, relative VI); **Ashok, Chatterjee, Daca, Křetínský,
-Meggendorfer, *Value Iteration for Long-Run Average Reward in MDPs*, CAV 2017**
-(arXiv:1705.02326) — the two-phase VI (mean-payoff *inside* each maximal end component,
-then weighted-reachability VI on the MEC-quotient), which is the exact template IMPaCT's
-MEC code plugs into. Robust/interval mean-payoff extends the inner solve to `omax`.
+**Papers (verified).** Puterman 1994 Ch. 8 (average-reward optimality / relative VI /
+aperiodicity transform); **Ashok, Chatterjee, Daca, Křetínský, Meggendorfer, *Value
+Iteration for Long-Run Average Reward in MDPs*, CAV 2017** (arXiv:1705.02326) — the
+two-phase VI; robust/interval setting: **Chatterjee, Goharshady, Karrabi, Novotný,
+Žikelić, *Solving Long-run Average Reward Robust MDPs via Stochastic Games*, IJCAI 2024**
+(arXiv:2312.13912). Robust inner = O-maximization (Iyengar 2005).
 
-**Reuse.** Very high: `graph::mecs` + `collapseMECs` give phase-2's quotient verbatim;
-`omax::optimize` is the robust inner solve for the gain within a MEC; the reward field +
-`.imdp` parser (from item 1) are reused.
+**What shipped.** `solve::longRunAverage` + `maxLRA{Pessimistic,Optimistic}` + static
+`mecGain`; `imdp_solve lra`. Phase 1: robust MEC gain by relative VI with Puterman's
+aperiodicity transform `L_τ h=(1-τ)h+τ(r+opt_a opt_p Σp·h)`, restricted to each MEC's
+staying actions (support ⊆ M, which is exactly why nature cannot escape M). Phase 2: a
+max-reachability "cash-out" VI to the best robustly-reachable MEC gain.
 
-**Correctness / oracle.** Two-phase VI is sound on the MEC-quotient (Ashok et al.). No peer
-does LRA on *intervals*, so validate the phases separately: (a) mean-payoff on an ordinary
-MDP vs **Storm `LRAmax=?`**; (b) robust value brackets the endpoint LRAs (compute LRA on
-the lower- and upper-probability MDPs; the robust value must lie between). Plus a small
-analytic 2-state cycle.
-
-**Effort:** medium-high. **Value:** high (unique — no tool does robust interval LRA).
+**Validated** (`lra_cycle` / `lra_interval` `.ref.json`): point cycle IMPaCT **2** =
+Storm `R{"r"}max=?[LRA]` **2** = analytic; interval MEC IMPaCT robust **0** / opt **4** =
+analytic (Storm/PRISM cannot do interval LRA — IMPaCT-only). **Fully IMPaCT-only for
+interval MDPs.**
 
 ---
 
@@ -104,9 +103,9 @@ IMPaCT-only ω-regular capability from the F/G/U/X/GF/FG fragment to arbitrary L
 
 ## Sequencing
 
-1. ✅ Expected reward (done — lands the reward plumbing).
-2. Long-run average (reuses reward plumbing + MEC code) — flagship, fully IMPaCT-only.
-3. Full LTL via Spot (reuses the ω-regular core; mostly integration).
+1. ✅ Expected reward (done — landed the reward plumbing).
+2. ✅ Long-run average (done — reused reward plumbing + MEC code; fully IMPaCT-only).
+3. Full LTL via LDBA (reuses the ω-regular core; needs Owl/Spot for the LTL→automaton step).
 4. Multi-objective (new Pareto layer over the scalarised O-max VI).
 
 Each is a self-contained VI variant over the same O-maximization inner solve, validated

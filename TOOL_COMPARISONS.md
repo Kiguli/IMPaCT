@@ -128,7 +128,7 @@ This is the reason an end-to-end comparison is impossible and §1–§2 compare 
 | Robust bounded / finite-horizon | ✅ | ✅ | ✅ `F<=k` | ✅ step-bounded |
 | **Robust ω-regular on IMDPs** (Büchi/persistence/LTL) | ✅ **only tool** | ❌ (DFA/co-safe only) | ❌ | ❌ |
 | Expected reward / cost | ✅ reachability + discounted (robust, §1b) | ✅ discounted, exit-time | ✅ (+interval reach-reward) | ✅ |
-| Long-run average / mean-payoff | ❌ | ❌ | ✅ (non-interval) | ✅ (non-interval) |
+| Long-run average / mean-payoff | ✅ robust interval (§1b) | ❌ | ✅ (non-interval) | ✅ (non-interval) |
 | Multi-objective / Pareto | ❌ | ❌ | ✅ (non-interval) | ✅ (non-interval) |
 | Controller / strategy synthesis | ✅ | ✅ | ✅ | ✅ |
 | GPU acceleration | ✅ SYCL (any vendor) | ✅ CUDA | ❌ | ❌ |
