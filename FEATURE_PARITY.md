@@ -52,3 +52,27 @@ tables: [`TOOL_COMPARISONS.md`](TOOL_COMPARISONS.md).
 > Grounded plans (papers verified, algorithm, IMPaCT reuse, oracle) are being filled in
 > per row from the parity-research pass; each row becomes a ROADMAP_UPGRADES.md section as it
 > is implemented, then flips to ✅ here. Issues are logged in [`issues/`](issues) as they arise.
+
+## C. SySCoRe comparison + benchmark implementation (planned, user 2026-07-02)
+
+**SySCoRe** (van Huijgevoort, Schön, Soudjani, Haesaert, HSCC 2023, DOI
+10.1145/3575870.3587123; v2.0: NAHS 58:101607, 2025) is a MATLAB toolbox computing
+(ε,δ)-stochastic simulation relations — a *different sound lower bound* on satisfaction
+than IMDP robust values (global (ε,δ) error vs per-transition intervals; supports
+model-order reduction; no GPU; MATLAB-only, so comparison is against its PUBLISHED
+numbers). Repo: github.com/BirgitVanHuijgevoort/SySCoRe-software (BSD-3).
+
+Plan (definitions + published targets verified 2026-07-02, research log in session
+scratchpad; ARCH-COMP25 report is the closest shared-benchmark venue):
+- [ ] Implement SySCoRe's benchmarks in IMPaCT: CarPark1D, CarPark2D (running example;
+      `!p2 U p1`, targets 0.60/0.52/0.42 at three init states, 7.94 s/27.5 MB),
+      PackageDelivery scLTL `F(p1 & (!p2 U p3))` (peak 0.663, 11.0 s), Van der Pol
+      variant (X=[-3,3]^2, no published scalar — compare maps/runtime vs 3191.6 s),
+      BAS 7D→2D MOR (≥0.9035, 122 s/5.4 GB) and BAS-4D-KF (ARCH-25: peak 0.973,
+      δ1=0.0054; IMPaCT already ships the 4D BAS = common ground).
+- [ ] Comparison page (docs/comparison/impact-vs-syscore.md): semantics difference
+      ((ε,δ)-coupling vs interval abstraction), feature matrix row (scLTL via ltl2ba;
+      MOR; PWA nonlinear; Gaussian-only noise; no GPU; ≤2D direct gridding), and the
+      published-numbers table with hardware caveats.
+- [ ] Watch paper-vs-code discrepancies: VdP domain ±4 (paper) vs ±3 (code/ARCH25);
+      CarPark regions ±4 vs ±3.25; lu=3 vs 7. Benchmark against the repo/ARCH-25 values.

@@ -58,3 +58,13 @@ parity solver. The built-in `ltl` fragment already covers `FG`/persistence, so t
 
 Refs: Sickert-Esparza-Jaax-Křetínský (CAV 2016, LDBA); Hahn et al. (TACAS 2020,
 good-for-MDP); Křetínský et al. (Owl). Spot/Owl tool URLs are not BibTeX refs.
+
+## UPDATE (2026-07-02) — Owl toolchain installed; jump-product is the remaining work
+Owl 21.0 (Kretinsky-Meggendorfer-Sickert, ATVA 2018, DOI 10.1007/978-3-030-01090-4_34)
+is now installed in the container as a NATIVE binary (no JRE):
+/opt/owl/owl-linux-musl-amd64-21.0/bin/owl (`owl ltl2ldba` emits HOA LDBAs). Remaining
+implementation: extend the ltl_spot product to CONTROLLER-RESOLVED automaton
+nondeterminism (the epsilon-jumps of the LDBA become extra product actions; sound by the
+good-for-MDPs property, Hahn et al. TACAS 2020), then the existing robust Buchi engine
+applies unchanged. Until then `ltlx` covers the deterministic class and `ltl` covers the
+F/G/U/X/GF/FG/patrol fragment (incl. the FG/persistence cases an LDBA would add).

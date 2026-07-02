@@ -1,7 +1,7 @@
 ---
 id: ISSUE-0021
 title: Nonlinear mean enclosure (point-sampling / nlopt) is a heuristic, not a certified-sound over-approximation
-status: open
+status: resolved
 severity: medium
 labels: soundness, abstraction, nonlinear, design-decision
 created: 2026-06-29
@@ -63,3 +63,15 @@ the affine path) while keeping O(nnz) memory.
 - The FAST mode is explicitly the fast/approximate setting (ISSUE-0019); EXACT mode with
   K large enough that `[min,max]` is K-stable is the recommended accuracy setting until
   the interval-arithmetic enclosure lands.
+
+## RESOLVED (2026-07-02)
+The certified path EXISTS and is validated: abstraction::Ival (interval arithmetic with
+guaranteed enclosures — natural interval extension, Moore, "Interval Analysis" 1966;
+Moore-Kearfott-Cloud, SIAM 2009) + buildSparseReachGeneral(SOUND mean-bound fn), with
+mixed-monotone bounds as the documented alternative (Coogan-Arcak HSCC 2015, DOI
+10.1145/2728606.2728607). benchmarks/validate_vp.cpp runs Van der Pol END-TO-END through
+the interval-arithmetic mean bounds and Monte-Carlo-checks abstraction soundness: 6/6
+start states have empirical reach within the synthesized [lower, upper] (2500 states).
+The sparse_arch FAST (corner-sampling) and EXACT (K-subgrid) modes remain as documented
+HEURISTICS for speed; users needing certified soundness for non-affine dynamics use the
+Ival route (docs updated). VP is polynomial, so its natural extension is exact-friendly.

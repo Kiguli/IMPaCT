@@ -43,3 +43,14 @@ Verify each citation (Crossref/DBLP) before adding to References.bib, per projec
 A brute-force oracle analogous to `test_pomdp.cpp`: enumerate controller
 history-policies AND nature history-policies (over interval vertices) for tiny models
 and small horizon; the solver's robust value must equal the max-min of that game.
+
+## UPDATE (2026-07-02) — literature grounded (verified), design constraint recorded
+Canonical verified references for robust/uncertain POMDPs: Osogami, "Robust Partially
+Observable Markov Decision Process", ICML 2015 (PMLR 37:106-115); Cubuktepe, Jansen,
+Junges, Marandi, Suilen, Topcu, "Robust Finite-State Controllers for Uncertain POMDPs",
+AAAI 2021 (DOI 10.1609/aaai.v35i13.17401); Suilen, Jansen, Cubuktepe, Topcu, IJCAI 2020
+(convex optimization for uncertain POMDPs). Key design constraint learned from this
+literature: under interval transitions the BELIEF is not a point (interval belief sets /
+FSC synthesis is required), so a naive per-step O-max on point beliefs is UNSOUND — no
+prototype will be shipped until the belief-set (or FSC) formulation is implemented.
+Remains open as the research item it is, now with the correct starting papers.

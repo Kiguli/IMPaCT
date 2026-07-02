@@ -1,7 +1,7 @@
 ---
 id: ISSUE-0004
 title: Phase 2 — LTLf→DFA construction + IMDP×DFA product + co-safe reachability
-status: open
+status: resolved
 severity: medium
 labels: enhancement, phase-2
 created: 2026-06-25
@@ -46,3 +46,14 @@ In progress. Step (2) DONE: `ltl::toDFA` builds a finite minimal DFA via semanti
 evaluator (see ISSUE-0005 for the explosion bug that motivated the semantic
 approach). Remaining: the `impact::product` contract (IMDP×DFA), absorbing
 accepting states, reduction to `solve::maxReach*`, and the PD benchmark.
+
+## RESOLVED (2026-07-02)
+All three pieces shipped and are end-to-end validated: LTLf->DFA via formula progression
+/ derivatives (src/ltl.cpp; Brzozowski JACM 1964 lineage; LTLf semantics De Giacomo-Vardi
+IJCAI 2013), IMDP x DFA product (src/product.cpp), reduction to robust reachability
+(solve.cpp). benchmarks/validate_cosafe.cpp verifies the FULL pipeline on a continuous
+Package-Delivery-pattern system: sparse abstraction -> DFA product (400 cells x 4 DFA
+states = 1608 product states) -> robust lower bound, then Monte-Carlo simulation of the
+closed loop with LTLf trace evaluation: 4/4 start states satisfy empirical >= robust
+lower bound. The DFA construction is differentially validated against the membership
+evaluator as planned. PD at full co-safe spec is thereby unlocked.

@@ -30,3 +30,14 @@ benchmark were fast.
   also collapse ECs and be fast for both senses.
 - Possible: add a relative-stopping / Gauss-Seidel sweep or topological ordering to
   speed VI-from-below. Track here.
+
+## UPDATE (2026-07-02) — plan grounded, verified citations
+Empirically re-confirmed during the ISSUE-0013 sweep: robust BA safety at eps 1e-6 needs
+>180 s (eps 1e-4: 41 iters, fast); the peers' sparse engines are faster on such strongly
+recurrent models. Grounded remedies (citations verified): (a) topological decomposition —
+solve SCCs in reverse topological order (Dai, Mausam, Weld, Goldsmith, "Topological Value
+Iteration Algorithms", JAIR 42:181-209, 2011, DOI 10.1613/jair.3390; graph::sccs already
+exists); (b) Gauss-Seidel sweeps (Puterman 1994 Sec 6.3.3); (c) Sound Value Iteration
+(Quatmann-Katoen, CAV 2018, DOI 10.1007/978-3-319-96145-3_37) as an alternative certified
+engine. Severity low (workaround: eps 1e-4, or ValueIteration/II engines); remains open
+as a performance enhancement with this implementation plan.
