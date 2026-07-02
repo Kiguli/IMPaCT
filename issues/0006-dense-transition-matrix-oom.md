@@ -1,7 +1,7 @@
 ---
 id: ISSUE-0006
 title: Dense transition matrix causes memory overflow even on "small" cases
-status: in-progress
+status: resolved
 severity: high
 labels: scalability, performance, tool-v1, memory
 created: 2026-06-25
@@ -46,3 +46,11 @@ abstraction vectors computed (is/ss/ts/min*/max* h5 produced), then:
   sparse for IMDP×automaton products; and either refactor v1 `IMDP.cpp` to sparse or
   drive ARCH benchmarks through the new sparse pipeline. v1's dense path is unchanged
   for now (still OOMs); use the sparse pipeline for large runs.
+
+## RESOLVED (2026-07-02)
+Closed by the v2 sparse path (src/abstraction.cpp O(nnz) + portable solver): the
+formerly-OOM 2D-robot/PR_minimal case COMPLETES at 3.86 GB (vs 17.7 GB dense);
+AV_minimal builds+solves at 7.78 GB (dense OOM); the 6-D LM case (~96 GB/matrix dense,
+infeasible) builds+solves at 196 MB / ~40 s (benchmarks/RESULTS.md). Automaton products
+(Phase 2/3) run on the portable sparse solver, avoiding the multiplied dense blow-up.
+Dense SYCL matrices remain as the GPU option only (ISSUE-0019 design decision).

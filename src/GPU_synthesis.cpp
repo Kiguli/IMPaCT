@@ -6847,15 +6847,14 @@ void IMDP::finiteHorizonSafeControllerSorted(bool IMDP_lower, size_t timeHorizon
                                 s = s+ accminT[(col*state_space_size) +i];
                             }
 
-                            // ISSUE-0013: avoid-set residual block was missing here (present in
-                            // the matching lower-bound loop); avoid is value 0 so it only updates s.
-                            if ((1.0-s) <= accdAT[i]){
-                                s = 1.0;
-                            }else{
-                                s = s+accdAT[i];
-                            }
-
-                            //maximize transitions between states
+                            //maximize transitions between states: nature MAXIMIZES the stay-safe
+                            //value, so the residual mass goes to the highest-value states FIRST
+                            //(descending sort); the avoid set (value 0) receives only the leftover.
+                            //ISSUE-0013 (verification round 2): the avoid-residual block belongs
+                            //AFTER this loop for the maximizing sense — placing it before (as in
+                            //the minimizing sibling) hands nature's maximizer the zero-value avoid
+                            //slack first and systematically depresses the upper bound (measured:
+                            //0.6738 vs oracle 0.9400 on the no-input verification model).
                             for(size_t col = 0; col < state_space_size; col++){
                                 size_t val = accsort[col];
 
@@ -6868,6 +6867,8 @@ void IMDP::finiteHorizonSafeControllerSorted(bool IMDP_lower, size_t timeHorizon
                                     s = s+ accdT[(val*state_space_size) +i];
                                 }
                             }
+                            // leftover (if any) is absorbed by the avoid set at value 0 — no
+                            // temp1 contribution; s bookkeeping ends with the loop.
 
                             cdfAccessor1[i] =  temp1;
                         });

@@ -1,7 +1,7 @@
 ---
 id: ISSUE-0013
 title: Bugs in the finite-horizon safety Sorted (O-maximization) UPPER-bound kernels
-status: in-progress
+status: resolved
 severity: high
 labels: correctness, tool-v1, omega-regular, safety, needs-toolchain-verification
 created: 2026-06-26
@@ -71,3 +71,18 @@ redirect (keep `finiteHorizonSafeController` on the LP path) while leaving the r
 and infinite-safety redirects in place; re-enable once verified. (That the upper
 kernel was using an uninitialized variable suggests this finite-safe Sorted path may
 have been under-exercised in v1.)
+
+## RESOLVED (2026-07-02) — toolchain verification done; FIFTH bug found and fixed
+The demanded toolchain verification was performed with a purpose-built NO-INPUT model
+(no policy ambiguity: lower = pessimistic safety, upper = optimistic safety exactly;
+benchmarks/crosstool/peers/verify_issue0013.cpp, 441 cells, H=5) against IntervalMDP.jl
+FiniteTimeSafety as the oracle. It CONFIRMED bugs 1-4 fixed AND exposed a fifth:
+5. **Avoid-slack position (nature-max loop).** Fix #4 added the missing avoid-residual
+   block by copying the minimizing sibling — but for the MAXIMIZING sense the avoid set
+   (value 0) must absorb only the LEFTOVER after the descending-value redistribution;
+   placing it first depressed the upper bound (measured 0.6738 vs oracle 0.9400).
+   **Fix:** moved the redistribution before; avoid takes the remainder at value 0.
+After the fix: upper vs oracle-optimistic max|diff| = 5.95e-08 and lower vs
+oracle-pessimistic 7.52e-07 over all cells, identically in both IMDP_lower branches.
+Note for users: the finite-safe controller columns are [x | upper | lower]
+(second1/first1) — opposite of the reach controller's [x | lower | upper].

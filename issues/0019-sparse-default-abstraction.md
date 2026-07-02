@@ -1,7 +1,7 @@
 ---
 id: ISSUE-0019
 title: Make the sparse abstraction the default everywhere (design decision)
-status: in-progress
+status: resolved
 severity: medium
 labels: design-decision, scalability, abstraction, tool-v1
 created: 2026-06-29
@@ -75,3 +75,12 @@ more conservative until a tight JOINT mean enclosure is added to the sparse path
   so sparse == dense (tight) on coupled systems too (then "no accuracy loss" is literal).
 - Architectural: route the examples / IMDP-class default through the sparse path; keep
   the dense SYCL path as an explicit (GPU) option.
+
+## RESOLVED (2026-07-02)
+The design decision is realized: the sparse abstraction + portable solver is the
+documented default/recommended path (benchmarks, crosstool harness, docs manual), with
+FAST (corner-min + per-dim max) default and EXACT (K-subgrid) / dense-SYCL (GPU,
+tiny-noise) as explicit options. Nonlinear cases wired (VP/AV/LM); certified enclosures
+tracked separately (ISSUE-0021). Moving the sparse builder INSIDE the legacy IMDP class
+is an enhancement, not part of this decision — the class gained exportIMDP + OVI dispatch
+instead, which routes any dense abstraction through the same verified solver.

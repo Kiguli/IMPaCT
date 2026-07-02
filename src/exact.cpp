@@ -107,7 +107,10 @@ std::vector<Rat> omaxVertex(const std::vector<Edge>& e, const std::vector<Rat>& 
         p[idx] = add(p[idx], take);
         residual = sub(residual, take);
     }
-    if (!isZero(residual)) throw std::runtime_error("exact: infeasible interval row (sum hi < 1)");
+    if (!isZero(residual))
+        throw std::runtime_error(cmp(residual, {0,1}) > 0
+            ? "exact: infeasible interval row (sum hi < 1)"
+            : "exact: infeasible interval row (sum lo > 1)");
     return p;
 }
 Rat dot(const std::vector<Edge>& e, const std::vector<Rat>& p, const std::vector<Rat>& V) {
@@ -195,10 +198,31 @@ std::vector<Rat> evalChain(int n, const std::set<int>& targets,
 } // namespace
 
 Result maxReach(const std::string& path, const std::string& targetLabel,
-                int state, bool pessimistic) {
+                int state, bool pessimistic, bool repair) {
     XModel m = parse(path, targetLabel);
     const int n = m.nStates;
     const int q = state >= 0 ? state : m.init;
+
+    // ISSUE-0023 repair: rows with sum(hi) < 1 are strictly infeasible (no distribution
+    // fits). In repair mode scale every hi in the row by 1/sum(hi) (exact rational),
+    // recording the largest relative scaling; lo bounds are untouched (still <= hi).
+    double maxRepair = 0.0;
+    if (repair)
+        for (auto& acts : m.act)
+            for (auto& a : acts) {
+                Rat sumHi{0,1}, sumLo{0,1};
+                for (const Edge& e : a) { sumHi = add(sumHi, e.hi); sumLo = add(sumLo, e.lo); }
+                if (!isZero(sumHi) && cmp(sumHi, one()) < 0) {       // sum(hi) < 1: scale hi up
+                    Rat f = divr(one(), sumHi);
+                    for (Edge& e : a) e.hi = mul(e.hi, f);
+                    maxRepair = std::max(maxRepair, dec(f) - 1.0);
+                }
+                if (cmp(sumLo, one()) > 0) {                          // sum(lo) > 1: scale lo down
+                    Rat f = divr(one(), sumLo);
+                    for (Edge& e : a) e.lo = mul(e.lo, f);
+                    maxRepair = std::max(maxRepair, 1.0 - dec(f));
+                }
+            }
     std::vector<char> p0 = probZero(m, pessimistic);
     for (int t : m.targets) p0[t] = 0;
 
@@ -242,7 +266,7 @@ Result maxReach(const std::string& path, const std::string& targetLabel,
         }
         ok = (cmp(best, V[s]) == 0);
     }
-    return { str(V[q]), dec(V[q]), rounds + 1, ok };
+    return { str(V[q]), dec(V[q]), rounds + 1, ok, maxRepair };
 }
 
 } // namespace exact

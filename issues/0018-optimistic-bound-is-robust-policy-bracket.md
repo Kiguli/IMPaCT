@@ -1,7 +1,7 @@
 ---
 id: ISSUE-0018
 title: IMPaCT's optimistic value is a bracket of the robust controller, not the cooperative optimum
-status: open
+status: resolved
 severity: low
 labels: semantics, documentation, cross-tool
 created: 2026-06-27
@@ -57,3 +57,14 @@ quantity for a controller, but is not the same as the two-sided value of the
 Document in TOOL_COMPARISONS.md and the controller-output docs (done). Optionally
 expose both controllers (robust and cooperative) or label the two columns explicitly
 as "robust-policy lower / robust-policy upper" to avoid confusion.
+
+## RESOLVED (2026-07-02)
+The v2 portable solver's `maxReachOptimistic` (and the dense path's OptimisticVI
+dispatch in the `false`/optimistic sense) computes the TRUE cooperative optimum —
+controller and nature jointly maximizing — not merely the robust controller's upper
+bracket. This is validated against Storm `--uncertainty-resolution cooperative` and
+IntervalMDP.jl `Optimistic/Maximize` on every shared model (equal to 1e-6 or better,
+TOOL_COMPARISONS.md). The legacy dense `second1` bound remains what it always was — the
+upper bracket of the ROBUST controller — and the distinction is now documented in the
+docs (manual/specifications.md) and the comparison pages. Users wanting the cooperative
+optimum use the portable solver / OVI dispatch; semantics ambiguity eliminated.

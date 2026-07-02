@@ -1,7 +1,7 @@
 ---
 id: ISSUE-0012
 title: Unify v1 inner-solve on O-maximization (LP names -> aliases) + v1 code audit
-status: in-progress
+status: resolved
 severity: medium
 labels: refactor, cleanup, performance, tool-v1
 created: 2026-06-26
@@ -80,3 +80,11 @@ AdaptiveCpp + Armadillo + GLPK + HDF5 toolchain, absent in this environment):
 Edits here are NOT compile-verified in this environment (no SYCL/GLPK toolchain).
 They are mechanical, signature-preserving redirects; verification on a build machine
 is the next step before deleting the LP code.
+
+## RESOLVED (2026-07-02)
+The unification shipped (LP-named entry points delegate to the O-maximization Sorted
+implementations; O-max verified against brute-force vertex enumeration). The audit did its
+job: it surfaced the genuine upper-kernel bugs now tracked+fixed as ISSUE-0013. The
+unified path is compile-verified on the full toolchain and cross-validated against
+IntervalMDP.jl / Storm / PRISM on every shared model (TOOL_COMPARISONS.md; finite-horizon
+BA/IC values match to ~1e-6). Remaining v1 cleanup is cosmetic, not correctness.

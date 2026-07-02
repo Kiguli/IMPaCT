@@ -112,6 +112,7 @@ int main(int argc, char** argv) {
     long long samples = 100000;  // smc: number of simulated paths
     double threshold = -1.0;     // smc: if >=0, run SPRT for P >= threshold
     bool exactMode = false;      // reach: exact rational robust policy iteration
+    bool exactRepair = false;    // repair infeasible rows (sum hi < 1) by scaling (ISSUE-0023)
     solve::Method method = solve::Method::OptimisticVI;
     bool methodSet = false;
     int stateArg = -1;  // -1 => use model init
@@ -133,6 +134,7 @@ int main(int argc, char** argv) {
         else if (a == "--samples") samples = std::stoll(need("--samples"));
         else if (a == "--threshold") threshold = std::stod(need("--threshold"));
         else if (a == "--exact") exactMode = true;
+        else if (a == "--exact-repair") { exactMode = true; exactRepair = true; }
         else if (a == "--state")  stateArg = std::stoi(need("--state"));
         else if (a == "--json")   jsonOut = true;
         else if (a == "--trace")  { jsonOut = true; traceOut = true; }
@@ -201,10 +203,12 @@ int main(int argc, char** argv) {
             std::cout.precision(10);
             for (const std::string& which : (bound == "both")
                      ? std::vector<std::string>{"pess", "opt"} : std::vector<std::string>{bound}) {
-                exact::Result r = exact::maxReach(path, label, s, which == "pess");
+                exact::Result r = exact::maxReach(path, label, s, which == "pess", exactRepair);
                 std::cout << "result\tprop=reach-exact\tbound=" << which << "\tstate=" << s
                           << "\texact=" << r.fraction << "\tapprox=" << r.approx
-                          << "\tcertified=" << (r.certified ? "yes" : "NO") << "\titers=" << r.iterations << "\n";
+                          << "\tcertified=" << (r.certified ? "yes" : "NO") << "\titers=" << r.iterations;
+                if (r.repaired > 0.0) std::cout << "\trepaired_max_rel=" << r.repaired;
+                std::cout << "\n";
             }
             return 0;
         } catch (const std::exception& e) { std::cerr << "exact error: " << e.what() << "\n"; return 1; }

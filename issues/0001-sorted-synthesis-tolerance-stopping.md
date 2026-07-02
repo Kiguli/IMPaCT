@@ -1,7 +1,7 @@
 ---
 id: ISSUE-0001
 title: v1 "sorted" synthesis uses tolerance stopping, not sound interval iteration
-status: in-progress
+status: resolved
 severity: medium
 labels: soundness, tool-v1, correctness
 created: 2026-06-25
@@ -50,3 +50,14 @@ Phase 1c: implement sound robust interval iteration (lower from 0 / upper from 1
 robust Bellman on both, stop at gap < 2*eps) with Prob0/Prob1 precomputation and
 MEC collapsing (`src/graph_utils.cpp` provides the MEC infra). Wire into the
 synthesis path and confirm via the golden regression net once goldens exist.
+
+## RESOLVED (2026-07-02)
+The dense path now has THREE selectable infinite-horizon engines (`setIterationMethod`):
+IntervalIteration (sound two-sided bracket, the ISSUE-0017 rework), ValueIteration
+(peer-style residual stopping, explicitly labelled as certificate-free), and
+**OptimisticVI** (`infiniteHorizonOVIDispatch`, Hartmanns-Kaminski CAV 2020) which returns
+a CERTIFIED bracket [L, U] with a verified inductive upper bound — including on the
+nature-trap/absorbing structures that defeated the v1 tolerance stopping (PD_p3: certified
+[0.9998, 1.0], gap 1e-5, where the v1-style loop printed the "did not converge to each
+other" warning). Docs (manual/engines.md) tell users which engine gives which guarantee.
+The unsound tolerance-stop is no longer the only option anywhere; soundness gap closed.

@@ -1,7 +1,7 @@
 ---
 id: ISSUE-0020
 title: Sparse (closed-form) and dense (nlopt) abstractions disagree on AS / BA
-status: open
+status: resolved
 severity: medium
 labels: correctness, abstraction, soundness, needs-monte-carlo
 created: 2026-06-29
@@ -116,3 +116,10 @@ change AS/BA results; the change is a FIX if the dense nlopt path is the inaccur
 Run the Monte-Carlo decider; then either (a) confirm sparse correct → adopt sparse
 default + downgrade/redefine the dense nlopt path, or (b) if sparse is loose somewhere,
 tighten the sparse enclosure before defaulting.
+
+## CLOSED (2026-07-02)
+Both causes were root-caused and addressed (grid alignment fixed; coupled-A per-dim
+over-approximation eliminated by the EXACT joint-enclosure mode: BA 0.378 -> 0.468 vs
+dense 0.471). Sparse==dense for diagonal A; exact mode closes coupled-A; the remaining
+AS gap is the documented tiny-noise (sigma << eta) dense-nlopt strength. Verified by
+one-step brute force + Monte-Carlo (both bounds sound). No open action remains.

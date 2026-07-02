@@ -39,13 +39,17 @@ namespace exact {
         double approx;          // decimal approximation
         int iterations;         // policy-improvement rounds
         bool certified;         // exact robust-Bellman fixpoint check passed
+        double repaired = 0.0;  // max relative upper-bound scaling applied (repair mode)
     };
 
     // Exact robust max-reachability P(F target) at `state` (or init if -1) for the
     // .imdp model at `path` (point or interval; decimals parsed exactly as fractions).
     // pessimistic = adversarial nature. Throws on rational overflow or non-convergence.
+    // `repair`: rows whose upper bounds sum below 1 (strictly infeasible, ISSUE-0023) are
+    // repaired by scaling all upper bounds by 1/sum(hi); the maximum relative scaling is
+    // reported in Result::repaired. Without repair such rows abort with a clear error.
     Result maxReach(const std::string& path, const std::string& targetLabel,
-                    int state, bool pessimistic);
+                    int state, bool pessimistic, bool repair = false);
 
 } // namespace exact
 } // namespace impact
