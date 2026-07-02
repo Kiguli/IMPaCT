@@ -44,7 +44,7 @@ error. All examples below use models in `benchmarks/crosstool/models/`.
 | `persist L` | max P(F G L) | `imdp_solve persist_leak.imdp persist safe --bound both` → 0.5 / 1 |
 | `patrol a,b,..` | generalized Büchi: every set infinitely often | `imdp_solve patrol_cycle.imdp patrol r0,r2` → 1 |
 | `ltl "φ"` | built-in fragment (X F G U, GF, FG, patrol conjunctions) | `imdp_solve ltl_demo.imdp ltl "G F a"` → 0.5 |
-| `ltlx "φ"` | arbitrary LTL via Spot (det. (gen.)Büchi class) | `imdp_solve ltl_interval.imdp ltlx "G F a" --bound both` → 0.3 / 0.7 |
+| `ltlx "φ"` | arbitrary LTL via Spot + Owl LDBA fallback (all of LTL) | `imdp_solve ltl_interval.imdp ltlx "G F a" --bound both` → 0.3 / 0.7 |
 | `multi t1,t2,..` | multi-objective reachability; sweep or `--weights` | `imdp_solve multi_demo.imdp multi t1,t2` → vertices (0.9,0.1), (0.2,0.8) |
 | `smc L` | Monte-Carlo estimate of P(F<=`--horizon` L), point chains | `imdp_solve bounded_demo.imdp smc goal --horizon 3` → estimate 0.87471 |
 

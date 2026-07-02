@@ -88,7 +88,7 @@ reject interval edges with a 0 lower bound (see {doc}`formats`).
 - Pessimistic interval iteration alone does not converge on *nature-confinable* end
   components (ISSUE-0003, resolved by the OVI default; see {doc}`engines`).
 - OVI can be slow on large strongly-recurrent IMDPs, mainly in the optimistic sense
-  (ISSUE-0010); `--method mec` is faster there.
+  (ISSUE-0010, now largely mitigated by topological Gauss–Seidel — BA at 1e-6 went from >180 s to 7.8 s); `--method mec` remains an alternative.
 - The optimistic sense is convention-dependent across tools for `[0,hi]` "leak" edges
   (ISSUE-0018, `TOOL_COMPARISONS.md` §4); the robust value is unambiguous and is the
   headline number.

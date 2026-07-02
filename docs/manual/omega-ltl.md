@@ -12,7 +12,7 @@ capability.
 | `persist L` | max P(F G L) — eventually remain in `L` forever |
 | `patrol a,b,...` | max P(G F a ∧ G F b ∧ ...) — generalized Büchi |
 | `ltl "FORMULA"` | built-in fragment: atoms, `! & \| ->`, X, F, G, U, G F, F G, conjunctions of G F |
-| `ltlx "FORMULA"` | arbitrary LTL whose deterministic automaton is (generalized) Büchi, via Spot |
+| `ltlx "FORMULA"` | arbitrary LTL: Spot (deterministic class) with automatic Owl LDBA fallback |
 
 Pessimistic = the controller wins against *every* nature resolution; optimistic =
 nature cooperates.
@@ -35,20 +35,36 @@ Checking*, Ch. 10). The two senses differ structurally:
 sub-region of `p`; **patrol** is degeneralized to Büchi by a round-robin counter
 product.
 
-**Arbitrary LTL** (`ltlx`, `src/ltl_spot.h`): the pipeline is
+**Arbitrary LTL** (`ltlx`, `src/ltl_spot.h`): a **two-stage** pipeline covering *all of
+LTL* (ISSUE-0016, resolved 2026-07-02):
 
 1. translate the formula with Spot's `ltl2tgba -D` (Duret-Lutz et al., *Spot 2.0*);
-2. parse the HOA automaton; require a **deterministic (generalized) Büchi** automaton;
-3. synchronous product with the IMDP (a deterministic automaton is always good-for-MDPs
-   — Hahn, Perez, Schewe, Somenzi, Trivedi, Wojtczak, *Good-for-MDPs Automata*, TACAS
-   2020 — so the product value is the LTL value);
-4. solve robustly with `omega::maxGenBuchi{Pessimistic,Optimistic}`.
+2. if the result is a **deterministic (generalized) Büchi** automaton: synchronous
+   product with the IMDP (a deterministic automaton is always good-for-MDPs — Hahn,
+   Perez, Schewe, Somenzi, Trivedi, Wojtczak, *Good-for-MDPs Automata*, TACAS 2020 —
+   so the product value is the LTL value), solved robustly with
+   `omega::maxGenBuchi{Pessimistic,Optimistic}`;
+3. otherwise (co-Büchi `F G`-type and beyond) `ltlx` **falls back automatically** to a
+   **limit-deterministic Büchi automaton** from Owl's `ltl2ldba` (Křetínský,
+   Meggendorfer, Sickert, *Owl: A Library for ω-Words, Automata, and LTL*, ATVA 2018,
+   DOI 10.1007/978-3-030-01090-4_34; LDBA theory: Sickert, Esparza, Jaax, Křetínský,
+   CAV 2016). The LDBA's ε-jumps to its accepting component appear as same-letter
+   nondeterminism, which the product resolves by the **controller** — each matching
+   automaton edge multiplies the product action space (sound because such LDBAs are
+   good-for-MDPs, Hahn et al. TACAS 2020); transition-based Büchi marks become
+   state-based accepting *entry copies*, and the same robust Büchi engine applies
+   unchanged.
 
-The LDBA/product route follows Sickert, Esparza, Jaax, Křetínský,
-*Limit-Deterministic Büchi Automata for LTL*, CAV 2016. Formulas whose deterministic
-automaton needs `Fin` acceptance (co-Büchi F G, Rabin/parity) are **rejected soundly**
-with an error naming ISSUE-0016 — use the built-in `ltl` fragment (which covers
-persistence) for those.
+The Owl fallback is enabled by pointing `IMPACT_LTL2LDBA` at Owl's native binary
+(no JRE needed for the Linux amd64 release):
+
+```bash
+export IMPACT_LTL2LDBA="/opt/owl/owl-linux-musl-amd64-21.0/bin/owl ltl2ldba"
+```
+
+Without it, nondeterministic-automaton formulas are rejected soundly with an error
+suggesting the `ltl` fragment (which covers persistence) as the dependency-free
+alternative.
 
 Set the environment variable `IMPACT_LTL2TGBA` to the `ltl2tgba` command if it is not
 on `PATH` (it may embed `LD_LIBRARY_PATH=... .../ltl2tgba`).
@@ -73,11 +89,20 @@ tools/imdp_solve benchmarks/crosstool/models/ltl_interval.imdp ltlx "G F a" --bo
 # result  prop=ltlx  bound=pess  state=0  lower=0.3  upper=0.300001  iters=2
 # result  prop=ltlx  bound=opt   state=0  lower=0.7  upper=0.700001  iters=2
 
-# Sound rejection of a nondeterministic-automaton formula (ISSUE-0016)
-tools/imdp_solve benchmarks/crosstool/models/ltl_demo.imdp ltlx "F G a"
-# solve error: ltl_spot: 'F G a' compiles to a NON-deterministic automaton (e.g.
-# co-Buchi / F G-type) — sound only via an LDBA (ISSUE-0016). Use the `ltl` fragment
-# solver (it handles F/G/U/X/GF/FG/persistence) for such formulas.
+# Nondeterministic-automaton formula via the Owl LDBA fallback (ISSUE-0016, resolved):
+export IMPACT_LTL2LDBA="/opt/owl/owl-linux-musl-amd64-21.0/bin/owl ltl2ldba"
+tools/imdp_solve benchmarks/crosstool/models/ltl_demo.imdp ltlx "F G a" --bound opt
+# result  prop=ltlx  bound=opt  state=0  lower=0.5  upper=0.500001  iters=18
+#   (== the built-in persistence solver == Storm Pmax=?[F G "a"] = 0.5)
+
+# The same on the INTERVAL model — robust full LTL, unique to IMPaCT:
+tools/imdp_solve benchmarks/crosstool/models/ltl_interval.imdp ltlx "F G a" --bound both
+# result  prop=ltlx  bound=pess  state=0  lower=0.3  upper=0.300001  iters=13
+# result  prop=ltlx  bound=opt   state=0  lower=0.7  upper=0.700001  iters=14
+
+# Beyond-fragment formula, LDBA route, validated against Storm (0.5):
+tools/imdp_solve benchmarks/crosstool/models/ltl_demo.imdp ltlx "F (a & X a)" --bound opt
+# result  prop=ltlx  bound=opt  state=0  lower=0.5  upper=0.500001  iters=13
 ```
 
 Reference values: `buchi_reach` 0.5, `buchi_routearound` 0 / 1, `persist_leak`
@@ -95,11 +120,14 @@ references above. The robust-Büchi core (ISSUE-0009) is oracle-validated separa
 
 ## Limitations
 
-- `ltlx` covers the deterministic-(generalized-)Büchi class; co-Büchi/Rabin formulas
-  require an LDBA (Owl) or a robust parity solver — open as ISSUE-0016. The `ltl`
-  fragment handles the common persistence case natively.
-- `ltlx` requires an external Spot installation (`ltl2tgba`); the `ltl` fragment has no
-  external dependency.
+- `ltlx` covers **all of LTL**: the deterministic-(generalized-)Büchi class via Spot,
+  and the nondeterministic class (co-Büchi `F G` etc.) via Owl's limit-deterministic
+  automata with the controller-resolved jump product (ISSUE-0016, resolved; validated
+  `F G a` = persistence solver = Storm on the point model, and 0.3/0.7 analytically on
+  the interval model). LDBAs with *generalized* (multi-set) acceptance are not yet
+  handled by the fallback (Owl's `ltl2ldba` emits single-set Büchi).
+- `ltlx` requires external translators (Spot's `ltl2tgba`; Owl's `ltl2ldba` for the
+  fallback); the `ltl` fragment has no external dependency.
 - On unbounded-noise abstractions the infinite-horizon ω-regular value is often 0
   because no non-trivial robust ECs survive abstraction (ISSUE-0011, a modelling fact,
   not a solver bug).

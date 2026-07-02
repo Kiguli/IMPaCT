@@ -22,7 +22,17 @@ solver `src/solve.cpp`):
 - **`OptimisticVI`** (CLI default) — optimistic value iteration (Hartmanns & Kaminski,
   CAV 2020): VI from below for the lower bound plus a *verified inductive* upper bound
   — a candidate `U` with `F(U) <= U` implies `V* <= U` by Knaster-Tarski. A sound
-  two-sided certificate that needs **no end-component handling**.
+  two-sided certificate that needs **no end-component handling**. The from-below phase
+  is **topological Gauss–Seidel** (ISSUE-0010, resolved 2026-07-02): the support graph
+  is decomposed into strongly connected components, iterated to convergence in reverse
+  topological order with successor components already fixed (Dai, Mausam, Weld,
+  Goldsmith, *Topological Value Iteration Algorithms*, JAIR 42:181–209, 2011, DOI
+  10.1613/jair.3390; acyclic states take a single pass), with in-place Gauss–Seidel
+  sweeps (Puterman, 1994, §6.3.3). Both preserve monotone convergence from below to the
+  same least fixpoint, and the inductive certificate is verified globally afterwards,
+  so soundness is independent of the sweep schedule. Measured effect: the ARCH `BA`
+  robust safety solve at `--eps 1e-6` went from **>180 s (timeout) to 7.8 s** (>23×),
+  with all reference values bit-identical.
 
 In `imdp_solve`, `--method ovi` (default) selects `solve::Method::OptimisticVI` and
 `--method mec` selects `solve::Method::MECCollapse` (interval iteration after
@@ -56,19 +66,18 @@ for point MDPs and for the optimistic sense (`src/solve.h`).
 | Situation | Method |
 |---|---|
 | Default; interval models, pessimistic sense | `OptimisticVI` (sound, converges on nature traps) |
-| Large *recurrent* models, optimistic sense (OVI mixes slowly, ISSUE-0010) | `MECCollapse` |
+| Large *recurrent* models (topological Gauss–Seidel handles most; ISSUE-0010 resolved) | `OptimisticVI`, or `MECCollapse` for the optimistic sense |
 | Point MDPs, either sense | either; `MECCollapse` is fast on controller ECs |
 | Matching a peer tool's convergence behaviour | `ValueIteration` (dense API only; residual stop, no certificate) |
 | Exact certified values on small models | {doc}`exact` (rational policy iteration) |
 
 ## Performance notes
 
-- **ISSUE-0010** (open, low): OVI's from-below iterate mixes slowly on large,
-  strongly-recurrent IMDPs (e.g. a full-dynamics grid abstraction where the value
-  tends to 1 almost everywhere); observed in the ARCH `BA` optimistic-safety case,
-  which did not converge in 180 s at `eps 1e-4` while the robust sense was fine
-  (`TOOL_COMPARISONS.md` §2). Remedies: `--method mec` for the optimistic sense, or a
-  looser `--eps`.
+- **ISSUE-0010** (resolved 2026-07-02): OVI's from-below iterate mixed slowly on large,
+  strongly-recurrent IMDPs (the ARCH `BA` case needed >180 s at `eps 1e-6`). Resolved
+  by the topological Gauss–Seidel from-below phase described above: BA robust safety at
+  `eps 1e-6` now solves in **7.8 s** with identical values. For stubborn cases the
+  older remedies remain available: `--method mec` or a looser `--eps`.
 - **ISSUE-0017** (resolved): the SYCL dense VI was slow versus Storm/IntervalMDP.jl on
   recurrent IMDPs; the infinite-horizon dense path now dispatches through the shared
   CPU OVI solver (`IMDP::infiniteHorizonOVIDispatch`, `src/IMDP.h`).

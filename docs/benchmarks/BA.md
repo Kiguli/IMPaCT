@@ -102,7 +102,7 @@ IntervalMDP.jl reports 1.9e-4 at its defaults. Peer solve times: 4.9 / 0.3 / 0.7
 ## Notes
 
 - IMPaCT's *optimistic* infinite-horizon safety OVI did not converge within 180 s on
-  this model — a large safe end component (ISSUE-0010). The robust (pessimistic)
+  this model — a large safe end component (ISSUE-0010, since resolved: topological Gauss–Seidel brings the eps=1e-6 robust solve to 7.8 s). The robust (pessimistic)
   value, which is the headline guarantee, is unambiguous and agrees across tools.
 - Optimistic safety is convention-dependent across tools (how the cooperative sense
   resolves `[0,hi]` leak edges); only the robust value should be compared directly.
