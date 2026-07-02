@@ -2,6 +2,7 @@
 #include "omega.h"
 
 #include <cstdio>
+#include <cstdlib>
 #include <sstream>
 #include <stdexcept>
 #include <vector>
@@ -68,6 +69,24 @@ bool guardHolds(const std::string& g, const std::vector<char>& val) {
     GuardEval e(g, val); return e.orE();
 }
 
+// run Owl's ltl2ldba (limit-deterministic Buchi; Kretinsky-Meggendorfer-Sickert,
+// ATVA 2018). The LDBA's nondeterminism (epsilon-jumps encoded as same-letter
+// branching) is resolved by the CONTROLLER in the product below — sound because
+// LDBAs of this kind are good-for-MDPs (Hahn et al., TACAS 2020).
+std::string runLtl2ldba(const std::string& cmd, const std::string& formula) {
+    std::string f; for (char c : formula) { if (c == '\'') f += "'\\''"; else f += c; }
+    std::string full = cmd + " -f '" + f + "' 2>/dev/null";
+    FILE* pipe = popen(full.c_str(), "r");
+    if (!pipe) throw std::runtime_error("ltl_spot: cannot run '" + cmd + "'");
+    std::string out; char buf[4096]; size_t n;
+    while ((n = fread(buf, 1, sizeof buf, pipe)) > 0) out.append(buf, n);
+    int rc = pclose(pipe);
+    if (rc != 0 || out.find("--BODY--") == std::string::npos)
+        throw std::runtime_error("ltl_spot: ltl2ldba failed for '" + formula +
+                                 "' (set IMPACT_LTL2LDBA to Owl's `owl ltl2ldba`)");
+    return out;
+}
+
 Automaton parseHOA(const std::string& hoa) {
     Automaton A; std::istringstream in(hoa); std::string line; bool body = false; int cur = -1;
     while (std::getline(in, line)) {
@@ -92,11 +111,16 @@ Automaton parseHOA(const std::string& hoa) {
             } else if (line.rfind("properties:", 0) == 0) {
                 if (line.find(" deterministic") != std::string::npos) A.deterministic = true;
             } else if (line.rfind("--BODY--", 0) == 0) {
-                body = true; A.edges.assign(A.nStates, {}); A.stateMarks.assign(A.nStates, {});
+                body = true; A.edges.assign(std::max(A.nStates, 1), {});
+                A.stateMarks.assign(std::max(A.nStates, 1), {});
             }
         } else {
+            auto grow = [&](int q) {                       // Owl omits the States: header
+                if (q >= (int)A.edges.size()) { A.edges.resize(q + 1); A.stateMarks.resize(q + 1); }
+                if (q >= A.nStates) A.nStates = q + 1;
+            };
             if (line.rfind("State:", 0) == 0) {
-                cur = std::stoi(tokenize(line).at(1));
+                cur = std::stoi(tokenize(line).at(1)); grow(cur);
                 size_t lb = line.find('{');       // state-based acceptance marks: "State: q {marks}"
                 if (lb != std::string::npos) { std::string mk = line.substr(lb + 1, line.find('}') - lb - 1);
                     std::istringstream ms(mk); int x; while (ms >> x) A.stateMarks.at(cur).push_back(x); }
@@ -107,6 +131,7 @@ Automaton parseHOA(const std::string& hoa) {
                 e.guard = line.substr(1, rb - 1);
                 std::string rest = line.substr(rb + 1);
                 std::istringstream rs(rest); rs >> e.dest;
+                grow(e.dest);
                 size_t lb = rest.find('{');
                 if (lb != std::string::npos) { std::string m = rest.substr(lb + 1, rest.find('}') - lb - 1);
                     std::istringstream ms(m); int x; while (ms >> x) e.marks.push_back(x); }
@@ -118,6 +143,68 @@ Automaton parseHOA(const std::string& hoa) {
     return A;
 }
 
+// ISSUE-0016: full-LTL product with a LIMIT-DETERMINISTIC Buchi automaton from Owl.
+// The automaton's same-letter nondeterminism (epsilon-jumps to the accepting component)
+// is resolved by the CONTROLLER: each matching automaton edge multiplies the product
+// action space (good-for-MDPs soundness: Hahn et al., TACAS 2020; LDBA: Sickert et al.,
+// CAV 2016). Transition-based Buchi marks become state-based by an entry-copy split:
+// product state = (s, q, entered-by-marked-edge?), accepting = the marked-entry copies.
+static solve::IntervalResult synthesizeLDBA(const solve::IMDPModel& m,
+        const std::map<std::string, std::set<int>>& labels, int init,
+        const std::string& formula, bool pessimistic, double eps, const std::string& ltl2ldba) {
+    const Automaton A = parseHOA(runLtl2ldba(ltl2ldba, formula));
+    if (A.nAcc > 1)
+        throw std::runtime_error("ltl_spot: LDBA with generalized acceptance not supported (expected 1 Buchi set)");
+    const int n = (int)m.size(), nQ = A.nStates;
+
+    std::vector<std::vector<char>> val(n, std::vector<char>(A.ap.size(), 0));
+    for (size_t a = 0; a < A.ap.size(); ++a) {
+        auto it = labels.find(A.ap[a]);
+        if (it != labels.end()) for (int s : it->second) if (s >= 0 && s < n) val[s][a] = 1;
+    }
+    // product state (s, q, mf) -> index ((s*nQ)+q)*2+mf, plus a reject sink
+    const long long NP = (long long)n * nQ * 2;
+    const int SINK = (int)NP;
+    solve::IMDPModel P(NP + 1);
+    std::set<int> accepting;
+    for (int s = 0; s < n; ++s)
+        for (int q = 0; q < nQ; ++q) {
+            // matching edges of q on the valuation of s (edge marked if it carries mark 0
+            // or its SOURCE state carries a state-based mark)
+            std::vector<std::pair<int,int>> succQ;           // (q', markedEntry)
+            const bool srcMarked = !A.stateMarks[q].empty();
+            for (const Edge& e : A.edges[q])
+                if (guardHolds(e.guard, val[s]))
+                    succQ.push_back({ e.dest, (srcMarked || !e.marks.empty()) ? 1 : 0 });
+            for (int mf = 0; mf < 2; ++mf) {
+                const long long ps = ((long long)s * nQ + q) * 2 + mf;
+                if (mf == 1) accepting.insert((int)ps);
+                if (succQ.empty()) { P[ps].push_back({ solve::Interval{SINK, 1.0, 1.0} }); continue; }
+                for (const auto& [q2, mk] : succQ) {         // controller resolves the LDBA branch
+                    if (m[s].empty()) {
+                        P[ps].push_back({ solve::Interval{(int)(((long long)s * nQ + q2) * 2 + mk), 1.0, 1.0} });
+                        continue;
+                    }
+                    for (const solve::ActionDist& act : m[s]) {
+                        solve::ActionDist pa; pa.reserve(act.size());
+                        for (const solve::Interval& iv : act)
+                            pa.push_back({ (int)(((long long)iv.to * nQ + q2) * 2 + mk), iv.lo, iv.hi });
+                        P[ps].push_back(std::move(pa));
+                    }
+                }
+            }
+        }
+    P[SINK].push_back({ solve::Interval{SINK, 1.0, 1.0} });
+
+    solve::IntervalResult r = pessimistic ? omega::maxBuchiPessimistic(P, accepting, eps)
+                                          : omega::maxBuchiOptimistic(P, accepting, eps);
+    const long long ip = ((long long)init * nQ + A.start) * 2 + 0;
+    solve::IntervalResult out; out.iterations = r.iterations;
+    out.lower.assign(n, 0.0); out.upper.assign(n, 0.0);
+    out.lower[init] = r.lower[ip]; out.upper[init] = r.upper[ip];
+    return out;
+}
+
 } // namespace
 
 solve::IntervalResult synthesizeLTL(const solve::IMDPModel& m,
@@ -125,10 +212,17 @@ solve::IntervalResult synthesizeLTL(const solve::IMDPModel& m,
                                     int init, const std::string& formula,
                                     bool pessimistic, double eps, const std::string& ltl2tgba) {
     const Automaton A = parseHOA(runLtl2tgba(ltl2tgba, formula));
-    if (!A.deterministic && A.nStates > 1)
+    if (!A.deterministic && A.nStates > 1) {
+        // ISSUE-0016 fallback: nondeterministic minimal automaton (co-Buchi FG etc.) —
+        // use Owl's limit-deterministic Buchi automaton with a controller-resolved product.
+        const char* owl = std::getenv("IMPACT_LTL2LDBA");
+        if (owl && *owl)
+            return synthesizeLDBA(m, labels, init, formula, pessimistic, eps, owl);
         throw std::runtime_error("ltl_spot: '" + formula + "' compiles to a NON-deterministic "
-            "automaton (e.g. co-Buchi / F G-type) — sound only via an LDBA (ISSUE-0016). Use the "
-            "`ltl` fragment solver (it handles F/G/U/X/GF/FG/persistence) for such formulas.");
+            "automaton (e.g. co-Buchi / F G-type). Set IMPACT_LTL2LDBA to Owl's `owl ltl2ldba` "
+            "for the limit-deterministic route, or use the `ltl` fragment solver "
+            "(it handles F/G/U/X/GF/FG/persistence).");
+    }
     const int n = (int)m.size(), nQ = A.nStates;
 
     // AP valuation of each IMDP state: which of the automaton's APs hold there.

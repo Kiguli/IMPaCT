@@ -1,7 +1,7 @@
 ---
 id: ISSUE-0016
 title: Full arbitrary-LTL -> LDBA front-end (Spot/Owl) — needs external toolchain, transfer to big machine
-status: partially-resolved
+status: resolved
 severity: medium
 labels: enhancement, omega-regular, ltl, external-dependency
 created: 2026-06-26
@@ -68,3 +68,19 @@ nondeterminism (the epsilon-jumps of the LDBA become extra product actions; soun
 good-for-MDPs property, Hahn et al. TACAS 2020), then the existing robust Buchi engine
 applies unchanged. Until then `ltlx` covers the deterministic class and `ltl` covers the
 F/G/U/X/GF/FG/patrol fragment (incl. the FG/persistence cases an LDBA would add).
+
+## RESOLVED (2026-07-02) — Owl LDBA jump-product implemented and validated
+src/ltl_spot.cpp now falls back automatically (env IMPACT_LTL2LDBA = `owl ltl2ldba`,
+native Owl 21.0 binary) when the Spot deterministic route rejects a formula: the LDBA's
+same-letter nondeterminism (epsilon-jumps to the accepting component) is resolved by the
+CONTROLLER — each matching automaton edge multiplies the product action space — sound by
+the good-for-MDPs property (Hahn-Perez-Schewe-Somenzi-Trivedi-Wojtczak, TACAS 2020;
+LDBA: Sickert-Esparza-Jaax-Kretinsky, CAV 2016; Owl: Kretinsky-Meggendorfer-Sickert,
+ATVA 2018). Transition-based Buchi marks become state-based by an entry-copy split
+(product state = (s, q, entered-by-marked-edge)), then the EXISTING robust Buchi engine
+(omega::maxBuchi*, ISSUE-0009 winning region) applies unchanged.
+VALIDATED: point model `F G a` = 0.5 via LDBA = built-in persistence solver = Storm;
+INTERVAL model `F G a` robust 0.3 / optimistic 0.7 = persistence solver = analytic
+(robust full-LTL on intervals remains IMPaCT-only); beyond-fragment `F(a & X a)` = 0.5
+= Storm. imdp_solve `ltlx` therefore now covers ARBITRARY LTL: deterministic class via
+Spot, nondeterministic class via Owl, with the fragment solver as a third cross-check.

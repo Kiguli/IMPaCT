@@ -54,3 +54,14 @@ literature: under interval transitions the BELIEF is not a point (interval belie
 FSC synthesis is required), so a naive per-step O-max on point beliefs is UNSOUND — no
 prototype will be shipped until the belief-set (or FSC) formulation is implemented.
 Remains open as the research item it is, now with the correct starting papers.
+
+## RESEARCH PROBLEM STATEMENT (2026-07-02) — see session summary
+Formal statement recorded with the verified literature above: robust value computation
+for interval POMDPs requires set-valued beliefs (nature's per-step interval choice makes
+the Bayes update non-unique), so the sound objects are belief SETS / weight polytopes or
+finite-state controllers optimized against nature (Osogami ICML 2015 = convex-concave
+point-based updates under rectangularity; Cubuktepe et al. AAAI 2021 = FSC synthesis via
+sequential convex programming). The IMPaCT-specific open problem: produce interval
+POMDPs by ABSTRACTION of continuous partially-observed stochastic systems (observation
+kernel + dynamics discretized together) and solve them with certified robust bounds that
+refine to the continuous closed loop — no existing tool does either half.

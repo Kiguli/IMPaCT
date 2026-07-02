@@ -141,29 +141,81 @@ IntervalResult solveReach(const IMDPModel& m, const std::set<int>& targets,
     return r;
 }
 
+// ISSUE-0010: topological ordering of the support-graph SCCs for the from-below VI
+// (Dai, Mausam, Weld, Goldsmith, "Topological Value Iteration Algorithms", JAIR 42,
+// 2011, DOI 10.1613/jair.3390): iterate each SCC to convergence with its successor
+// SCCs already fixed, sinks first. Within an SCC the sweep is Gauss-Seidel (in-place,
+// Puterman 1994 Sec. 6.3.3) — monotone from below, so it converges to the same least
+// fixpoint; and OVI's inductive certificate below guards soundness regardless of the
+// sweep schedule.
+static std::vector<std::vector<int>> sccTopoOrder(const IMDPModel& m) {
+    const int n = (int)m.size();
+    graph::AdjList adj(n);
+    for (int s = 0; s < n; ++s) {
+        std::set<int> succ;
+        for (const ActionDist& act : m[s])
+            for (const Interval& iv : act) if (iv.hi > 0.0 && iv.to != s) succ.insert(iv.to);
+        adj[s].assign(succ.begin(), succ.end());
+    }
+    std::vector<std::vector<int>> comps = graph::sccs(adj);
+    const int k = (int)comps.size();
+    std::vector<int> compOf(n, -1);
+    for (int c = 0; c < k; ++c) for (int s : comps[c]) compOf[s] = c;
+    // condensation DAG edge a->b iff some state in a reads a state in b
+    std::vector<std::set<int>> out(k);
+    std::vector<int> indeg(k, 0);
+    for (int s = 0; s < n; ++s)
+        for (int t : adj[s])
+            if (compOf[s] != compOf[t] && out[compOf[s]].insert(compOf[t]).second)
+                ++indeg[compOf[t]];
+    std::vector<int> order; order.reserve(k);
+    std::vector<int> q;
+    for (int c = 0; c < k; ++c) if (indeg[c] == 0) q.push_back(c);
+    while (!q.empty()) {
+        int c = q.back(); q.pop_back(); order.push_back(c);
+        for (int t : out[c]) if (--indeg[t] == 0) q.push_back(t);
+    }
+    // Kahn order has predecessors first; VI needs SUCCESSOR components solved first.
+    std::vector<std::vector<int>> sched;
+    sched.reserve(k);
+    for (auto it = order.rbegin(); it != order.rend(); ++it) sched.push_back(std::move(comps[*it]));
+    return sched;
+}
+
 // Optimistic value iteration (Hartmanns & Kaminski, CAV 2020): VI-from-below gives
 // a sound lower bound L (<= V*); then guess U = min(1, L+eps) and VERIFY it is a
 // pre-fixpoint (F(U) <= U). By Knaster-Tarski, F(U) <= U implies V* (the least
 // fixpoint) <= U, so [L,U] is sound with gap <= eps. No end-component handling
 // needed, so it converges on nature-confinable ECs (ISSUE-0003). If the guess is
-// not yet inductive, refine L (smaller delta) and retry.
+// not yet inductive, refine L (smaller delta) and retry. The from-below phase is
+// topological Gauss-Seidel (ISSUE-0010; Dai et al. JAIR 2011, Puterman Sec. 6.3.3).
 IntervalResult solveOVI(const IMDPModel& m, const std::set<int>& targets,
                         double eps, omax::Sense sense, bool controllerMax = true) {
     const int n = (int)m.size();
-    std::vector<double> L(n, 0.0), tmp(n), U(n), FU(n);
+    std::vector<double> L(n, 0.0), U(n), FU(n);
     for (int t : targets) L[t] = 1.0;
     int iters = 0;
     double delta = eps;
     const int MAXROUND = 100, MAXINNER = 2000000;
+    const std::vector<std::vector<int>> sched = sccTopoOrder(m);
+    std::vector<char> selfLoop(n, 0);                        // self-mass => singleton still cyclic
+    for (int s = 0; s < n; ++s)
+        for (const ActionDist& act : m[s])
+            for (const Interval& iv : act) if (iv.to == s && iv.hi > 0.0) { selfLoop[s] = 1; }
     for (int round = 0; round < MAXROUND; ++round) {
-        for (int it = 0; it < MAXINNER; ++it) {              // refine L from below
-            ++iters;
-            for (int s = 0; s < n; ++s)
-                tmp[s] = targets.count(s) ? 1.0 : backup(m[s], L, sense, controllerMax);
-            double ch = 0.0;
-            for (int s = 0; s < n; ++s) ch = std::max(ch, std::fabs(tmp[s] - L[s]));
-            L.swap(tmp);
-            if (ch < delta) break;
+        for (const std::vector<int>& comp : sched) {         // refine L from below, SCC by SCC
+            const bool oneShot = (comp.size() == 1 && !selfLoop[comp[0]]);
+            for (int it = 0; it < MAXINNER; ++it) {
+                ++iters;
+                double ch = 0.0;
+                for (int s : comp) {                          // Gauss-Seidel: in-place update
+                    if (targets.count(s)) { L[s] = 1.0; continue; }
+                    const double v = backup(m[s], L, sense, controllerMax);
+                    ch = std::max(ch, std::fabs(v - L[s]));
+                    L[s] = v;
+                }
+                if (oneShot || ch < delta) break;             // acyclic singleton: one pass
+            }
         }
         for (int s = 0; s < n; ++s)
             U[s] = targets.count(s) ? 1.0 : std::min(1.0, L[s] + eps);

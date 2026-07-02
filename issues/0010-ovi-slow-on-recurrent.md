@@ -1,7 +1,7 @@
 ---
 id: ISSUE-0010
 title: OVI is slow on large strongly-recurrent IMDPs (VI-from-below mixes slowly)
-status: open
+status: resolved
 severity: low
 labels: performance, solver
 created: 2026-06-25
@@ -41,3 +41,15 @@ exists); (b) Gauss-Seidel sweeps (Puterman 1994 Sec 6.3.3); (c) Sound Value Iter
 (Quatmann-Katoen, CAV 2018, DOI 10.1007/978-3-319-96145-3_37) as an alternative certified
 engine. Severity low (workaround: eps 1e-4, or ValueIteration/II engines); remains open
 as a performance enhancement with this implementation plan.
+
+## RESOLVED (2026-07-02) — topological Gauss-Seidel value iteration
+Implemented in solve.cpp::solveOVI: the from-below phase now (i) decomposes the support
+graph into SCCs and processes them in reverse topological order — each component iterates
+with its successor components already converged (Dai, Mausam, Weld, Goldsmith, "Topological
+Value Iteration Algorithms", JAIR 42:181-209, 2011, DOI 10.1613/jair.3390; acyclic
+singletons take a single pass, self-loop singletons iterate) — and (ii) sweeps in place
+(Gauss-Seidel, Puterman 1994 Sec. 6.3.3). Both preserve monotone convergence from below to
+the same least fixpoint, and OVI's inductive certificate is checked globally afterwards,
+so soundness is independent of the sweep schedule.
+MEASURED: BA robust safety at eps 1e-6 — previously >180 s (timeout) — now **7.8 s**
+(>23x). Reference values unchanged (chain 0.25, choice 0.4, fork 0.4, robot 0.8946629826).
