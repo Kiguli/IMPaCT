@@ -28,20 +28,30 @@ Model parseFile(const std::string& path, const std::string& targetLabel) {
         else if (kw == "init") { is >> m.init; }
         else if (kw == "label") { std::string name; is >> name; int s;
             while (is >> s) if (name == targetLabel) m.targets.insert(s); }
-        else if (kw == "otran") {
-            int s, a, d; is >> s >> a >> d;
-            if (s < 0 || s >= n || d < 0 || d >= (int)m.dims.size())
-                throw std::runtime_error("odimdp: otran index out of range");
-            if ((int)m.actions[s].size() <= a) m.actions[s].resize(a + 1, Marginals(m.dims.size()));
-            solve::ActionDist dist;
-            std::string t;
-            while (is >> t) {
-                auto c1 = t.find(':'), c2 = t.rfind(':');
-                dist.push_back({ std::stoi(t.substr(0, c1)),
-                                 std::stod(t.substr(c1 + 1, c2 - c1 - 1)),
-                                 std::stod(t.substr(c2 + 1)) });
+        else if (kw == "otran" || kw == "mtran" || kw == "mweight") {
+            int s, a; is >> s >> a;
+            if (s < 0 || s >= n) throw std::runtime_error("odimdp: state out of range");
+            if ((int)m.actions[s].size() <= a) m.actions[s].resize(a + 1);
+            Action& act = m.actions[s][a];
+            auto parseEdges = [&](solve::ActionDist& dist) {
+                std::string t;
+                while (is >> t) {
+                    auto c1 = t.find(':'), c2 = t.rfind(':');
+                    dist.push_back({ std::stoi(t.substr(0, c1)),
+                                     std::stod(t.substr(c1 + 1, c2 - c1 - 1)),
+                                     std::stod(t.substr(c2 + 1)) });
+                }
+            };
+            if (kw == "mweight") { act.weights.clear(); parseEdges(act.weights); }
+            else {
+                int k = 0, d;
+                if (kw == "mtran") is >> k;
+                is >> d;
+                if (d < 0 || d >= (int)m.dims.size()) throw std::runtime_error("odimdp: dim out of range");
+                if ((int)act.comps.size() <= k) act.comps.resize(k + 1, Marginals(m.dims.size()));
+                solve::ActionDist dist; parseEdges(dist);
+                act.comps[k][d] = std::move(dist);
             }
-            m.actions[s][a][d] = std::move(dist);
         }
         else throw std::runtime_error("odimdp: unknown directive '" + kw + "'");
     }
@@ -79,8 +89,24 @@ static double factoredOpt(const Marginals& mg, const std::vector<int>& dims,
 double backup(const Model& m, int s, const std::vector<double>& V, bool pessimistic) {
     const omax::Sense sense = pessimistic ? omax::Sense::Min : omax::Sense::Max;
     double best = 0.0; bool any = false;
-    for (const Marginals& mg : m.actions[s]) {
-        const double q = factoredOpt(mg, m.dims, V, sense);
+    std::vector<double> lo, hi, vk;
+    for (const Action& act : m.actions[s]) {
+        double q;
+        if (act.comps.size() <= 1 || act.weights.empty()) {
+            q = act.comps.empty() ? 0.0 : factoredOpt(act.comps[0], m.dims, V, sense);
+        } else {
+            // mixture: per-component factored O-max, then O-max over the weight intervals
+            // (weights sorted by component value like any interval distribution).
+            vk.assign(act.comps.size(), 0.0);
+            for (size_t k = 0; k < act.comps.size(); ++k)
+                vk[k] = factoredOpt(act.comps[k], m.dims, V, sense);
+            lo.clear(); hi.clear();
+            std::vector<double> vv;
+            for (const solve::Interval& w : act.weights) {
+                lo.push_back(w.lo); hi.push_back(w.hi); vv.push_back(vk[w.to]);
+            }
+            q = omax::optimize(lo, hi, vv, sense).value;
+        }
         if (!any || q > best) { best = q; any = true; }
     }
     return any ? best : 0.0;

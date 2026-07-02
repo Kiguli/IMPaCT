@@ -36,7 +36,7 @@ tables: [`TOOL_COMPARISONS.md`](TOOL_COMPARISONS.md).
 |---|---|---|---|---|
 | **CTMC + CSL** time-bounded reachability `P(F<=t g)` | PRISM, Storm | ✅ | uniformisation + Fox-Glynn (Baier-Haverkort-Hermanns-Katoen TSE 2003 DOI 10.1109/TSE.2003.1205180; Fox-Glynn CACM 1988) — `src/ctmc.cpp`, `imdp_solve csl --time t`; validated == Storm == 1-e^{-t} | interval-CTMC (Katoen et al. CAV 2007) planned |
 | **Nondeterministic-LDBA full LTL** (co-Büchi FG, Rabin) | Storm, PRISM | 🔶 (ISSUE-0016) | LTL→LDBA (Owl `ltl2ldba`), controller-resolved GFM product → existing robust Büchi | robust LTL on IMDPs (all of LTL) |
-| **Exact / rational arithmetic** | PRISM, Storm, IntervalMDP.jl | ⬜ | templatise omax/VI on the numeric type; rational Gaussian elimination (Haddad-Monmege) | exact robust value, rational interval endpoints |
+| **Exact / rational arithmetic** | PRISM, Storm, IntervalMDP.jl | ✅ | robust policy iteration over rationals (Iyengar 2005 §3.3; Puterman PI; O-max is division-free) + exact Gaussian elimination + exact P0 + fixpoint certificate — `src/exact.cpp`, `imdp_solve reach --exact`. Point chain 1/4 == PRISM/Storm `-exact`; **interval exact 2/5, 1/2, 3/5 certified — peers are point-only (verified: both error on intervals)**. Exposed infeasible rows in the robot model (ISSUE-0023) | exact robust interval value — IMPaCT-only |
 | **Symbolic / BDD (MTBDD) engine** | PRISM, Storm | ⬜ | MTBDD reachability (de Alfaro-Kwiatkowska-Norman-Parker-Segala TACAS2000) | symbolic robust IMDP |
 | **Parametric REGION verification** | Storm (storm-pars) | ✅ | Parameter Lifting → interval-MDP reachability (Quatmann-Dehnert-Jansen-Junges-Katoen ATVA2016, DOI 10.1007/978-3-319-46520-3_4) — `peers/param_lift.py` + existing solve; region [0.3,0.7]→[0.3,0.7] == Storm corners | parametric ≡ interval/robust (native) |
 | Parametric **solution functions** | Storm | ⬜ | state elimination + multivariate rational-function arithmetic (Daws ICTAC2004) — needs a rational-function type | — |
@@ -44,9 +44,9 @@ tables: [`TOOL_COMPARISONS.md`](TOOL_COMPARISONS.md).
 | Step-bounded reachability `P[F<=k]` / `a U<=k b` | PRISM, Storm | ✅ | finite-horizon exact DP (`pctl::boundedUntil`, exposed via `reach/until --horizon k`) == Storm | robust bounded |
 | Expected time / steps to reach | PRISM, Storm | ✅ | = expected reward with unit state rewards (`reward` with all-1 reward) | robust |
 | **Full PCTL\* nesting / conditional prob** | PRISM, Storm | ⬜ | nested P-operators as state predicates over pctl.cpp (satStates already returns the sub-formula state set) | robust nested |
-| **Statistical MC / simulation** (SPRT, CI) | PRISM, Storm | ⬜ | discrete-event simulator + hypothesis tests | — |
+| **Statistical MC / simulation** (SPRT, CI) | PRISM, Storm | ✅ | Monte-Carlo path sampling + Wilson CI + APMC/Chernoff (Hérault et al. VMCAI 2004) + Wald SPRT (Younes-Simmons CAV 2002; Wald 1945) — `src/smc.cpp`, `imdp_solve smc [--threshold p]`. Estimate 0.87471 (CI ∋ 0.875 analytic) == PRISM `-sim` 0.87479; SPRT correct both directions. Point chains (like PRISM's simulator) | — |
 | **Orthogonal IMDPs** (factored) | IntervalMDP.jl | ✅ | recursive per-dimension O-max, dim-1-innermost convention (Mathiesen-Haesaert-Laurenti arXiv:2411.11803) — `src/odimdp.cpp`, `imdp_solve *.odimdp reach`; == IntervalMDP.jl to 10 digits both senses (ISSUE-0022) | native fit to IMPaCT's per-dim abstraction bounds |
-| Mixture IMDPs | IntervalMDP.jl | ⬜ | interval-weighted mixture of odIMDPs (same paper) — one more O-max layer over the mixture weights | — |
+| **Mixture IMDPs** | IntervalMDP.jl | ✅ | per-component factored O-max + O-max over interval mixture weights (Mathiesen et al. arXiv:2411.11803) — `mtran`/`mweight` in `.odimdp`. == IntervalMDP.jl MixtureIntervalMarkovDecisionProcess to 10 digits both senses (pess 0.4756756752 / opt 0.9619450314) | — |
 | **DFT / GSPN front-ends** | Storm | ⬜ | Galileo/PNPRO → MA/MDP translation | robust DFT |
 
 > Grounded plans (papers verified, algorithm, IMPaCT reuse, oracle) are being filled in

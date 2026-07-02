@@ -35,10 +35,19 @@ namespace odimdp {
     // marginal[d] = interval distribution over dim-d destination coordinates 0..dims[d]-1
     using Marginals = std::vector<solve::ActionDist>;
 
+    // One action = a MIXTURE of orthogonal components (Mathiesen-Haesaert-Laurenti,
+    // arXiv:2411.11803): nature picks a weight vector within the `weights` intervals AND
+    // each component's marginals within theirs; the backup is the per-component factored
+    // O-max followed by an O-max over the mixture weights. A single component with empty
+    // weights is the plain odIMDP case.
+    struct Action {
+        std::vector<Marginals> comps;   // >= 1 orthogonal components
+        solve::ActionDist weights;      // interval distribution over component index (empty if 1 comp)
+    };
+
     struct Model {
         std::vector<int> dims;                       // per-dimension sizes; nStates = prod
-        // actions[s] = available actions; each action = one Marginals (size dims.size())
-        std::vector<std::vector<Marginals>> actions; // indexed by linearised state (dim 0 fastest)
+        std::vector<std::vector<Action>> actions;    // indexed by linearised state (dim 0 fastest)
         std::set<int> targets;                       // linearised target states
         int init = 0;
         long long nStates() const { long long n = 1; for (int d : dims) n *= d; return n; }
@@ -46,7 +55,9 @@ namespace odimdp {
 
     // Parse the .odimdp text format:
     //   odimdp / dims n1 n2 ... / init s / label NAME s... /
-    //   otran <s> <a> <d> to:lo:hi ...     (dim-d marginal of action a in state s)
+    //   otran  <s> <a> <d> to:lo:hi ...      (dim-d marginal of action a, single component)
+    //   mtran  <s> <a> <k> <d> to:lo:hi ...  (dim-d marginal of mixture component k)
+    //   mweight <s> <a> k:lo:hi ...          (interval mixture weights over components)
     Model parseFile(const std::string& path, const std::string& targetLabel);
 
     // Robust factored Bellman backup of value V (indexed linearised, dim 0 fastest) at

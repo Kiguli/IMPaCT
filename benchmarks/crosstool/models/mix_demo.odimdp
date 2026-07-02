@@ -1,0 +1,25 @@
+# MIXTURE-of-orthogonal IMDP (Mathiesen et al., arXiv:2411.11803), dims 2x2.
+# State 0 = (1,1): one action = mixture of 2 orthogonal components with interval weights.
+# State 1 = (2,1) single component; state 2 = (1,2) dead absorbing; state 3 = (2,2) target.
+# Oracle: IntervalMDP.jl MixtureIntervalMarkovDecisionProcess (peers/mixture_oracle.jl).
+odimdp
+dims 2 2
+init 0
+label target 3
+# state 0: mixture, component 0 (od_demo-like)
+mtran 0 0 0 0 0:0.3:0.7 1:0.3:0.7
+mtran 0 0 0 1 0:0.4:0.6 1:0.4:0.6
+# state 0: component 1 (biased toward the target corner)
+mtran 0 0 1 0 0:0.0:0.2 1:0.8:1.0
+mtran 0 0 1 1 0:0.1:0.3 1:0.7:0.9
+# state 0: interval mixture weights
+mweight 0 0 0:0.3:0.8 1:0.2:0.7
+# state 1 = (2,1): single component
+otran 1 0 0 0:0.0:0.2 1:0.8:1.0
+otran 1 0 1 0:0.5:0.5 1:0.5:0.5
+# state 2 = (1,2): dead absorbing
+otran 2 0 0 0:1:1
+otran 2 0 1 1:1:1
+# state 3 = (2,2): target absorbing
+otran 3 0 0 1:1:1
+otran 3 0 1 1:1:1

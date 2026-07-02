@@ -28,3 +28,4 @@ See [`README.md`](README.md) for conventions and the literature-counterexample p
 | [0020](0020-sparse-vs-dense-abstraction-discrepancy.md) | Sparse (closed-form) and dense (nlopt) abstractions disagree on AS/BA | open | medium | correctness, abstraction, soundness |
 | [0021](0021-nonlinear-mean-enclosure-not-certified.md) | Nonlinear mean enclosure (point-sampling / nlopt) is heuristic, not certified-sound | open | medium | soundness, abstraction, nonlinear, design-decision |
 | [0022](0022-odimdp-reduction-order-semantics.md) | odIMDP factored ambiguity is reduction-order sensitive (matched IntervalMDP.jl convention) | resolved | medium | design-decision, semantics, odimdp, cross-tool |
+| [0023](0023-exact-mode-surfaces-infeasible-rows.md) | Exact rational mode surfaces interval rows with sum(hi) < 1 (silent in floating point) | open | low | correctness, data-quality, exact, cross-tool |

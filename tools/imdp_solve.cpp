@@ -34,6 +34,8 @@
 #include "../src/ltl_spot.h"
 #include "../src/ctmc.h"
 #include "../src/odimdp.h"
+#include "../src/smc.h"
+#include "../src/exact.h"
 #include "../src/omaximization.h"
 
 #include <iostream>
@@ -107,6 +109,9 @@ int main(int argc, char** argv) {
     std::string weightsArg;  // multi prop: comma-separated weights, or empty => sweep (2 objectives)
     double cslTime = 1.0;    // csl prop: the time bound t in P(F<=t goal)
     int horizon = 0;         // reach/until: step bound k (P[F<=k] / a U<=k b); 0 => unbounded
+    long long samples = 100000;  // smc: number of simulated paths
+    double threshold = -1.0;     // smc: if >=0, run SPRT for P >= threshold
+    bool exactMode = false;      // reach: exact rational robust policy iteration
     solve::Method method = solve::Method::OptimisticVI;
     bool methodSet = false;
     int stateArg = -1;  // -1 => use model init
@@ -125,6 +130,9 @@ int main(int argc, char** argv) {
         else if (a == "--weights") weightsArg = need("--weights");
         else if (a == "--time")   cslTime = std::stod(need("--time"));
         else if (a == "--horizon") horizon = std::stoi(need("--horizon"));
+        else if (a == "--samples") samples = std::stoll(need("--samples"));
+        else if (a == "--threshold") threshold = std::stod(need("--threshold"));
+        else if (a == "--exact") exactMode = true;
         else if (a == "--state")  stateArg = std::stoi(need("--state"));
         else if (a == "--json")   jsonOut = true;
         else if (a == "--trace")  { jsonOut = true; traceOut = true; }
@@ -184,6 +192,46 @@ int main(int argc, char** argv) {
     const std::set<int>& states = noLabel ? empty : accSets.front();
     const int s = (stateArg >= 0) ? stateArg : p.init;
     if (s < 0 || s >= p.nStates) { std::cerr << "state out of range\n"; return 1; }
+
+    // Exact rational robust reachability (policy iteration over rationals; unique among
+    // tools for INTERVAL models — PRISM -exact / Storm --exact are point-only).
+    if (exactMode) {
+        if (prop != "reach") { std::cerr << "--exact supports `reach` only\n"; return 2; }
+        try {
+            std::cout.precision(10);
+            for (const std::string& which : (bound == "both")
+                     ? std::vector<std::string>{"pess", "opt"} : std::vector<std::string>{bound}) {
+                exact::Result r = exact::maxReach(path, label, s, which == "pess");
+                std::cout << "result\tprop=reach-exact\tbound=" << which << "\tstate=" << s
+                          << "\texact=" << r.fraction << "\tapprox=" << r.approx
+                          << "\tcertified=" << (r.certified ? "yes" : "NO") << "\titers=" << r.iterations << "\n";
+            }
+            return 0;
+        } catch (const std::exception& e) { std::cerr << "exact error: " << e.what() << "\n"; return 1; }
+    }
+
+    // Statistical model checking (simulation) on point chains: estimate P(F<=horizon LABEL)
+    // with Wilson CI + APMC/Chernoff half-width; --threshold p adds a Wald SPRT verdict.
+    if (prop == "smc") {
+        const int H = horizon > 0 ? horizon : 1000;
+        try {
+            std::cout.precision(10);
+            smc::Estimate e = smc::estimateReach(p.model, states, s, H, samples, /*seed=*/20260702u);
+            std::cout << "result\tprop=smc\tstate=" << s << "\testimate=" << e.mean
+                      << "\twilson95=[" << e.ciLo << "," << e.ciHi << "]"
+                      << "\tchernoff_eps=" << e.chernoffEps
+                      << "\tsamples=" << e.samples << "\n";
+            if (threshold >= 0.0) {
+                long long used = 0;
+                int v = smc::sprt(p.model, states, s, H, threshold, /*delta=*/0.01,
+                                  samples * 10, /*seed=*/20260703u, &used);
+                std::cout << "result\tprop=smc-sprt\tthreshold=" << threshold
+                          << "\tverdict=" << (v > 0 ? "accept(P>=theta)" : v < 0 ? "reject(P<theta)" : "undecided")
+                          << "\tsamples=" << used << "\n";
+            }
+            return 0;
+        } catch (const std::exception& e) { std::cerr << "smc error: " << e.what() << "\n"; return 1; }
+    }
 
     // Multi-objective robust reachability: LABEL = comma-separated target labels; --weights
     // gives one point, otherwise sweep the weight simplex (2 objectives) to trace the Pareto
