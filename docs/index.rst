@@ -182,6 +182,48 @@ API Modules
 
 .. toctree::
    :hidden:
+   :caption: Feature Manual (v2.0)
+
+   manual/index
+   manual/specifications
+   manual/rewards
+   manual/lra-steadystate
+   manual/omega-ltl
+   manual/multiobjective
+   manual/ctmc-csl
+   manual/parametric
+   manual/odimdp
+   manual/exact
+   manual/smc
+   manual/engines
+   manual/formats
+   manual/cli
+
+.. toctree::
+   :hidden:
+   :caption: Tool Comparison
+
+   comparison/index
+   comparison/impact-vs-prism
+   comparison/impact-vs-storm
+   comparison/impact-vs-intervalmdp
+
+.. toctree::
+   :hidden:
+   :caption: ARCH Benchmarks
+
+   benchmarks/index
+   benchmarks/AS
+   benchmarks/BA
+   benchmarks/VP
+   benchmarks/IC
+   benchmarks/PD
+   benchmarks/PR_minimal
+   benchmarks/AV_minimal
+   benchmarks/LM
+
+.. toctree::
+   :hidden:
    :caption: API Reference
 
    api/mdp
