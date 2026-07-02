@@ -27,3 +27,4 @@ See [`README.md`](README.md) for conventions and the literature-counterexample p
 | [0019](0019-sparse-default-abstraction.md) | Make the sparse abstraction the default everywhere (design decision) | in-progress | medium | design-decision, scalability, abstraction |
 | [0020](0020-sparse-vs-dense-abstraction-discrepancy.md) | Sparse (closed-form) and dense (nlopt) abstractions disagree on AS/BA | open | medium | correctness, abstraction, soundness |
 | [0021](0021-nonlinear-mean-enclosure-not-certified.md) | Nonlinear mean enclosure (point-sampling / nlopt) is heuristic, not certified-sound | open | medium | soundness, abstraction, nonlinear, design-decision |
+| [0022](0022-odimdp-reduction-order-semantics.md) | odIMDP factored ambiguity is reduction-order sensitive (matched IntervalMDP.jl convention) | resolved | medium | design-decision, semantics, odimdp, cross-tool |

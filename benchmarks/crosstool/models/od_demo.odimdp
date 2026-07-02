@@ -1,0 +1,20 @@
+# Orthogonally-decoupled IMDP, dims 2x2 (states (i,j), linearised s = i + 2j, dim 0 fastest).
+# Single action; per-dimension marginal interval distributions. Target = (1,1) = state 3,
+# absorbing. Oracle: IntervalMDP.jl OrthogonalIntervalMarkovDecisionProcess on the SAME
+# model (peers/odimdp_oracle.jl).
+odimdp
+dims 2 2
+init 0
+label target 3
+# state 0 = (0,0)
+otran 0 0 0 0:0.3:0.7 1:0.3:0.7
+otran 0 0 1 0:0.4:0.6 1:0.4:0.6
+# state 1 = (1,0)
+otran 1 0 0 0:0.0:0.2 1:0.8:1.0
+otran 1 0 1 0:0.5:0.5 1:0.5:0.5
+# state 2 = (0,1) DEAD (absorbing, not target -> mass here is lost)
+otran 2 0 0 0:1:1
+otran 2 0 1 1:1:1
+# state 3 = (1,1) target, absorbing
+otran 3 0 0 1:1:1
+otran 3 0 1 1:1:1

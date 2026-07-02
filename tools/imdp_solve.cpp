@@ -33,6 +33,7 @@
 #include "../src/ltlspec.h"
 #include "../src/ltl_spot.h"
 #include "../src/ctmc.h"
+#include "../src/odimdp.h"
 #include "../src/omaximization.h"
 
 #include <iostream>
@@ -138,6 +139,25 @@ int main(int argc, char** argv) {
         return s.size() >= suf.size() && s.compare(s.size() - suf.size(), suf.size(), suf) == 0;
     };
     const bool isPrism = endsWith(path, ".prism") || endsWith(path, ".pm") || endsWith(path, ".nm");
+
+    // Orthogonally-decoupled IMDP (.odimdp): factored per-dimension marginals, robust
+    // reachability by recursive per-dimension O-maximization (src/odimdp.h).
+    if (endsWith(path, ".odimdp")) {
+        if (prop != "reach") { std::cerr << "odimdp: only `reach` is supported\n"; return 2; }
+        try {
+            odimdp::Model om = odimdp::parseFile(path, label);
+            const int s = (stateArg >= 0) ? stateArg : om.init;
+            std::cout.precision(10);
+            for (const std::string& which : (bound == "both")
+                     ? std::vector<std::string>{"pess", "opt"} : std::vector<std::string>{bound}) {
+                int iters = 0;
+                std::vector<double> V = odimdp::reach(om, eps, which == "pess", &iters);
+                std::cout << "result\tprop=reach\tbound=" << which << "\tstate=" << s
+                          << "\tlower=" << V[s] << "\tupper=" << V[s] << "\titers=" << iters << "\n";
+            }
+            return 0;
+        } catch (const std::exception& e) { std::cerr << "odimdp error: " << e.what() << "\n"; return 1; }
+    }
 
     io::Problem p;
     try {

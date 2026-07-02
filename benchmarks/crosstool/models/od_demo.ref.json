@@ -1,0 +1,14 @@
+{
+  "model": "od_demo.odimdp",
+  "description": "Orthogonally-decoupled IMDP (factored per-dimension marginal interval distributions), robust reachability by recursive per-dimension O-maximization. IntervalMDP.jl's flagship scalability representation, now in IMPaCT. Paper: Mathiesen, Haesaert, Laurenti, 'Scalable control synthesis for stochastic systems via structural IMDP abstractions' (arXiv:2411.11803); per-marginal inner solve = O-maximization (Givan-Leach-Dean AIJ 2000).",
+  "provenance": "2x2 product space; target (2,2) absorbing, (1,2) dead absorbing; interval marginals per dimension. Oracle = IntervalMDP.jl OrthogonalIntervalMarkovDecisionProcess on the identical model (peers/odimdp_oracle.jl), InfiniteTimeReachability, Pessimistic/Optimistic x Maximize.",
+  "checks": [
+    {"prop": "reach", "label": "target", "state": 0, "pess": 0.3714286, "opt": 0.8536585, "tol": 1e-6},
+    {"prop": "reach", "label": "target", "state": 1, "pess": 0.7285714, "opt": 1.0, "tol": 1e-6}
+  ],
+  "measured": {
+    "note": "Live 2026-07-01. IMPaCT == IntervalMDP.jl to 10 digits, both senses. Semantics note (ISSUE-0022): the factored ambiguity is REDUCTION-ORDER sensitive; IMPaCT matches IntervalMDP.jl's convention (dimension 1 optimised innermost, per combination of the remaining coordinates).",
+    "impact":      {"s0": {"pess": 0.3714285709, "opt": 0.8536585360}, "s1": {"pess": 0.7285714278, "opt": 0.9999999995}},
+    "intervalmdp": {"s0": {"pess": 0.3714285709, "opt": 0.8536585360}, "s1": {"pess": 0.7285714278, "opt": 0.9999999995}}
+  }
+}

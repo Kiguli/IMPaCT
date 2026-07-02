@@ -45,7 +45,8 @@ tables: [`TOOL_COMPARISONS.md`](TOOL_COMPARISONS.md).
 | Expected time / steps to reach | PRISM, Storm | ✅ | = expected reward with unit state rewards (`reward` with all-1 reward) | robust |
 | **Full PCTL\* nesting / conditional prob** | PRISM, Storm | ⬜ | nested P-operators as state predicates over pctl.cpp (satStates already returns the sub-formula state set) | robust nested |
 | **Statistical MC / simulation** (SPRT, CI) | PRISM, Storm | ⬜ | discrete-event simulator + hypothesis tests | — |
-| **Orthogonal / mixture IMDPs** | IntervalMDP.jl | ⬜ | factored per-dimension O-max (Mathiesen-Haesaert-Laurenti arXiv:2411.11803) | scalability of robust abstraction |
+| **Orthogonal IMDPs** (factored) | IntervalMDP.jl | ✅ | recursive per-dimension O-max, dim-1-innermost convention (Mathiesen-Haesaert-Laurenti arXiv:2411.11803) — `src/odimdp.cpp`, `imdp_solve *.odimdp reach`; == IntervalMDP.jl to 10 digits both senses (ISSUE-0022) | native fit to IMPaCT's per-dim abstraction bounds |
+| Mixture IMDPs | IntervalMDP.jl | ⬜ | interval-weighted mixture of odIMDPs (same paper) — one more O-max layer over the mixture weights | — |
 | **DFT / GSPN front-ends** | Storm | ⬜ | Galileo/PNPRO → MA/MDP translation | robust DFT |
 
 > Grounded plans (papers verified, algorithm, IMPaCT reuse, oracle) are being filled in
